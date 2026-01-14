@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
@@ -67,6 +68,8 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 				"report":  in.Report,
 			})),
 		)
+		rail.Infof("System Message: %v", systemMessage.Content)
+		rail.Infof("User Message: %v", userMessage.Content)
 
 		return []*schema.Message{
 			systemMessage,
@@ -96,5 +99,7 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 }
 
 func (w *ExecutiveSummaryWriter) Execute(rail flow.Rail, input ExecutiveSummaryWriterInput) (*ExecutiveSummaryWriterOutput, error) {
+	start := time.Now()
+	defer rail.TimeOp(start, "ExecutiveSummaryWriter")
 	return w.graph.Invoke(rail, input)
 }
