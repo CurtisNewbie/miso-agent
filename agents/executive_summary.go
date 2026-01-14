@@ -8,6 +8,8 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
+	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/llm"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -52,7 +54,7 @@ ${report}
 	}
 }
 
-func NewExecutiveSummaryWriter(ctx context.Context, chatModel model.ToolCallingChatModel, ops *executiveSummaryWriterOps) (*ExecutiveSummaryWriter, error) {
+func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *executiveSummaryWriterOps) (*ExecutiveSummaryWriter, error) {
 
 	g := compose.NewGraph[ExecutiveSummaryWriterInput, *ExecutiveSummaryWriterOutput]()
 
@@ -74,8 +76,9 @@ func NewExecutiveSummaryWriter(ctx context.Context, chatModel model.ToolCallingC
 
 	_ = g.AddChatModelNode("generate_summary", chatModel, compose.WithNodeName("ChatModel"))
 	_ = g.AddLambdaNode("remove_think", compose.InvokableLambda(func(ctx context.Context, msg *schema.Message) (*ExecutiveSummaryWriterOutput, error) {
+		_, s := llm.ParseThink(msg.Content)
 		return &ExecutiveSummaryWriterOutput{
-			Summary: removeThinkTags(msg.Content),
+			Summary: s,
 		}, nil
 	}))
 
@@ -84,7 +87,7 @@ func NewExecutiveSummaryWriter(ctx context.Context, chatModel model.ToolCallingC
 	_ = g.AddEdge("generate_summary", "remove_think")
 	_ = g.AddEdge("remove_think", compose.END)
 
-	runnable, err := g.Compile(ctx)
+	runnable, err := g.Compile(rail)
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
@@ -92,15 +95,6 @@ func NewExecutiveSummaryWriter(ctx context.Context, chatModel model.ToolCallingC
 	return &ExecutiveSummaryWriter{graph: runnable}, nil
 }
 
-func (w *ExecutiveSummaryWriter) Execute(ctx context.Context, input ExecutiveSummaryWriterInput) (*ExecutiveSummaryWriterOutput, error) {
-	return w.graph.Invoke(ctx, input)
-}
-
-func removeThinkTags(content string) string {
-	thinkEnd := "</think>"
-	i := strings.LastIndex(content, thinkEnd)
-	if i == -1 {
-		return content
-	}
-	return content[i+len(thinkEnd):]
+func (w *ExecutiveSummaryWriter) Execute(rail flow.Rail, input ExecutiveSummaryWriterInput) (*ExecutiveSummaryWriterOutput, error) {
+	return w.graph.Invoke(rail, input)
 }
