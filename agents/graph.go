@@ -5,10 +5,9 @@ import (
 	"github.com/curtisnewbie/miso/flow"
 )
 
-func CompileGraph[T, V any](rail flow.Rail, o *genericOps, g *compose.Graph[T, V]) (compose.Runnable[T, V], error) {
+func CompileGraph[T, V any](rail flow.Rail, o *genericOps, g *compose.Graph[T, V], opts ...compose.GraphCompileOption) (compose.Runnable[T, V], error) {
 	if o.VisualizeDir != "" {
-		return g.Compile(rail, compose.WithGraphCompileCallbacks(NewMermaidGenerator(o.VisualizeDir)))
-	} else {
-		return g.Compile(rail)
+		opts = append(opts, compose.WithGraphCompileCallbacks(NewMermaidGenerator(o.VisualizeDir)))
 	}
+	return g.Compile(rail, opts...)
 }
