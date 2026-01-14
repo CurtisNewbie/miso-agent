@@ -1,7 +1,8 @@
 package agents
 
 type genericOps struct {
-	Language string
+	Language     string
+	VisualizeDir string
 }
 
 func NewGenericOps() *genericOps {

@@ -28,12 +28,14 @@ type ExecutiveSummaryWriterOutput struct {
 }
 
 type executiveSummaryWriterOps struct {
+	genops              *genericOps
 	SystemMessagePrompt string
 	UserMessagePrompt   string
 }
 
-func NewExecutiveSummaryWriterOps(o *genericOps) *executiveSummaryWriterOps {
+func NewExecutiveSummaryWriterOps(g *genericOps) *executiveSummaryWriterOps {
 	return &executiveSummaryWriterOps{
+		genops: g,
 		SystemMessagePrompt: strutil.NamedSprintfkv(`
 A report has been written. Your task is to analyze the report, understand it's content, and write a short executive summary for the report.
 
@@ -41,7 +43,7 @@ The executive summary should be around 100~200 words.
 It must be written in ${language}.
 It should capture the most important information from the report.
 Do not include any markdown titles (e.g., ##), just output the content.
-Use bullet points if necessary.`, "language", o.Language),
+Use bullet points if necessary.`, "language", g.Language),
 
 		UserMessagePrompt: `
 <context>
@@ -90,7 +92,7 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 	_ = g.AddEdge("generate_summary", "remove_think")
 	_ = g.AddEdge("remove_think", compose.END)
 
-	runnable, err := g.Compile(rail)
+	runnable, err := CompileGraph(rail, ops.genops, g)
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
