@@ -15,11 +15,15 @@ func CompileGraph[T, V any](rail flow.Rail, o *genericOps, g *compose.Graph[T, V
 	return g.Compile(rail, opts...)
 }
 
-func WithTraceCallback(name string) compose.Option {
+func WithTraceCallback(name string, logInputs bool) compose.Option {
 	return compose.WithCallbacks(
 		callbacks.NewHandlerBuilder().
 			OnStartFn(func(ctx context.Context, ri *callbacks.RunInfo, in callbacks.CallbackInput) context.Context {
-				flow.NewRail(ctx).Infof("Graph exec %v, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
+				if logInputs {
+					flow.NewRail(ctx).Infof("Graph exec %v, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
+				} else {
+					flow.NewRail(ctx).Infof("Graph exec %v, name: %v, type: %v, component: %v", name, ri.Name, ri.Type, ri.Component)
+				}
 				return ctx
 			}).
 			Build(),

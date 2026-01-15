@@ -107,7 +107,7 @@ func (w *ExecutiveSummaryWriter) Execute(rail flow.Rail, input ExecutiveSummaryW
 
 	cops := []compose.Option{}
 	if w.genops.LogOnStart {
-		cops = append(cops, WithTraceCallback("ExecutiveSummaryWriter"))
+		cops = append(cops, WithTraceCallback("ExecutiveSummaryWriter", w.genops.LogInputs))
 	}
 	return w.graph.Invoke(rail, input, cops...)
 }
