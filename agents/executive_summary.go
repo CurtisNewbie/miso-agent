@@ -78,15 +78,15 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 			systemMessage,
 			userMessage,
 		}, nil
-	}))
+	}), compose.WithNodeName("Prepare Messages"))
 
-	_ = g.AddChatModelNode("generate_summary", chatModel, compose.WithNodeName("ChatModel"))
+	_ = g.AddChatModelNode("generate_summary", chatModel, compose.WithNodeName("Generate Summary"))
 	_ = g.AddLambdaNode("remove_think", compose.InvokableLambda(func(ctx context.Context, msg *schema.Message) (*ExecutiveSummaryWriterOutput, error) {
 		_, s := llm.ParseThink(msg.Content)
 		return &ExecutiveSummaryWriterOutput{
 			Summary: s,
 		}, nil
-	}))
+	}), compose.WithNodeName("Remove Think"))
 
 	_ = g.AddEdge(compose.START, "prepare_messages")
 	_ = g.AddEdge("prepare_messages", "generate_summary")
