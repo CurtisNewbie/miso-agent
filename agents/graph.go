@@ -19,7 +19,7 @@ func WithTraceCallback(name string) compose.Option {
 	return compose.WithCallbacks(
 		callbacks.NewHandlerBuilder().
 			OnStartFn(func(ctx context.Context, ri *callbacks.RunInfo, in callbacks.CallbackInput) context.Context {
-				flow.NewRail(ctx).Infof("[%v] name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
+				flow.NewRail(ctx).Infof("Graph exec %v, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
 				return ctx
 			}).
 			Build(),
