@@ -15,7 +15,8 @@ import (
 )
 
 type ExecutiveSummaryWriter struct {
-	graph compose.Runnable[ExecutiveSummaryWriterInput, *ExecutiveSummaryWriterOutput]
+	genops *genericOps
+	graph  compose.Runnable[ExecutiveSummaryWriterInput, *ExecutiveSummaryWriterOutput]
 }
 
 type ExecutiveSummaryWriterInput struct {
@@ -97,11 +98,16 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 		return nil, errs.Wrap(err)
 	}
 
-	return &ExecutiveSummaryWriter{graph: runnable}, nil
+	return &ExecutiveSummaryWriter{graph: runnable, genops: ops.genops}, nil
 }
 
 func (w *ExecutiveSummaryWriter) Execute(rail flow.Rail, input ExecutiveSummaryWriterInput) (*ExecutiveSummaryWriterOutput, error) {
 	start := time.Now()
 	defer rail.TimeOp(start, "ExecutiveSummaryWriter")
-	return w.graph.Invoke(rail, input)
+
+	cops := []compose.Option{}
+	if w.genops.LogOnStart {
+		cops = append(cops, WithTraceCallback("ExecutiveSummaryWriter"))
+	}
+	return w.graph.Invoke(rail, input, cops...)
 }
