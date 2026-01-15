@@ -34,9 +34,10 @@ type DeepResearchClarifierOutput struct {
 type DeepResearchClarifierOps struct {
 	genops *GenericOps
 
+	// Injected variables: ${language}
 	SystemMessagePrompt string
 
-	// Provided variables: ${conversation}, ${memory}
+	// Injected variables: ${conversation}, ${memory}
 	UserMessagePrompt string
 }
 
@@ -48,6 +49,7 @@ You are a research assistant, you are given a historical conversation between yo
 Your task is to analyze the conversation, guess what are the research title and description that user wants, and use the tool 'FillResearchInfo' to fill in the fields.
 If you don't know what user wants, leave the field empty.
 The generated research title and description are mainly suggestion for user's convenience, user may modify them if necessary.
+It must be written in ${language}.
 `,
 		UserMessagePrompt: `
 <conversation>
@@ -67,7 +69,11 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 
 	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, in DeepResearchClarifierInput) ([]*schema.Message, error) {
 
-		systemMessage := schema.SystemMessage(strings.TrimSpace(ops.SystemMessagePrompt))
+		systemMessage := schema.SystemMessage(strings.TrimSpace(
+			strutil.NamedSprintf(ops.SystemMessagePrompt, map[string]any{
+				"language": ops.genops.Language,
+			})))
+
 		userMessage := schema.UserMessage(strings.TrimSpace(
 			strutil.NamedSprintf(ops.UserMessagePrompt, map[string]any{
 				"conversation": in.Conversation,

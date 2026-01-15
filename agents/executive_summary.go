@@ -31,10 +31,10 @@ type ExecutiveSummaryWriterOutput struct {
 type executiveSummaryWriterOps struct {
 	genops *GenericOps
 
-	// Provided variables: ${language}
+	// Injected variables: ${language}
 	SystemMessagePrompt string
 
-	// Provided variables: ${context}, ${report}
+	// Injected variables: ${context}, ${report}
 	UserMessagePrompt string
 }
 
