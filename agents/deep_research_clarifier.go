@@ -12,6 +12,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/json"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -114,11 +115,29 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 	}
 	_ = g.AddToolsNode("tools", toolNode)
 	_ = g.AddChatModelNode("clarify_generate_research", chatModel, compose.WithNodeName("Generate Summary"))
+	_ = g.AddLambdaNode("extract_tool_output", compose.InvokableLambda(func(ctx context.Context, input []*schema.Message) (output DeepResearchClarifierOutput, err error) {
+		o := DeepResearchClarifierOutput{}
+		for _, m := range input {
+			if m == nil {
+				continue
+			}
+			for _, tc := range m.ToolCalls {
+				if tc.Function.Name == "FillResearchInfo" {
+					if err := json.SParseJson(tc.Function.Arguments, &o); err != nil {
+						return DeepResearchClarifierOutput{}, err
+					}
+				}
+			}
+		}
+
+		return o, nil
+	}))
 
 	_ = g.AddEdge(compose.START, "prepare_messages")
 	_ = g.AddEdge("prepare_messages", "clarify_generate_research")
 	_ = g.AddEdge("clarify_generate_research", "tools")
-	_ = g.AddEdge("tools", compose.END)
+	_ = g.AddEdge("tools", "extract_tool_output")
+	_ = g.AddEdge("extract_tool_output", compose.END)
 
 	runnable, err := CompileGraph(rail, ops.genops, g, compose.WithGraphName("DeepResearchClarifier"))
 	if err != nil {
