@@ -138,12 +138,14 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 					if err := json.SParseJson(tc.Function.Arguments, &o); err != nil {
 						return DeepResearchClarifierOutput{}, err
 					}
+					rail.Infof("%#v", o)
+					return o, nil
 				}
 			}
 		}
 
 		return o, nil
-	}))
+	}), compose.WithNodeName("Extract Tool Output"))
 
 	_ = g.AddEdge(compose.START, "prepare_messages")
 	_ = g.AddEdge("prepare_messages", "clarify_generate_research")
