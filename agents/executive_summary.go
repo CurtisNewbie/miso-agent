@@ -29,9 +29,13 @@ type ExecutiveSummaryWriterOutput struct {
 }
 
 type executiveSummaryWriterOps struct {
-	genops              *genericOps
+	genops *genericOps
+
+	// Provided variables: ${language}
 	SystemMessagePrompt string
-	UserMessagePrompt   string
+
+	// Provided variables: ${context}, ${report}
+	UserMessagePrompt string
 }
 
 func NewExecutiveSummaryWriterOps(g *genericOps) *executiveSummaryWriterOps {
