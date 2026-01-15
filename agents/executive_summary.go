@@ -71,8 +71,8 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 				"report":  in.Report,
 			})),
 		)
-		rail.Infof("System Message: %v", systemMessage.Content)
-		rail.Infof("User Message: %v", userMessage.Content)
+		rail.Debugf("System Message: %v", systemMessage.Content)
+		rail.Debugf("User Message: %v", userMessage.Content)
 
 		return []*schema.Message{
 			systemMessage,
