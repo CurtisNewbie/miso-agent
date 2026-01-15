@@ -133,17 +133,13 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 			if m == nil {
 				continue
 			}
-			for _, tc := range m.ToolCalls {
-				if tc.Function.Name == "FillResearchInfo" {
-					if err := json.SParseJson(tc.Function.Arguments, &o); err != nil {
-						return DeepResearchClarifierOutput{}, err
-					}
-					rail.Infof("%#v", o)
-					return o, nil
+			if m.ToolName == "FillResearchInfo" {
+				if err := json.SParseJson(m.Content, &o); err != nil {
+					return DeepResearchClarifierOutput{}, err
 				}
+				return o, nil
 			}
 		}
-
 		return o, nil
 	}), compose.WithNodeName("Extract Tool Output"))
 
