@@ -88,26 +88,38 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 		Description string `json:"description"`
 	}
 
+	fillResearchInfoTool := utils.NewTool(
+		&schema.ToolInfo{
+			Name: "FillResearchInfo",
+			Desc: "Fill in Deep Research Title and Description",
+			ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+				"title": {
+					Type: "string",
+					Desc: "Research Title (less then 100 characters)",
+				},
+				"description": {
+					Type: "string",
+					Desc: "Research Description (less then 300 characters)",
+				},
+			}),
+		},
+		func(ctx context.Context, input FillResearchInfoInput) (output DeepResearchClarifierOutput, err error) {
+			return DeepResearchClarifierOutput(input), nil
+		})
+
+	info, err := fillResearchInfoTool.Info(context.TODO())
+	if err != nil {
+		return nil, err
+	}
+
+	chatModel, err = chatModel.WithTools([]*schema.ToolInfo{info})
+	if err != nil {
+		return nil, err
+	}
+
 	toolNode, err := compose.NewToolNode(context.TODO(), &compose.ToolsNodeConfig{
 		Tools: []tool.BaseTool{
-			utils.NewTool(
-				&schema.ToolInfo{
-					Name: "FillResearchInfo",
-					Desc: "Fill in Deep Research Title and Description",
-					ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-						"title": {
-							Type: "string",
-							Desc: "Research Title (less then 100 characters)",
-						},
-						"description": {
-							Type: "string",
-							Desc: "Research Description (less then 300 characters)",
-						},
-					}),
-				},
-				func(ctx context.Context, input FillResearchInfoInput) (output DeepResearchClarifierOutput, err error) {
-					return DeepResearchClarifierOutput(input), nil
-				}),
+			fillResearchInfoTool,
 		},
 	})
 	if err != nil {
