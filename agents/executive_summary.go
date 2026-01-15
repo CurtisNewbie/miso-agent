@@ -15,7 +15,7 @@ import (
 )
 
 type ExecutiveSummaryWriter struct {
-	genops *genericOps
+	genops *GenericOps
 	graph  compose.Runnable[ExecutiveSummaryWriterInput, *ExecutiveSummaryWriterOutput]
 }
 
@@ -29,7 +29,7 @@ type ExecutiveSummaryWriterOutput struct {
 }
 
 type executiveSummaryWriterOps struct {
-	genops *genericOps
+	genops *GenericOps
 
 	// Provided variables: ${language}
 	SystemMessagePrompt string
@@ -38,7 +38,7 @@ type executiveSummaryWriterOps struct {
 	UserMessagePrompt string
 }
 
-func NewExecutiveSummaryWriterOps(g *genericOps) *executiveSummaryWriterOps {
+func NewExecutiveSummaryWriterOps(g *GenericOps) *executiveSummaryWriterOps {
 	return &executiveSummaryWriterOps{
 		genops: g,
 		SystemMessagePrompt: strutil.NamedSprintfkv(`
