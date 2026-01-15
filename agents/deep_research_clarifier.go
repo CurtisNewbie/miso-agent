@@ -17,7 +17,7 @@ import (
 
 type DeepResearchClarifier struct {
 	genops *GenericOps
-	graph  compose.Runnable[DeepResearchClarifierInput, *DeepResearchClarifierOutput]
+	graph  compose.Runnable[DeepResearchClarifierInput, DeepResearchClarifierOutput]
 }
 
 type DeepResearchClarifierInput struct {
@@ -62,7 +62,7 @@ ${memory}
 
 func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *DeepResearchClarifierOps) (*DeepResearchClarifier, error) {
 
-	g := compose.NewGraph[DeepResearchClarifierInput, *DeepResearchClarifierOutput]()
+	g := compose.NewGraph[DeepResearchClarifierInput, DeepResearchClarifierOutput]()
 
 	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, in DeepResearchClarifierInput) ([]*schema.Message, error) {
 
@@ -128,7 +128,7 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 	return &DeepResearchClarifier{graph: runnable, genops: ops.genops}, nil
 }
 
-func (w *DeepResearchClarifier) Execute(rail flow.Rail, input DeepResearchClarifierInput) (*DeepResearchClarifierOutput, error) {
+func (w *DeepResearchClarifier) Execute(rail flow.Rail, input DeepResearchClarifierInput) (DeepResearchClarifierOutput, error) {
 	start := time.Now()
 	defer rail.TimeOp(start, "DeepResearchClarifier")
 
