@@ -46,7 +46,7 @@ func NewDeepResearchClarifierOps(g *GenericOps) *DeepResearchClarifierOps {
 	return &DeepResearchClarifierOps{
 		genops: g,
 		SystemMessagePrompt: `
-You are a research assistant, you are given a historical conversation between you and the user.
+You are a research expert, you are given a historical conversation between you and the user.
 Your task is to analyze the conversation, guess what are the research title and description that user wants, and use the tool 'FillResearchInfo' to fill in the fields.
 
 # Requirements
