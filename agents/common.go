@@ -1,6 +1,7 @@
 package agents
 
 type GenericOps struct {
+	Now          string
 	Language     string
 	VisualizeDir string
 	LogOnStart   bool
