@@ -44,36 +44,7 @@ func NewMemorySummarizerOps(g *GenericOps) *MemorySummarizerOps {
 		SystemMessagePrompt: `
 Your task is to create a short but context rich summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
 
-This summary should be thorough in capturing user's requests, intents, interests and requirements that would be essential for continuing the conversation without losing context. This summary will replace the given <long_term_memory>.
-
-Your summary should include the following sections:
-
-<summary>
-1. Primary Request and Intent:
-   [Detailed description]
-
-2. Explicit Requirements
-   - [Requirement 1]
-   - [Requirement 2]
-
-2. Key Concepts:
-   - [Concept 1]
-   - [Concept 2]
-   - [...]
-
-3. Problem Solving:
-   [Description of solved problems and ongoing troubleshooting]
-
-4. Pending Tasks:
-   - [Task 1]
-   - [Task 2]
-   - [...]
-
-5. Current Work:
-   [Precise description of current work]
-</summary>
-
-Please provide your summary based on the conversation so far, following this structure and ensuring precision and thoroughness in your response.
+This summary should be thorough in capturing user's requests, intents, interests and requirements that would be essential for creating a new conversation without losing context. Make the summary as concise as possible but context rich.
 `,
 
 		UserMessagePrompt: `
