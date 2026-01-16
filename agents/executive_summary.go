@@ -78,6 +78,15 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 		rail.Debugf("System Message: %v", systemMessage.Content)
 		rail.Debugf("User Message: %v", userMessage.Content)
 
+		if ops.genops.RepeatPrompt {
+			return []*schema.Message{
+				systemMessage,
+				userMessage,
+				systemMessage,
+				userMessage,
+			}, nil
+		}
+
 		return []*schema.Message{
 			systemMessage,
 			userMessage,
