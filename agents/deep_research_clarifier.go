@@ -55,16 +55,6 @@ Your task is to analyze the conversation, guess what are the research title and 
 3. The generated research title and description are mainly suggestion for user's convenience, user may modify them if necessary.
 4. If you don't know what user wants, leave the field empty.
 5. It must be written in ${language}.
-
-You are a research assistant, you are given a historical conversation between you and the user.
-Your task is to analyze the conversation, guess what are the research title and description that user wants, and use the tool 'FillResearchInfo' to fill in the fields.
-
-# Requirements
-1. Previous conversation may include what have been decided to be the research title and description, if so, just use the ones mentioned in the conversation.
-2. You should only focus the most recent conversation, if conversation contains multiple topics, only pick the last one. Do not attempt to include everything.
-3. The generated research title and description are mainly suggestion for user's convenience, user may modify them if necessary.
-4. If you don't know what user wants, leave the field empty.
-5. It must be written in ${language}.
 `,
 		UserMessagePrompt: `
 <now>
