@@ -44,7 +44,8 @@ func NewMemorySummarizerOps(g *GenericOps) *MemorySummarizerOps {
 		SystemMessagePrompt: `
 Your task is to create a short but context rich summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
 
-This summary should be thorough in capturing user's requests, intents, interests and requirements that would be essential for creating a new conversation without losing context. Make the summary as concise as possible but context rich.
+This summary should be thorough in capturing user's requests, intents, interests and requirements that would be essential for creating a new conversation without losing context.
+ Make the summary as concise as possible but context rich.
 `,
 
 		UserMessagePrompt: `
