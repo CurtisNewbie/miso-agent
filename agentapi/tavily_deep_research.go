@@ -29,12 +29,16 @@ func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq,
 </previous_research>`, req.PreviousResearch)
 	}
 	query := strutil.NamedSprintfkv(`
+# Research Topic
+${query}
+
 # Core Research Requirements:
  - Practical Focus: Prioritize real-world application over theoretical concepts. Avoid jargon; explain necessary terms plainly.
  - Problem-Solution Alignment: Clearly connect findings to specific, solvable problems or decisions the user faces.
  - Scope & Constraints: Acknowledge limitations (e.g., cost, time, feasibility) in any recommendations.
  - Actionable Output: Provide clear, concrete steps, alternatives, or criteria for decision-making.
  - Evidence-Based: Ground insights in credible data, case studies, or proven examples—not just trends.
+ - Clarity on Gaps: If critical information is unavailable or uncertain, state this simply and move on. Do not over-elaborate on research process shortcomings.
 
  Avoid:
   - Purely academic or abstract discussions.
@@ -46,8 +50,6 @@ func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq,
  - Avoid Citation in graphs, it hurts readability.
  - Simplify graphs, graphs are rendered in plain text, make sure they are readable, avoid fancy formatting.
 
-# Research Topic
-${query}
 ${previousResearch}
 `, "query", req.Topic, "previousResearch", previousResearch)
 
