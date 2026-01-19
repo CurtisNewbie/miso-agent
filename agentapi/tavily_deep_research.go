@@ -59,6 +59,7 @@ ${previousResearch}
 			Input:          query,
 			Model:          req.Model,
 			OutputSchema:   req.OutputSchema,
+			Stream:         true,
 		},
 		ops...)
 }
