@@ -11,11 +11,9 @@ import (
 type InitTavilyResearchReq struct {
 	Topic            string
 	PreviousResearch string
-
-	CitationFormat string               `json:"citation_format"` // numbered, mla, apa, chicago
-	Model          string               `json:"model"`           // mini, pro, auto
-	OutputSchema   *tavily.OutputSchema `json:"output_schema"`
-	Stream         bool                 `json:"stream"`
+	CitationFormat   string               `json:"citation_format"` // numbered, mla, apa, chicago
+	Model            string               `json:"model"`           // mini, pro, auto
+	OutputSchema     *tavily.OutputSchema `json:"output_schema"`
 }
 
 // Run Tavily Deep Research with predefined prompt.
@@ -60,7 +58,6 @@ ${previousResearch}
 			CitationFormat: req.CitationFormat,
 			Input:          query,
 			Model:          req.Model,
-			Stream:         req.Stream,
 			OutputSchema:   req.OutputSchema,
 		},
 		ops...)
