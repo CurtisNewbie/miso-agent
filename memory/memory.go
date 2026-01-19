@@ -74,7 +74,7 @@ type TempMemory struct {
 
 	shortTerm *shortTermTempMemory
 	longTerm  *longTermTempMemory
-	agent     agents.MemorySummarizer
+	agent     *agents.MemorySummarizer
 
 	compactThreshold   int
 	compactCount       int
@@ -207,7 +207,7 @@ type memoryConfigFunc func(*memoryConfig)
 // Create TempMemory.
 //
 // By default, CompactThreshold is set to 4, CompactCount is set to 2, and both the long term memory and short term memory are set to 30 days.
-func NewTempMemory(key string, agent agents.MemorySummarizer, ops ...memoryConfigFunc) *TempMemory {
+func NewTempMemory(key string, agent *agents.MemorySummarizer, ops ...memoryConfigFunc) *TempMemory {
 	m := &memoryConfig{
 		compactThreshold:   4,
 		compactCount:       2,
