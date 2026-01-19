@@ -42,7 +42,7 @@ func NewExecutiveSummaryWriterOps(g *GenericOps) *executiveSummaryWriterOps {
 	return &executiveSummaryWriterOps{
 		genops: g,
 		SystemMessagePrompt: strutil.NamedSprintfkv(`
-A report has been written. Your task is to analyze the report, understand it's content, and write a short executive summary for the report.
+Your task is to analyze the content thoroughly and write a short executive summary.
 
 The executive summary should be around 100~200 words.
 It must be written in ${language}.
@@ -55,9 +55,9 @@ Use bullet points if necessary.`, "language", g.Language),
 ${context}
 </context>
 
-<final_report>
+<content>
 ${report}
-</final_report>
+</content>
 `,
 	}
 }
