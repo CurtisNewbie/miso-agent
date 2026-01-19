@@ -51,7 +51,7 @@ ${query}
 ${previousResearch}
 `, "query", req.Topic, "previousResearch", previousResearch)
 
-	rail.Debugf("TavilyDeepResearch Prompt: %v", query)
+	rail.Infof("TavilyDeepResearch Prompt: %v", query)
 
 	return tavily.StreamResearch(rail, apiKey,
 		tavily.InitResearchReq{
