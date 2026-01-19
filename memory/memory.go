@@ -8,6 +8,7 @@ import (
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/middleware/redis"
 	"github.com/curtisnewbie/miso/miso"
+	"github.com/curtisnewbie/miso/util/async"
 	"github.com/curtisnewbie/miso/util/atom"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
@@ -132,37 +133,64 @@ func (m *TempMemory) Append(rail miso.Rail, c Conversation) error {
 		return err
 	}
 
+	shortTerm = append(shortTerm, c)
+	if err := m.shortTerm.Store(rail, m.key, shortTerm, m.shortTermMemoryTTL); err != nil {
+		return err
+	}
+	if len(shortTerm) >= m.compactThreshold {
+		async.Fire(rail, func() error { return m.compactMemory(rail) })
+	}
+	return nil
+}
+
+func (m *TempMemory) compactMemory(rail miso.Rail) error {
+	lk := redis.NewRLockf(rail, m.lockPat, m.key)
+	ok, err := lk.TryLock(redis.WithBackoff(time.Second * 3))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	defer lk.Unlock()
+
+	shortTerm, err := m.shortTerm.Load(rail, m.key)
+	if err != nil {
+		return err
+	}
+
+	if len(shortTerm) < m.compactThreshold {
+		return nil
+	}
+
 	longTerm, err := m.longTerm.Load(rail, m.key)
 	if err != nil {
 		return err
 	}
 
-	shortTerm = append(shortTerm, c)
-	if len(shortTerm) >= m.compactThreshold {
-		trimmed := shortTerm[:m.compactCount]
-		shortTerm = shortTerm[m.compactCount:]
+	trimmed := shortTerm[:m.compactCount]
+	shortTerm = shortTerm[m.compactCount:]
 
-		slices.Reverse(trimmed)
-		trimmedstr := strutil.NewBuilder()
-		for _, t := range trimmed {
-			if trimmedstr.Len() > 0 {
-				trimmedstr.WriteRune('\n')
-			}
-			trimmedstr.Printlnf("%v", t.Time.FormatStdLocale())
-			trimmedstr.Printlnf("User: %v", t.User)
-			trimmedstr.Printlnf("Assistant: %v", t.Assistant)
+	slices.Reverse(trimmed)
+	trimmedstr := strutil.NewBuilder()
+	for _, t := range trimmed {
+		if trimmedstr.Len() > 0 {
+			trimmedstr.WriteRune('\n')
 		}
-		summarizerd, err := m.agent.Execute(rail, agents.MemorySummarizerInput{
-			LongTermMemory:     longTerm,
-			RecentConversation: trimmedstr.String(),
-		})
-		if err != nil {
-			return err
-		}
-		longTerm = summarizerd.Summary
-		if err := m.longTerm.Store(rail, m.key, longTerm, m.longTermMemoryTTL); err != nil {
-			return err
-		}
+		trimmedstr.Printlnf("%v", t.Time.FormatStdLocale())
+		trimmedstr.Printlnf("User: %v", t.User)
+		trimmedstr.Printlnf("Assistant: %v", t.Assistant)
+	}
+	summarizerd, err := m.agent.Execute(rail, agents.MemorySummarizerInput{
+		LongTermMemory:     longTerm,
+		RecentConversation: trimmedstr.String(),
+	})
+	if err != nil {
+		return err
+	}
+	longTerm = summarizerd.Summary
+	if err := m.longTerm.Store(rail, m.key, longTerm, m.longTermMemoryTTL); err != nil {
+		return err
 	}
 
 	return m.shortTerm.Store(rail, m.key, shortTerm, m.shortTermMemoryTTL)
