@@ -1,6 +1,8 @@
 package agentapi
 
 import (
+	"fmt"
+
 	"github.com/curtisnewbie/miso-tavily/tavily"
 	"github.com/curtisnewbie/miso/miso"
 	"github.com/curtisnewbie/miso/util/strutil"
@@ -20,6 +22,14 @@ type InitTavilyResearchReq struct {
 //
 // If you don't want the prompt, just call Tvaily's API yourself, or use [tavily.StreamResearch] directly.
 func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq, ops ...tavily.StreamResearchOpFunc) (string, error) {
+	var previousResearch string
+	if req.PreviousResearch != "" {
+		previousResearch = fmt.Sprintf(`
+# Previous Research History Retrieval
+<previous_research>
+%s
+</previous_research>`, req.PreviousResearch)
+	}
 	query := strutil.NamedSprintfkv(`
 # Core Research Requirements:
  - Practical Focus: Prioritize real-world application over theoretical concepts. Avoid jargon; explain necessary terms plainly.
@@ -40,12 +50,10 @@ func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq,
 
 # Research Topic
 ${query}
+${previousResearch}
+`, "query", req.Topic, "prevReport", previousResearch)
 
-# User Previous Research History
-<previous_research>
-${prevReport}
-</previous_research>
-`, "query", req.Topic, "prevReport", req.PreviousResearch)
+	rail.Debugf("TavilyDeepResearch Prompt: %v", query)
 
 	return tavily.StreamResearch(rail, apiKey,
 		tavily.InitResearchReq{
