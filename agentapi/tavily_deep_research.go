@@ -49,7 +49,7 @@ func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq,
 # Research Topic
 ${query}
 ${previousResearch}
-`, "query", req.Topic, "prevReport", previousResearch)
+`, "query", req.Topic, "previousResearch", previousResearch)
 
 	rail.Debugf("TavilyDeepResearch Prompt: %v", query)
 
