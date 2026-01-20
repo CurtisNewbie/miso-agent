@@ -90,17 +90,7 @@ func (m *TempMemory) LoadLocked(rail miso.Rail) (_longTerm string, shortTerm []C
 	}
 	defer lk.Unlock()
 
-	shortTerm, err := m.shortTerm.Load(rail, m.key)
-	if err != nil {
-		return "", nil, err
-	}
-	slices.Reverse(shortTerm)
-
-	longTerm, err := m.longTerm.Load(rail, m.key)
-	if err != nil {
-		return "", nil, err
-	}
-	return longTerm, shortTerm, nil
+	return m.Load(rail)
 }
 
 func (m *TempMemory) Load(rail miso.Rail) (_longTerm string, shortTerm []Conversation, _err error) {
