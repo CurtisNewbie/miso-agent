@@ -66,7 +66,7 @@ func (s *longTermTempMemory) Load(rail miso.Rail, key string) (string, error) {
 }
 
 func (s *longTermTempMemory) Store(rail miso.Rail, key string, value string, ttl time.Duration) error {
-	return redis.Set(rail, key, fmt.Sprintf(s.keyPat, key), ttl)
+	return redis.Set(rail, fmt.Sprintf(s.keyPat, key), value, ttl)
 }
 
 type TempMemory struct {
@@ -162,6 +162,7 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 	if len(shortTerm) < m.compactThreshold {
 		return nil
 	}
+	rail.Infof("ShortTermMemory len execeeds threshold: %v, compacting memory", len(shortTerm))
 
 	longTerm, err := m.longTerm.Load(rail, m.key)
 	if err != nil {
@@ -172,23 +173,29 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 	shortTerm = shortTerm[m.compactCount:]
 
 	slices.Reverse(trimmed)
-	trimmedstr := strutil.NewBuilder()
+	trimBuilder := strutil.NewBuilder()
 	for _, t := range trimmed {
-		if trimmedstr.Len() > 0 {
-			trimmedstr.WriteRune('\n')
+		if trimBuilder.Len() > 0 {
+			trimBuilder.WriteRune('\n')
 		}
-		trimmedstr.Printlnf("%v", t.Time.FormatStdLocale())
-		trimmedstr.Printlnf("User: %v", t.User)
-		trimmedstr.Printlnf("Assistant: %v", t.Assistant)
+		trimBuilder.Printlnf("%v", t.Time.FormatStdLocale())
+		trimBuilder.Printlnf("User: %v", t.User)
+		trimBuilder.Printlnf("Assistant: %v", t.Assistant)
 	}
+	trimmedstr := trimBuilder.String()
 	summarizerd, err := m.agent.Execute(rail, agents.MemorySummarizerInput{
 		LongTermMemory:     longTerm,
-		RecentConversation: trimmedstr.String(),
+		RecentConversation: trimmedstr,
 	})
 	if err != nil {
 		return err
 	}
 	longTerm = summarizerd.Summary
+	if longTerm == "" { // failed for whatever reason?
+		rail.Warnf("Failed to compact memory, summarized memory is empty, conversation: '%v'", trimmedstr)
+		return nil
+	}
+
 	if err := m.longTerm.Store(rail, m.key, longTerm, m.longTermMemoryTTL); err != nil {
 		return err
 	}
