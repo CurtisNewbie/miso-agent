@@ -67,7 +67,7 @@ type MaterialExtractOps struct {
 	// Injected variables: ${context}
 	SystemMessagePrompt string
 
-	// Injected variables: ${materials}, ${extractedInfo}
+	// Injected variables: ${materials}, ${fields}, ${extractedInfo}
 	UserMessagePrompt string
 }
 
