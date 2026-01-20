@@ -9,8 +9,8 @@ import (
 )
 
 type InitTavilyResearchReq struct {
-	Topic            string
-	PreviousResearch string
+	Topic            string               `json:"topic"`
+	PreviousResearch string               `json:"previousResearch"`
 	CitationFormat   string               `json:"citation_format"` // numbered, mla, apa, chicago
 	Model            string               `json:"model"`           // mini, pro, auto
 	OutputSchema     *tavily.OutputSchema `json:"output_schema"`
