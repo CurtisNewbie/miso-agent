@@ -83,7 +83,7 @@ type TempMemory struct {
 	shortTermMemoryTTL time.Duration
 }
 
-func (m *TempMemory) Load(rail miso.Rail) (_longTerm string, shortTerm []Conversation, _err error) {
+func (m *TempMemory) LoadLocked(rail miso.Rail) (_longTerm string, shortTerm []Conversation, _err error) {
 	lk := redis.NewRLockf(rail, m.lockPat, m.key)
 	if err := lk.Lock(); err != nil {
 		return "", nil, err
@@ -103,8 +103,31 @@ func (m *TempMemory) Load(rail miso.Rail) (_longTerm string, shortTerm []Convers
 	return longTerm, shortTerm, nil
 }
 
-func (m *TempMemory) LoadFormatted(rail miso.Rail) (_longTerm string, _shortTerm string, _err error) {
-	longTerm, shortTerm, err := m.Load(rail)
+func (m *TempMemory) Load(rail miso.Rail) (_longTerm string, shortTerm []Conversation, _err error) {
+	shortTerm, err := m.shortTerm.Load(rail, m.key)
+	if err != nil {
+		return "", nil, err
+	}
+	slices.Reverse(shortTerm)
+
+	longTerm, err := m.longTerm.Load(rail, m.key)
+	if err != nil {
+		return "", nil, err
+	}
+	return longTerm, shortTerm, nil
+}
+
+func (m *TempMemory) LoadFormatted(rail miso.Rail, lock bool) (_longTerm string, _shortTerm string, _err error) {
+	var (
+		longTerm  string
+		shortTerm []Conversation
+		err       error
+	)
+	if lock {
+		longTerm, shortTerm, err = m.LoadLocked(rail)
+	} else {
+		longTerm, shortTerm, err = m.Load(rail)
+	}
 	if err != nil {
 		return "", "", err
 	}
