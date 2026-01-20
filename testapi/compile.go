@@ -28,5 +28,7 @@ func compileGraph() error {
 	if err != nil {
 		return err
 	}
-	return nil
+
+	_, err = agents.NewMaterialExtract(rail, model, agents.NewMaterialExtractOps(gop))
+	return err
 }
