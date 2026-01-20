@@ -39,6 +39,7 @@ ${query}
  - Actionable Output: Provide clear, concrete steps, alternatives, or criteria for decision-making.
  - Evidence-Based: Ground insights in credible data, case studies, or proven examples—not just trends.
  - Clarity on Gaps: If critical information is unavailable or uncertain, state this simply and move on. Do not over-elaborate on research process shortcomings.
+ - Readability: Use language that is easy to understand, try not to over-complicate things.
 
  Avoid:
   - Purely academic or abstract discussions.
