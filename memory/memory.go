@@ -151,7 +151,7 @@ func (m *TempMemory) Append(rail miso.Rail, c Conversation) error {
 		return err
 	}
 	if len(shortTerm) >= m.compactThreshold {
-		async.Fire(rail, func() error { return m.compactMemory(rail) })
+		async.Fire(rail.NextSpan(), func() error { return m.compactMemory(rail) })
 	}
 	return nil
 }
