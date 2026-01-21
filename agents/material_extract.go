@@ -12,14 +12,17 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/atom"
+	"github.com/curtisnewbie/miso/util/hash"
 	"github.com/curtisnewbie/miso/util/json"
 	"github.com/curtisnewbie/miso/util/llm"
+	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
 type MaterialExtract struct {
-	genops *GenericOps
-	graph  compose.Runnable[MaterialExtractInput, MaterialExtractOutput]
+	ops   *MaterialExtractOps
+	graph compose.Runnable[MaterialExtractInput, MaterialExtractOutput]
 }
 
 type Material struct {
@@ -31,6 +34,7 @@ type MaterialExtractInput struct {
 	Context   string             `json:"context"`
 	Materials []Material         `json:"materials"`
 	Fields    []ExtractFieldSpec `json:"fields"`
+	now       atom.Time
 }
 
 type ExtractFieldSpec struct {
@@ -49,7 +53,7 @@ func (e ExtractFieldSpecs) format() string {
 	sb := strutil.NewBuilder()
 	for i, f := range e {
 		if f.Example != "" {
-			sb.Printlnf("%d. %s: %s (E.g., %s)", i+1, f.Name, f.Description, f.Example)
+			sb.Printlnf("%d. %s: %s (E.g., %s)", i+1, f.Name, f.Description, strutil.SAddLineIndent(f.Example, " "))
 		} else {
 			sb.Printlnf("%d. %s: %s", i+1, f.Name, f.Description)
 		}
@@ -64,11 +68,13 @@ type MaterialExtractOutput struct {
 type MaterialExtractOps struct {
 	genops *GenericOps
 
-	// Injected variables: ${context}
+	// Injected variables: ${context}, ${language}, ${now}
 	SystemMessagePrompt string
 
 	// Injected variables: ${materials}, ${fields}, ${extractedInfo}
 	UserMessagePrompt string
+
+	TimeZoneHourOffset float64
 }
 
 func NewMaterialExtractOps(g *GenericOps) *MaterialExtractOps {
@@ -79,10 +85,13 @@ You are a information extraction assistant. Your task is to carefully review the
 ${context}
 
 You should:
-1. Read through the materials systematically
-2. Extract missing information based on the requirements
-3. Use the fillExtractedInfoTool to fill in the extracted information
-4. Be thorough and accurate in your extraction
+1. Use ${language}
+2. Read through the materials systematically
+3. Extract missing information based on the requirements
+4. Use the fillExtractedInfoTool to fill in the extracted information
+5. Be thorough and accurate in your extraction
+
+Current Time: ${now}
 
 IMPORTANT: When calling fillExtractedInfoTool, you must provide the extracted information as a JSON object (key-value pairs, both of the key and value MUST BE string), NOT an array.
 Example of correct fillExtractedInfoTool call:
@@ -170,13 +179,6 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 	}
 
 	_ = g.AddLambdaNode("prepare_input", compose.InvokableLambda(func(ctx context.Context, in MaterialExtractInput) (MaterialExtractInput, error) {
-		// append extra reason fields for existing fields
-		reasonFields := make([]ExtractFieldSpec, 0, len(in.Fields))
-		for _, f := range in.Fields {
-			reasonFields = append(reasonFields, ExtractFieldSpec{Name: f.Name + "Reason", Description: "Based on what and how you extract field " + f.Name})
-		}
-		in.Fields = append(in.Fields, reasonFields...)
-
 		err := compose.ProcessState(ctx, func(ctx context.Context, state *materialExtractState) error {
 			state.input = in
 			return nil
@@ -184,23 +186,14 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 		return in, err
 	}), compose.WithNodeName("Prepare Input"))
 
-	_ = g.AddLambdaNode("prepare_system_messages", compose.InvokableLambda(func(ctx context.Context, in MaterialExtractInput) ([]*schema.Message, error) {
-		ctxbd := strutil.NewBuilder()
-		if in.Context != "" {
-			ctxbd.WriteRune('\n')
-			ctxbd.WriteString(in.Context)
-		}
-		systemMessage := schema.SystemMessage(strings.TrimSpace(strutil.NamedSprintf(ops.SystemMessagePrompt, map[string]any{
-			"context": ctxbd.String(),
-		})))
-		rail.Debugf("System Message: %v", systemMessage.Content)
-		return []*schema.Message{systemMessage}, nil
-	}), compose.WithNodeName("Prepare Messages"))
-
 	_ = g.AddLambdaNode("select_material", compose.InvokableLambda(func(ctx context.Context, _ any) ([]*schema.Message, error) {
-		var materialText string
-		var extractedInfo string
-		var fields string
+		var (
+			materialText  string
+			extractedInfo string
+			fields        string
+			contexts      string
+			now           string
+		)
 
 		err := compose.ProcessState(ctx, func(ctx context.Context, state *materialExtractState) error {
 			flow.NewRail(ctx).Infof("Reading material: %v, %v", state.materialIndex, state.input.Materials[state.materialIndex].Source)
@@ -213,6 +206,15 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 			materialText = fmt.Sprintf("Material %d (Source: %s):\n%s\n", state.materialIndex+1, currentMaterial.Source, currentMaterial.Content)
 			extractedInfo = json.TrySWriteJson(state.extractedInfo)
 			fields = ExtractFieldSpecs(state.input.Fields).format()
+
+			ctxbd := strutil.NewBuilder()
+			if state.input.Context != "" {
+				ctxbd.WriteRune('\n')
+				ctxbd.WriteString(state.input.Context)
+			}
+			contexts = ctxbd.String()
+			now = state.input.now.FormatStdLocale()
+
 			return nil
 		})
 		if err != nil {
@@ -222,16 +224,20 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 			return []*schema.Message{}, nil
 		}
 
-		userMessage := schema.UserMessage(strings.TrimSpace(
-			strutil.NamedSprintf(ops.UserMessagePrompt, map[string]any{
-				"material":      materialText,
-				"fields":        fields,
-				"extractedInfo": extractedInfo,
-			})),
-		)
-		rail.Debugf("User Message: %v", userMessage.Content)
+		systemMessage := schema.SystemMessage(strings.TrimSpace(strutil.NamedSprintf(ops.SystemMessagePrompt, map[string]any{
+			"context":  contexts,
+			"language": ops.genops.Language,
+			"now":      now,
+		})))
+		userMessage := schema.UserMessage(strings.TrimSpace(strutil.NamedSprintf(ops.UserMessagePrompt, map[string]any{
+			"material":      materialText,
+			"fields":        fields,
+			"extractedInfo": extractedInfo,
+		})))
+		rail.Infof("System Message: %v", systemMessage.Content)
+		rail.Infof("User Message: %v", userMessage.Content)
 
-		return []*schema.Message{userMessage}, nil
+		return []*schema.Message{systemMessage, userMessage}, nil
 	}), compose.WithNodeName("Prepare User Message"))
 
 	_ = g.AddChatModelNode("extract_info", chatModel, compose.WithNodeName("Extract Info"))
@@ -262,10 +268,41 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 
 		err := compose.ProcessState(ctx, func(ctx context.Context, state *materialExtractState) error {
 			if len(in.ExtractedInfo) > 0 {
+				merged := hash.NewSet[string]()
 				for k, v := range in.ExtractedInfo {
 					if v != "" {
+						if strings.HasSuffix(k, "Reason") {
+							continue // skip reason field in first iteration
+						}
 						state.extractedInfo[k] = v
+						merged.Add(k)
 					}
+				}
+
+				// only update reason field when the original field is written
+				for k := range merged.All() {
+					rk := k + "Reason"
+					state.extractedInfo[rk] = in.ExtractedInfo[rk]
+				}
+
+				// update reason fields when the original fields are empty
+				missing := hash.NewSet[string]()
+				for k, v := range state.extractedInfo {
+					if strings.HasSuffix(k, "Reason") {
+						continue // skip reason field in first iteration
+					}
+					if v == "" {
+						missing.Add(k)
+					}
+				}
+				for k := range missing.All() {
+					// we only update the reason fields, explaining why the field is missing
+					kr := k + "Reason"
+					v, ok := state.extractedInfo[kr]
+					if !ok {
+						continue
+					}
+					state.extractedInfo[kr] = v
 				}
 			}
 			state.materialIndex++
@@ -299,8 +336,7 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 	}))
 
 	_ = g.AddEdge(compose.START, "prepare_input")
-	_ = g.AddEdge("prepare_input", "prepare_system_messages")
-	_ = g.AddEdge("prepare_system_messages", "select_material")
+	_ = g.AddEdge("prepare_input", "select_material")
 	_ = g.AddEdge("select_material", "extract_info")
 	_ = g.AddEdge("extract_info", "tools")
 	_ = g.AddEdge("tools", "extract_tool_output")
@@ -312,7 +348,7 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 		return nil, errs.Wrap(err)
 	}
 
-	return &MaterialExtract{graph: runnable, genops: ops.genops}, nil
+	return &MaterialExtract{graph: runnable, ops: ops}, nil
 }
 
 func (b *MaterialExtract) Execute(rail flow.Rail, input MaterialExtractInput) (MaterialExtractOutput, error) {
@@ -320,9 +356,36 @@ func (b *MaterialExtract) Execute(rail flow.Rail, input MaterialExtractInput) (M
 		return MaterialExtractOutput{}, nil
 	}
 
-	cops := []compose.Option{}
-	if b.genops.LogOnStart {
-		cops = append(cops, WithTraceCallback("MaterialExtract", b.genops.LogInputs))
+	now := atom.Now()
+	if b.ops.TimeZoneHourOffset > 0 {
+		now = now.InZone(float64(b.ops.TimeZoneHourOffset))
 	}
-	return b.graph.Invoke(rail, input, cops...)
+	input.now = now
+
+	// append extra reason fields for existing fields
+	reasonFields := make([]ExtractFieldSpec, 0, len(input.Fields))
+	for _, f := range input.Fields {
+		reasonFields = append(reasonFields, ExtractFieldSpec{Name: f.Name + "Reason", Description: "Based on what and how you extract field " + f.Name})
+	}
+	input.Fields = append(reasonFields, input.Fields...)
+
+	cops := []compose.Option{}
+	if b.ops.genops.LogOnStart {
+		cops = append(cops, WithTraceCallback("MaterialExtract", b.ops.genops.LogInputs))
+	}
+	out, err := b.graph.Invoke(rail, input, cops...)
+	if err != nil {
+		return out, err
+	}
+
+	required := hash.NewSet[string](slutil.MapTo(input.Fields, func(f ExtractFieldSpec) string { return f.Name })...)
+	if out.ExtractedInfo == nil {
+		out.ExtractedInfo = map[string]string{}
+	}
+	for k := range required.All() {
+		if _, ok := out.ExtractedInfo[k]; !ok {
+			out.ExtractedInfo[k] = ""
+		}
+	}
+	return out, nil
 }
