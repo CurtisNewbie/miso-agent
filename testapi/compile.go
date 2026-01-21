@@ -29,6 +29,11 @@ func compileGraph() error {
 		return err
 	}
 
+	_, err = agents.NewRuleMatcher(rail, model, agents.NewRuleMatcherOps(gop))
+	if err != nil {
+		return err
+	}
+
 	_, err = agents.NewMaterialExtract(rail, model, agents.NewMaterialExtractOps(gop))
 	return err
 }
