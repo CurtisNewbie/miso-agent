@@ -237,6 +237,10 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 		rail.Infof("System Message: %v", systemMessage.Content)
 		rail.Infof("User Message: %v", userMessage.Content)
 
+		if ops.genops.RepeatPrompt {
+			return []*schema.Message{systemMessage, userMessage, systemMessage, userMessage}, nil
+		}
+
 		return []*schema.Message{systemMessage, userMessage}, nil
 	}), compose.WithNodeName("Prepare User Message"))
 
@@ -244,6 +248,7 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 	_ = g.AddToolsNode("tools", toolNode)
 
 	_ = g.AddLambdaNode("extract_tool_output", compose.InvokableLambda(func(ctx context.Context, input []*schema.Message) (toolOutputResult, error) {
+		rail := flow.NewRail(ctx)
 		result := toolOutputResult{}
 		for _, m := range input {
 			if m == nil {
@@ -253,13 +258,14 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 				doneInput, err := llm.ParseLLMJsonAs[ExtractToolInput](m.Content)
 				if err != nil {
 					rail.Warnf("Failed to parse tool output: %v", err)
-					return toolOutputResult{ExtractedInfo: map[string]string{}}, nil
+					return toolOutputResult{ExtractedInfo: map[string]string{}}, err
 				} else {
 					rail.Infof("Parsed tool output: %#v", doneInput)
 				}
 				return toolOutputResult{ExtractedInfo: doneInput.ExtractedInfo}, nil
 			}
 		}
+		rail.Warnf("Did not call %v", fillExtractedInfoToolName)
 		return result, nil
 	}), compose.WithNodeName("Extract Tool Output"))
 
