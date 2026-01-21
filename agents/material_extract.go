@@ -298,7 +298,7 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 				for k := range missing.All() {
 					// we only update the reason fields, explaining why the field is missing
 					kr := k + "Reason"
-					v, ok := state.extractedInfo[kr]
+					v, ok := in.ExtractedInfo[kr]
 					if !ok {
 						continue
 					}
