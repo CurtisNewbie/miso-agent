@@ -41,7 +41,7 @@ type RuleMatcherInput struct {
 	// Rules
 	Rules []Rule `json:"Rules"`
 
-	now atom.Time `json:"now"`
+	now atom.Time
 }
 
 type RuleResult struct {

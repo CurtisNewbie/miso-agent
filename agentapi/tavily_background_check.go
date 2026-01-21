@@ -50,8 +50,8 @@ func TavilBackgroundCheck(rail miso.Rail, apiKey string, req InitTavilyBackgroun
 	query := strutil.NamedSprintf(`
 # Task
 Conduct a focused investigation of the provided Entity based solely on the specified Aspects.
-Generate a practical, fact-based report that directly answers the questions.
-Do not research, analyze, or comment on areas outside the defined scope.
+Generate a practical, fact-based report that directly answers or closely related to the questions.
+Do not research or analyze on areas outside the defined scope.
 
 # Context
 - Entity Name: ${entity}
@@ -62,7 +62,7 @@ ${context}
 
 # Core Instructions:
 - Report must be written in ${language}.
-- Strict Scope Adherence: Research only the listed Aspects. Ignore all other information about the entity, no matter how notable it seems.
+- Strict Scope Adherence: Research the listed Aspects. Ignore all other information about the entity unless the information is very closely related to the listed aspects.
 - Practical & Direct: Write concisely. Present findings as clear statements, bullet points, or short summaries. Avoid introductions, theoretical frameworks, and concluding summaries.
 - Fact-Based Reporting: Prioritize verified data from credible sources (official records, reputable news, financial filings). Clearly distinguish between confirmed facts and widespread public claims.
 - Gap Statement: If a specific Aspect cannot be answered due to a complete lack of publicly available information, state this simply (e.g., "No public record found."). Do not elaborate on the reasons for the gap.
