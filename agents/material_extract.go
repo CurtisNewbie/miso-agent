@@ -169,6 +169,21 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 		return nil, err
 	}
 
+	_ = g.AddLambdaNode("prepare_input", compose.InvokableLambda(func(ctx context.Context, in MaterialExtractInput) (MaterialExtractInput, error) {
+		// append extra reason fields for existing fields
+		reasonFields := make([]ExtractFieldSpec, 0, len(in.Fields))
+		for _, f := range in.Fields {
+			reasonFields = append(reasonFields, ExtractFieldSpec{Name: f.Name + "Reason", Description: "Based on what and how you extract field " + f.Name})
+		}
+		in.Fields = append(in.Fields, reasonFields...)
+
+		err := compose.ProcessState(ctx, func(ctx context.Context, state *materialExtractState) error {
+			state.input = in
+			return nil
+		})
+		return in, err
+	}), compose.WithNodeName("Prepare Input"))
+
 	_ = g.AddLambdaNode("prepare_system_messages", compose.InvokableLambda(func(ctx context.Context, in MaterialExtractInput) ([]*schema.Message, error) {
 		ctxbd := strutil.NewBuilder()
 		if in.Context != "" {
@@ -181,14 +196,6 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 		rail.Debugf("System Message: %v", systemMessage.Content)
 		return []*schema.Message{systemMessage}, nil
 	}), compose.WithNodeName("Prepare Messages"))
-
-	_ = g.AddLambdaNode("prepare_input", compose.InvokableLambda(func(ctx context.Context, in MaterialExtractInput) (MaterialExtractInput, error) {
-		err := compose.ProcessState(ctx, func(ctx context.Context, state *materialExtractState) error {
-			state.input = in
-			return nil
-		})
-		return in, err
-	}), compose.WithNodeName("Prepare Input"))
 
 	_ = g.AddLambdaNode("select_material", compose.InvokableLambda(func(ctx context.Context, _ any) ([]*schema.Message, error) {
 		var materialText string
