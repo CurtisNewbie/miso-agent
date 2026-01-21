@@ -9,9 +9,9 @@ import (
 )
 
 type TavilyBackgroundCheckAspect struct {
-	Name        string
-	Description string
-	Example     string
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Example     string `json:"example"`
 }
 
 type InitTavilyBackgroundCheckReq struct {
