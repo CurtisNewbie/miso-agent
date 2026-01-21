@@ -12,6 +12,9 @@ func CompileGraph[T, V any](rail flow.Rail, o *GenericOps, g *compose.Graph[T, V
 	if o.VisualizeDir != "" {
 		opts = append(opts, compose.WithGraphCompileCallbacks(NewMermaidGenerator(o.VisualizeDir)))
 	}
+	if o.MaxRunSteps > 0 {
+		opts = append(opts, compose.WithMaxRunSteps(o.MaxRunSteps))
+	}
 	return g.Compile(rail, opts...)
 }
 

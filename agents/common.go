@@ -1,6 +1,7 @@
 package agents
 
 type GenericOps struct {
+	MaxRunSteps  int
 	RepeatPrompt bool // Propmt Repeation: https://arxiv.org/html/2512.14982v1
 	Now          string
 	Language     string
