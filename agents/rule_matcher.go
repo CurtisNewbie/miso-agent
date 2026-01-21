@@ -28,6 +28,11 @@ type Rule struct {
 }
 
 type RuleMatcherInput struct {
+	// Additional instruction about the task
+	//
+	// How should LLM make decision on whether the target matches the given rule or not.
+	TaskInstruction string `json:"taskInstruction"`
+
 	// context about the target
 	//
 	// e.g., if we are running a background check for a company, the context will be the information about the company.
@@ -36,7 +41,7 @@ type RuleMatcherInput struct {
 	// Rules
 	Rules []Rule `json:"Rules"`
 
-	now atom.Time
+	now atom.Time `json:"now"`
 }
 
 type RuleResult struct {
@@ -52,7 +57,7 @@ type RuleMatcherOutput struct {
 type RuleMatcherOps struct {
 	genops *GenericOps
 
-	// Injected variables: ${language}, ${now}
+	// Injected variables: ${taskInstruction}, ${language}, ${now}
 	SystemMessagePrompt string
 
 	// Injected variables: ${rule}, ${context}
@@ -66,11 +71,12 @@ func NewRuleMatcherOps(g *GenericOps) *RuleMatcherOps {
 		genops: g,
 		SystemMessagePrompt: `
 You are a rule matcher. Your task is to carefully review the provided context information and check if the given rule matches for the given context.
+${taskInstruction}
 
 You should:
 1. Use ${language}
 2. Read through the Rules systematically
-4. Use the RecordMatchRuleTool to record the information about the rule matched.
+4. Always use the tool RecordMatchRuleTool to record the information about the rule regardless of whether the rule matches.
 5. Be thorough and accurate.
 
 Current Time: ${now}
@@ -164,9 +170,10 @@ func NewRuleMatcher(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *R
 
 	_ = g.AddLambdaNode("select_rule", compose.InvokableLambda(func(ctx context.Context, _ any) ([]*schema.Message, error) {
 		var (
-			RuleText string
-			contexts string
-			now      string
+			taskInstruct string
+			RuleText     string
+			contexts     string
+			now          string
 		)
 
 		err := compose.ProcessState(ctx, func(ctx context.Context, state *RuleMatcherState) error {
@@ -180,6 +187,7 @@ func NewRuleMatcher(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *R
 			RuleText = fmt.Sprintf("Rule Name: %s\nRule Content: %s\n", crule.Name, crule.Content)
 			now = state.input.now.FormatStdLocale()
 			contexts = state.input.Context
+			taskInstruct = state.input.TaskInstruction
 
 			return nil
 		})
@@ -191,12 +199,13 @@ func NewRuleMatcher(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *R
 		}
 
 		systemMessage := schema.SystemMessage(strings.TrimSpace(strutil.NamedSprintf(ops.SystemMessagePrompt, map[string]any{
-			"context":  contexts,
-			"language": ops.genops.Language,
-			"now":      now,
+			"taskInstruction": taskInstruct,
+			"language":        ops.genops.Language,
+			"now":             now,
 		})))
 		userMessage := schema.UserMessage(strings.TrimSpace(strutil.NamedSprintf(ops.UserMessagePrompt, map[string]any{
-			"Rule": RuleText,
+			"rule":    RuleText,
+			"context": contexts,
 		})))
 		rail.Infof("System Message: %v", systemMessage.Content)
 		rail.Infof("User Message: %v", userMessage.Content)
