@@ -314,6 +314,7 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 			state.materialIndex++
 			result.ShouldContinue = state.materialIndex < len(state.input.Materials)
 			result.ExtractedInfo = state.extractedInfo
+			rail.Infof("Update states: %#v", state.extractedInfo)
 			return nil
 		})
 		if err != nil {
