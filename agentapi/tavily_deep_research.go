@@ -32,24 +32,19 @@ func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq,
 # Research Topic
 ${query}
 
-# Core Research Requirements:
- - Practical Focus: Prioritize real-world application over theoretical concepts. Avoid jargon; explain necessary terms plainly.
- - Problem-Solution Alignment: Clearly connect findings to specific, solvable problems or decisions the user faces.
- - Scope & Constraints: Acknowledge limitations (e.g., cost, time, feasibility) in any recommendations.
- - Actionable Output: Provide clear, concrete steps, alternatives, or criteria for decision-making.
- - Evidence-Based: Ground insights in credible data, case studies, or proven examples—not just trends.
- - Clarity on Gaps: If critical information is unavailable or uncertain, state this simply and move on. Do not over-elaborate on research process shortcomings.
- - Readability: Use language that is easy to understand, try not to over-complicate things.
-
- Avoid:
-  - Purely academic or abstract discussions.
-  - Overly verbose explanations or unnecessary background.
-  - Generic advice without clear implementation paths.
-
-# Formatting Requirements
- - Avoid LaTeX syntax, LaTeX markdown can't be rendered properly in the generated report.
- - Avoid Citation in graphs, it hurts readability.
- - Simplify graphs, graphs are rendered in plain text, make sure they are readable, avoid fancy formatting.
+# Core Research Requirements
+- Practical Focus: Prioritize real-world application over theoretical concepts. Avoid jargon, abstract discussions, or overly verbose explanations. Explain necessary terms plainly.
+- Problem-Solution Alignment: Clearly connect findings to specific, solvable problems or decisions the user faces.
+- Scope & Constraints: Acknowledge limitations (e.g., cost, time, feasibility) in any recommendations.
+- Actionable Output: Provide clear, concrete steps, alternatives, or criteria for decision-making.
+- Evidence-Based: Ground insights in credible data, case studies, or proven examples—not just trends.
+- Clarity on Gaps: If critical information is unavailable or uncertain, state this simply and move on. Do not over-elaborate on research process shortcomings.
+- Readability: Use simple, easy to understand language, try not to over-complicate things.
+- Formatting:
+	- Report should be well organized. Avoid using too many bulletpoints.
+	- Avoid LaTeX syntax, LaTeX markdown can't be rendered properly in the generated report.
+	- Avoid Citation in graphs, it hurts readability.
+	- Simplify graphs, graphs are rendered in plain text, make sure they are readable, avoid fancy formatting.
 
 ${previousResearch}
 `, "query", req.Topic, "previousResearch", previousResearch)
