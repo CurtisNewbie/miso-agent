@@ -17,6 +17,23 @@ var (
 	AliBailianCnBaseURL   = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 
+var (
+	modelMaxToken = map[string]int{
+		"qwen-flash":                     32000,
+		"qwen-plus":                      32000,
+		"qwen3-max":                      64000,
+		"qwen3-coder-plus":               64000,
+		"qwen3-next-80b-a3b-thinking":    32000,
+		"qwen3-next-80b-a3b-instruct":    32000,
+		"qwen3-coder-30b-a3b-instruct":   64000,
+		"qwen3-30b-a3b-thinking-2507":    32000,
+		"qwen3-30b-a3b-instruct-2507":    32000,
+		"qwen3-235b-a22b-thinking-2507":  32000,
+		"qwen3-235b-a22b-instruct-2507":  32000,
+		"qwen3-coder-480b-a35b-instruct": 64000,
+	}
+)
+
 type openAiModelConfig struct {
 	maxToken    int
 	temperature float32
@@ -44,13 +61,22 @@ func WithRetry(n int) func(o *openAiModelConfig) {
 
 func NewOpenAIChatModel(model, apiKey string, ops ...func(o *openAiModelConfig)) (model.ToolCallingChatModel, error) {
 	o := &openAiModelConfig{
-		maxToken:    4096,
+		maxToken:    0,
 		temperature: 0.7,
 		baseURL:     AliBailianIntlBaseURL,
 		retry:       0,
 	}
 	for _, op := range ops {
 		op(o)
+	}
+
+	if o.maxToken < 1 {
+		if n, ok := modelMaxToken[model]; ok {
+			o.maxToken = n
+		}
+	}
+	if o.maxToken < 1 {
+		o.maxToken = 32000 // default value for all models
 	}
 
 	cm, err := openai.NewChatModel(context.TODO(), &openai.ChatModelConfig{
