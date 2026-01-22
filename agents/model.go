@@ -17,20 +17,25 @@ var (
 	AliBailianCnBaseURL   = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 
+const (
+	maxToken32k = 32768
+	maxToken64k = 65536
+)
+
 var (
 	modelMaxToken = map[string]int{
-		"qwen-flash":                     32000,
-		"qwen-plus":                      32000,
-		"qwen3-max":                      64000,
-		"qwen3-coder-plus":               64000,
-		"qwen3-next-80b-a3b-thinking":    32000,
-		"qwen3-next-80b-a3b-instruct":    32000,
-		"qwen3-coder-30b-a3b-instruct":   64000,
-		"qwen3-30b-a3b-thinking-2507":    32000,
-		"qwen3-30b-a3b-instruct-2507":    32000,
-		"qwen3-235b-a22b-thinking-2507":  32000,
-		"qwen3-235b-a22b-instruct-2507":  32000,
-		"qwen3-coder-480b-a35b-instruct": 64000,
+		"qwen-flash":                     maxToken32k,
+		"qwen-plus":                      maxToken32k,
+		"qwen3-max":                      maxToken64k,
+		"qwen3-coder-plus":               maxToken64k,
+		"qwen3-next-80b-a3b-thinking":    maxToken32k,
+		"qwen3-next-80b-a3b-instruct":    maxToken32k,
+		"qwen3-coder-30b-a3b-instruct":   maxToken64k,
+		"qwen3-30b-a3b-thinking-2507":    maxToken32k,
+		"qwen3-30b-a3b-instruct-2507":    maxToken32k,
+		"qwen3-235b-a22b-thinking-2507":  maxToken32k,
+		"qwen3-235b-a22b-instruct-2507":  maxToken32k,
+		"qwen3-coder-480b-a35b-instruct": maxToken64k,
 	}
 )
 
@@ -76,7 +81,7 @@ func NewOpenAIChatModel(model, apiKey string, ops ...func(o *openAiModelConfig))
 		}
 	}
 	if o.maxToken < 1 {
-		o.maxToken = 32000 // default value for all models
+		o.maxToken = maxToken32k // default value for all models
 	}
 
 	cm, err := openai.NewChatModel(context.TODO(), &openai.ChatModelConfig{
