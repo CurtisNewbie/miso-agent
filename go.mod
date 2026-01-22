@@ -6,7 +6,7 @@ require (
 	github.com/cloudwego/eino v0.7.18
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.7
 	github.com/curtisnewbie/miso v0.4.12-0.20260120081926-5532113bb9b3
-	github.com/curtisnewbie/miso-tavily v0.0.0-20260119032449-bf5b540e2f34
+	github.com/curtisnewbie/miso-tavily v0.0.0-20260122055311-4a748287d499
 )
 
 require (

@@ -5,6 +5,7 @@ import (
 
 	"github.com/curtisnewbie/miso-tavily/tavily"
 	"github.com/curtisnewbie/miso/miso"
+	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -16,10 +17,21 @@ type InitTavilyResearchReq struct {
 	OutputSchema     *tavily.OutputSchema `json:"output_schema"`
 }
 
+type Source struct {
+	Favicon string `json:"favicon"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+}
+
+type TavilyDeepResearchRes struct {
+	Report  string   `json:"report"`
+	Sources []Source `json:"sources"`
+}
+
 // Run Tavily Deep Research with predefined prompt.
 //
 // If you don't want the prompt, just call Tvaily's API yourself, or use [tavily.StreamResearch] directly.
-func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq, ops ...tavily.StreamResearchOpFunc) (string, error) {
+func TavilyDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq, ops ...tavily.StreamResearchOpFunc) (TavilyDeepResearchRes, error) {
 	var previousResearch string
 	if req.PreviousResearch != "" {
 		previousResearch = fmt.Sprintf(`
@@ -28,6 +40,8 @@ func TavilDeepResearch(rail miso.Rail, apiKey string, req InitTavilyResearchReq,
 %s
 </previous_research>`, req.PreviousResearch)
 	}
+
+	sources := make([]tavily.Source, 0, 10)
 	query := strutil.NamedSprintfkv(`
 # Research Topic
 ${query}
@@ -50,8 +64,7 @@ ${previousResearch}
 `, "query", req.Topic, "previousResearch", previousResearch)
 
 	rail.Infof("TavilyDeepResearch Prompt: %v", query)
-
-	return tavily.StreamResearch(rail, apiKey,
+	report, err := tavily.StreamResearch(rail, apiKey,
 		tavily.InitResearchReq{
 			CitationFormat: req.CitationFormat,
 			Input:          query,
@@ -59,5 +72,16 @@ ${previousResearch}
 			OutputSchema:   req.OutputSchema,
 			Stream:         true,
 		},
-		ops...)
+		append(ops, tavily.WithSourceHook(func(s []tavily.Source) error {
+			sources = append(sources, s...)
+			return nil
+		}))...)
+
+	if err != nil {
+		return TavilyDeepResearchRes{}, err
+	}
+	return TavilyDeepResearchRes{
+		Report:  report,
+		Sources: slutil.MapTo(sources, func(s tavily.Source) Source { return Source(s) }),
+	}, nil
 }
