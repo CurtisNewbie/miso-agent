@@ -12,8 +12,10 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/async"
 	"github.com/curtisnewbie/miso/util/atom"
 	"github.com/curtisnewbie/miso/util/llm"
+	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -289,6 +291,9 @@ func NewRuleMatcher(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *R
 	return &RuleMatcher{graph: runnable, ops: ops}, nil
 }
 
+// Execute.
+//
+// If there are lots of rules, use [RuleMatcher.ParallelExecute] instead.
 func (b *RuleMatcher) Execute(rail flow.Rail, input RuleMatcherInput) (RuleMatcherOutput, error) {
 	if len(input.Rules) < 1 {
 		return RuleMatcherOutput{}, nil
@@ -309,4 +314,30 @@ func (b *RuleMatcher) Execute(rail flow.Rail, input RuleMatcherInput) (RuleMatch
 		return out, err
 	}
 	return out, nil
+}
+
+func (b *RuleMatcher) ParallelExecute(rail flow.Rail, input RuleMatcherInput, batchSize int, pool async.AsyncPool) (RuleMatcherOutput, error) {
+	aw := async.NewAwaitFutures[RuleMatcherOutput](pool)
+	if batchSize < 1 {
+		batchSize = 2
+	}
+	slutil.SplitSubSlices(input.Rules, batchSize, func(sub []Rule) error {
+		aw.SubmitAsync(func() (RuleMatcherOutput, error) {
+			return b.Execute(rail.NextSpan(), RuleMatcherInput{
+				Context:         input.Context,
+				TaskInstruction: input.TaskInstruction,
+				Rules:           sub,
+			})
+		})
+		return nil
+	})
+	r, err := aw.AwaitResultAnyErr()
+	if err != nil {
+		return RuleMatcherOutput{}, err
+	}
+	merged := make([]RuleResult, 0, len(input.Rules))
+	for _, v := range r {
+		merged = append(merged, v.Rules...)
+	}
+	return RuleMatcherOutput{Rules: merged}, nil
 }

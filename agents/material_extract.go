@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
@@ -12,6 +13,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/async"
 	"github.com/curtisnewbie/miso/util/atom"
 	"github.com/curtisnewbie/miso/util/hash"
 	"github.com/curtisnewbie/miso/util/json"
@@ -358,6 +360,9 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 	return &MaterialExtract{graph: runnable, ops: ops}, nil
 }
 
+// Execute.
+//
+// If there are lots of fields, use [MaterialExtract.ParallelExecute] instead.
 func (b *MaterialExtract) Execute(rail flow.Rail, input MaterialExtractInput) (MaterialExtractOutput, error) {
 	if len(input.Materials) < 1 {
 		return MaterialExtractOutput{}, nil
@@ -395,4 +400,34 @@ func (b *MaterialExtract) Execute(rail flow.Rail, input MaterialExtractInput) (M
 		}
 	}
 	return out, nil
+}
+
+func (b *MaterialExtract) ParallelExecute(rail flow.Rail, input MaterialExtractInput, batchSize int, pool async.AsyncPool) (MaterialExtractOutput, error) {
+	aw := async.NewAwaitFutures[MaterialExtractOutput](pool)
+	if batchSize < 1 {
+		batchSize = 5
+	}
+	slutil.SplitSubSlices(input.Fields, batchSize, func(sub []ExtractFieldSpec) error {
+		aw.SubmitAsync(func() (MaterialExtractOutput, error) {
+			return b.Execute(rail.NextSpan(), MaterialExtractInput{
+				Context:   input.Context,
+				Materials: input.Materials,
+				Fields:    sub,
+			})
+		})
+		return nil
+	})
+	r, err := aw.AwaitResultAnyErr()
+	if err != nil {
+		return MaterialExtractOutput{}, err
+	}
+	n := 0
+	for _, v := range r {
+		n += len(v.ExtractedInfo)
+	}
+	merged := make(map[string]string, n)
+	for _, v := range r {
+		maps.Copy(merged, v.ExtractedInfo)
+	}
+	return MaterialExtractOutput{ExtractedInfo: merged}, nil
 }
