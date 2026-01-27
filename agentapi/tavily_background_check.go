@@ -39,7 +39,7 @@ func TavilBackgroundParallelCheck(rail miso.Rail, apiKey string, req TavilyBackg
 	aw := async.NewAwaitFutures[TavilyBackgroundCheckRes](pool)
 	_ = slutil.SplitSubSlices(req.Asepcts, batchSize, func(sub []TavilyBackgroundCheckAspect) error {
 		aw.SubmitAsync(func() (TavilyBackgroundCheckRes, error) {
-			return TavilBackgroundCheck(rail, apiKey, TavilyBackgroundCheckReq{
+			return TavilBackgroundCheck(rail.NextSpan(), apiKey, TavilyBackgroundCheckReq{
 				Language: req.Language,
 				Entity:   req.Entity,
 				Context:  req.Context,
