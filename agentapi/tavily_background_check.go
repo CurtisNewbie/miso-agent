@@ -5,6 +5,7 @@ import (
 
 	"github.com/curtisnewbie/miso-tavily/tavily"
 	"github.com/curtisnewbie/miso/miso"
+	"github.com/curtisnewbie/miso/util/async"
 	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
@@ -26,6 +27,29 @@ type TavilyBackgroundCheckReq struct {
 type TavilyBackgroundCheckRes struct {
 	Report  string   `json:"report"`
 	Sources []Source `json:"sources"`
+}
+
+// Run multiple Tavily background check with predefined prompt in parallel.
+//
+// If you don't want the prompt, just call Tvaily's API yourself, or use [tavily.StreamResearch] directly.
+func TavilBackgroundParallelCheck(rail miso.Rail, apiKey string, req TavilyBackgroundCheckReq, pool async.AsyncPool, batchSize int, ops ...tavily.StreamResearchOpFunc) ([]TavilyBackgroundCheckRes, error) {
+	if batchSize < 1 {
+		batchSize = 5
+	}
+	aw := async.NewAwaitFutures[TavilyBackgroundCheckRes](pool)
+	_ = slutil.SplitSubSlices(req.Asepcts, batchSize, func(sub []TavilyBackgroundCheckAspect) error {
+		aw.SubmitAsync(func() (TavilyBackgroundCheckRes, error) {
+			return TavilBackgroundCheck(rail, apiKey, TavilyBackgroundCheckReq{
+				Language: req.Language,
+				Entity:   req.Entity,
+				Context:  req.Context,
+				Asepcts:  sub,
+				Model:    req.Model,
+			}, ops...)
+		})
+		return nil
+	})
+	return aw.AwaitResultAnyErr()
 }
 
 // Run Tavily background check with predefined prompt.
