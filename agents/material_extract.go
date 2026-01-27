@@ -92,6 +92,7 @@ You should:
 3. Extract missing information based on the requirements
 4. Use the fillExtractedInfoTool to fill in the extracted information
 5. Be thorough and accurate in your extraction
+6. Always refer to material 'source' name not index number.
 
 Current Time: ${now}
 
