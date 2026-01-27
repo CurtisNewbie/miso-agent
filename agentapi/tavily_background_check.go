@@ -63,15 +63,15 @@ func TavilBackgroundCheck(rail miso.Rail, apiKey string, req TavilyBackgroundChe
 	ab := strutil.NewBuilder()
 	ab.WithIndent("  ", 1)
 	for _, asp := range req.Asepcts {
-		ab.Printlnf("- %v", asp.Name)
+		ab.PPrintlnf("- %v", asp.Name)
 		if asp.Description != "" {
 			ab.Printf(", %v", asp.Description)
 		}
 		if asp.Example != "" {
 			ab.StepIn(func(b *strutil.Builder) {
-				b.Println("E.g.,")
+				b.PPrintln("E.g.,")
 				for _, l := range strings.Split(asp.Example, "\n") {
-					b.Println(l)
+					b.PPrintln(l)
 				}
 			})
 		}
