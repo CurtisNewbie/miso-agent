@@ -96,6 +96,7 @@ ${context}
 - Fact-Based Reporting: Prioritize verified data from credible sources (official records, reputable news, financial filings). Clearly distinguish between confirmed facts and widespread public claims.
 - Integrated Reasoning (CRITICAL): For each finding or answer provided, you must append a brief, practical reason in parentheses. This reason should explain the basis for the information (e.g., source type, logic of deduction, or acknowledgment of data limitation).
 - Gap Statement: If a specific Aspect cannot be answered due to a complete lack of publicly available information, state this simply (e.g., "No public record found."). Do not elaborate on the reasons for the gap.
+- Table structure is preferred for readability, but you must make sure all relevant information is included.
 `, map[string]any{
 		"language": req.Language,
 		"entity":   req.Entity,
