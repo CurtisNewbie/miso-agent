@@ -3,10 +3,10 @@ package agentloop
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agentloop/skills"
+	"github.com/curtisnewbie/miso/util/atom"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -154,11 +154,9 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 
 // GetCurrentTime returns the current time formatted for display.
 func GetCurrentTime(timezone float64) string {
-	now := time.Now()
+	now := atom.Now()
 	if timezone != 0 {
-		// Apply timezone offset
-		offset := time.Duration(timezone * float64(time.Hour))
-		now = now.Add(offset)
+		now = now.InZone(timezone)
 	}
-	return now.Format("2006-01-02 15:04:05")
+	return now.FormatStd()
 }

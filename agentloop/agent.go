@@ -102,18 +102,3 @@ func (a *Agent) Execute(ctx context.Context, userInput string) (string, error) {
 
 	return result.response, nil
 }
-
-// GetTools returns the agent's tool registry.
-func (a *Agent) GetTools() *tools.Registry {
-	return a.tools
-}
-
-// GetSkills returns the agent's skills middleware.
-func (a *Agent) GetSkills() *skills.Middleware {
-	return a.skills
-}
-
-// GetTodoManager returns the agent's todo manager.
-func (a *Agent) GetTodoManager() *tools.TodoManager {
-	return a.todoManager
-}
