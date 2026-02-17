@@ -2,10 +2,10 @@ package skills
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agentloop/backend"
+	"github.com/curtisnewbie/miso/errs"
 )
 
 // Middleware injects loaded skills into the system prompt.
@@ -25,7 +25,7 @@ func NewMiddleware(backend backend.FileBackendProtocol, sources []string) *Middl
 func (m *Middleware) Load(ctx context.Context, sources []string) error {
 	skills, err := m.loader.LoadFromSources(ctx, sources)
 	if err != nil {
-		return fmt.Errorf("failed to load skills: %w", err)
+		return errs.Wrapf(err, "failed to load skills")
 	}
 	m.skills = skills
 	return nil

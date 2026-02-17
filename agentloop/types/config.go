@@ -16,6 +16,11 @@ type AgentConfig struct {
 	// Skills are loaded from the backend and injected into the system prompt.
 	Skills []string
 
+	// PreloadedSkills is a map of file paths to content that will be written to the backend
+	// before loading skills. This is useful for predefining skills when using MemFileBackend.
+	// Example: {"/skills/web-research/SKILL.md": "# Web Research\n\n..."}
+	PreloadedSkills map[string]string
+
 	// Tools is a list of tools available to the agent.
 	// If nil, built-in tools will be used.
 	Tools []Tool

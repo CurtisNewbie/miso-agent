@@ -2,11 +2,11 @@ package skills
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/curtisnewbie/miso-agent/agentloop/backend"
+	"github.com/curtisnewbie/miso/errs"
 )
 
 // Loader loads skills from a backend.
@@ -31,7 +31,7 @@ func (l *Loader) LoadFromSources(ctx context.Context, sources []string) (SkillsM
 	for _, source := range sources {
 		sourceSkills, err := l.LoadFromSource(ctx, source)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load skills from %s: %w", source, err)
+			return nil, errs.Wrapf(err, "failed to load skills from %s", source)
 		}
 
 		// Merge skills, later sources override earlier ones
@@ -51,7 +51,7 @@ func (l *Loader) LoadFromSource(ctx context.Context, source string) (SkillsMap, 
 	// List directory contents
 	files, err := l.backend.ListDirectory(ctx, source)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list directory %s: %w", source, err)
+		return nil, errs.Wrapf(err, "failed to list directory %s", source)
 	}
 
 	result := make(SkillsMap)
@@ -80,13 +80,13 @@ func (l *Loader) LoadSkillFile(ctx context.Context, path string) (*Skill, error)
 	// Read file
 	content, err := l.backend.ReadFile(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read skill file %s: %w", path, err)
+		return nil, errs.Wrapf(err, "failed to read skill file %s", path)
 	}
 
 	// Parse skill
 	skill, err := LoadSkill(path, content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse skill %s: %w", path, err)
+		return nil, errs.Wrapf(err, "failed to parse skill %s", path)
 	}
 
 	return skill, nil

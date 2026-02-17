@@ -1,10 +1,12 @@
 package skills
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
+	"fmt"
+
+	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/strutil"
 	"gopkg.in/yaml.v2"
 )
@@ -39,7 +41,7 @@ func LoadSkill(path string, content []byte) (*Skill, error) {
 	// Split YAML frontmatter and content
 	parts := strings.SplitN(contentStr, "---", 3)
 	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid skill format: missing YAML frontmatter")
+		return nil, errs.NewErrf("invalid skill format: missing YAML frontmatter")
 	}
 
 	yamlContent := parts[1]
@@ -48,7 +50,7 @@ func LoadSkill(path string, content []byte) (*Skill, error) {
 	// Parse YAML frontmatter
 	var metadata SkillMetadata
 	if err := yaml.Unmarshal([]byte(yamlContent), &metadata); err != nil {
-		return nil, fmt.Errorf("failed to parse skill metadata: %w", err)
+		return nil, errs.Wrapf(err, "failed to parse skill metadata")
 	}
 
 	// Validate metadata
@@ -68,27 +70,27 @@ func validateMetadata(metadata SkillMetadata) error {
 	// Name validation (per Agent Skills spec)
 	// 1-64 chars, lowercase alphanumeric and hyphens, must not start/end with hyphen
 	if metadata.Name == "" {
-		return fmt.Errorf("skill name is required")
+		return errs.NewErrf("skill name is required")
 	}
 	if len(metadata.Name) > 64 {
-		return fmt.Errorf("skill name must be 64 characters or less")
+		return errs.NewErrf("skill name must be 64 characters or less")
 	}
 	nameRegex := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	if !nameRegex.MatchString(metadata.Name) {
-		return fmt.Errorf("skill name must be lowercase alphanumeric with hyphens, not starting/ending with hyphen")
+		return errs.NewErrf("skill name must be lowercase alphanumeric with hyphens, not starting/ending with hyphen")
 	}
 
 	// Description validation
 	if metadata.Description == "" {
-		return fmt.Errorf("skill description is required")
+		return errs.NewErrf("skill description is required")
 	}
 	if len(metadata.Description) > 1024 {
-		return fmt.Errorf("skill description must be 1024 characters or less")
+		return errs.NewErrf("skill description must be 1024 characters or less")
 	}
 
 	// Compatibility validation (optional, max 500 chars)
 	if len(metadata.Compatible) > 500 {
-		return fmt.Errorf("skill compatibility must be 500 characters or less")
+		return errs.NewErrf("skill compatibility must be 500 characters or less")
 	}
 
 	return nil

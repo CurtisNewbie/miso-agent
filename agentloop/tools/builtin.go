@@ -8,6 +8,7 @@ import (
 
 	"github.com/curtisnewbie/miso-agent/agentloop/backend"
 	"github.com/curtisnewbie/miso-agent/agentloop/types"
+	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -27,7 +28,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
 			path, ok := args["path"].(string)
 			if !ok {
-				return "", fmt.Errorf("path is required")
+				return "", errs.NewErrf("path is required")
 			}
 			// Check if offset/limit are provided for pagination
 			offset := 0
@@ -41,7 +42,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 
 			content, err := backend.ReadFile(ctx, path)
 			if err != nil {
-				return "", fmt.Errorf("failed to read file: %w", err)
+				return "", errs.Wrapf(err, "failed to read file")
 			}
 
 			// Apply pagination if requested
@@ -81,15 +82,15 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
 			path, ok := args["path"].(string)
 			if !ok {
-				return "", fmt.Errorf("path is required")
+				return "", errs.NewErrf("path is required")
 			}
 			content, ok := args["content"].(string)
 			if !ok {
-				return "", fmt.Errorf("content is required")
+				return "", errs.NewErrf("content is required")
 			}
 
 			if err := backend.WriteFile(ctx, path, []byte(content)); err != nil {
-				return "", fmt.Errorf("failed to write file: %w", err)
+				return "", errs.Wrapf(err, "failed to write file")
 			}
 
 			return fmt.Sprintf("Successfully wrote to %s", path), nil
@@ -108,12 +109,12 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
 			path, ok := args["path"].(string)
 			if !ok {
-				return "", fmt.Errorf("path is required")
+				return "", errs.NewErrf("path is required")
 			}
 
 			files, err := backend.ListDirectory(ctx, path)
 			if err != nil {
-				return "", fmt.Errorf("failed to list directory: %w", err)
+				return "", errs.Wrapf(err, "failed to list directory")
 			}
 
 			sb := strutil.NewBuilder()
@@ -141,12 +142,12 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
 			pattern, ok := args["pattern"].(string)
 			if !ok {
-				return "", fmt.Errorf("pattern is required")
+				return "", errs.NewErrf("pattern is required")
 			}
 
 			matches, err := globRecursive(ctx, backend, pattern, ".")
 			if err != nil {
-				return "", fmt.Errorf("failed to glob: %w", err)
+				return "", errs.Wrapf(err, "failed to glob")
 			}
 
 			return strings.Join(matches, "\n"), nil

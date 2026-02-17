@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/curtisnewbie/miso-agent/agentloop/types"
+	"github.com/curtisnewbie/miso/errs"
 )
 
 // TodoManager manages the todo list for the agent.
@@ -30,7 +31,7 @@ func (tm *TodoManager) AddTodo(task, priority, description string) (string, erro
 	defer tm.mu.Unlock()
 
 	if task == "" {
-		return "", fmt.Errorf("task cannot be empty")
+		return "", errs.NewErrf("task cannot be empty")
 	}
 
 	if priority == "" {
@@ -64,7 +65,7 @@ func (tm *TodoManager) UpdateTodoStatus(id, status string) error {
 		}
 	}
 
-	return fmt.Errorf("todo %s not found", id)
+	return errs.NewErrf("todo %s not found", id)
 }
 
 // ListTodos returns all todo items.
@@ -103,7 +104,7 @@ func (tm *TodoManager) DeleteTodo(id string) error {
 		}
 	}
 
-	return fmt.Errorf("todo %s not found", id)
+	return errs.NewErrf("todo %s not found", id)
 }
 
 // ClearCompleted removes all completed todos.

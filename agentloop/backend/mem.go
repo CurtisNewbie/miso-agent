@@ -2,11 +2,12 @@ package backend
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/curtisnewbie/miso/errs"
 )
 
 // MemFileBackend is an in-memory backend implementation.
@@ -38,10 +39,10 @@ func (b *MemFileBackend) ReadFile(ctx context.Context, path string) ([]byte, err
 	normalizedPath := normalizePath(path)
 	entry, exists := b.files[normalizedPath]
 	if !exists {
-		return nil, fmt.Errorf("file not found: %s", path)
+		return nil, errs.NewErrf("file not found: %s", path)
 	}
 	if entry.IsDirectory {
-		return nil, fmt.Errorf("cannot read directory: %s", path)
+		return nil, errs.NewErrf("cannot read directory: %s", path)
 	}
 	return entry.Content, nil
 }
@@ -118,7 +119,7 @@ func (b *MemFileBackend) DeleteFile(ctx context.Context, path string) error {
 
 	normalizedPath := normalizePath(path)
 	if _, exists := b.files[normalizedPath]; !exists {
-		return fmt.Errorf("file not found: %s", path)
+		return errs.NewErrf("file not found: %s", path)
 	}
 
 	delete(b.files, normalizedPath)

@@ -2,11 +2,11 @@ package tools
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agentloop/types"
+	"github.com/curtisnewbie/miso/errs"
 )
 
 // Wrapper wraps a types.Tool into an Eino BaseTool.
@@ -46,7 +46,7 @@ func (w *Wrapper) Invokable(ctx context.Context, args map[string]any) (any, erro
 
 // Stream is not supported.
 func (w *Wrapper) Stream(ctx context.Context, args map[string]any) (*schema.StreamReader[any], error) {
-	return nil, fmt.Errorf("stream not supported")
+	return nil, errs.NewErrf("stream not supported")
 }
 
 // ConvertToEinoTools converts a list of types.Tool to Eino BaseTools.
