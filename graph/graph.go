@@ -16,9 +16,7 @@ func CompileGraph[T, V any](o *GenericOps, g *compose.Graph[T, V], opts ...compo
 	if o.MaxRunSteps > 0 {
 		opts = append(opts, compose.WithMaxRunSteps(o.MaxRunSteps))
 	}
-	ctx := context.Background()
-	rail := flow.NewRail(ctx)
-	return g.Compile(rail, opts...)
+	return g.Compile(context.Background(), opts...)
 }
 
 func WithTraceCallback(name string, logInputs bool) compose.Option {

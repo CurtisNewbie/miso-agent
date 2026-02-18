@@ -12,6 +12,7 @@ import (
 	"github.com/curtisnewbie/miso-agent/agentloop/tools"
 	"github.com/curtisnewbie/miso-agent/agentloop/types"
 	"github.com/curtisnewbie/miso/errs"
+	"github.com/curtisnewbie/miso/flow"
 )
 
 // Agent represents a ReAct agent with skills and tools.
@@ -99,14 +100,14 @@ func NewAgent(config types.AgentConfig) (*Agent, error) {
 }
 
 // Execute runs the agent with the given user input.
-func (a *Agent) Execute(ctx context.Context, userInput string) (string, error) {
+func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 	// Prepare input
 	taskInput := TaskInput{
 		task: userInput,
 	}
 
 	// Execute graph
-	result, err := a.graph.Invoke(ctx, taskInput)
+	result, err := a.graph.Invoke(rail, taskInput)
 	if err != nil {
 		return "", errs.Wrapf(err, "failed to execute graph")
 	}
