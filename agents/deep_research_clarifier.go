@@ -175,7 +175,7 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 	_ = g.AddEdge("tools", "extract_tool_output")
 	_ = g.AddEdge("extract_tool_output", compose.END)
 
-	runnable, err := graph.CompileGraph(rail, ops.genops, g, compose.WithGraphName("DeepResearchClarifier"))
+	runnable, err := graph.CompileGraph(ops.genops, g, compose.WithGraphName("DeepResearchClarifier"))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}

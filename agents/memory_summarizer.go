@@ -105,7 +105,7 @@ func NewMemorySummarizer(rail flow.Rail, chatModel model.ToolCallingChatModel, o
 	_ = g.AddEdge("compact_memory", "remove_think")
 	_ = g.AddEdge("remove_think", compose.END)
 
-	runnable, err := graph.CompileGraph(rail, ops.genops, g, compose.WithGraphName("MemorySummarizer"))
+	runnable, err := graph.CompileGraph(ops.genops, g, compose.WithGraphName("MemorySummarizer"))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}

@@ -107,7 +107,7 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 	_ = g.AddEdge("generate_summary", "remove_think")
 	_ = g.AddEdge("remove_think", compose.END)
 
-	runnable, err := graph.CompileGraph(rail, ops.genops, g, compose.WithGraphName("ExecutiveSummaryWriter"))
+	runnable, err := graph.CompileGraph(ops.genops, g, compose.WithGraphName("ExecutiveSummaryWriter"))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}

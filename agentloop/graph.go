@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/graph"
 )
 
 type agentLoopState struct {
@@ -160,5 +161,11 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 	// Finish: final_output → END
 	_ = g.AddEdge("final_output", compose.END)
 
-	return g.Compile(context.Background())
+	// Create GenericOps from AgentConfig
+	gops := &graph.GenericOps{
+		MaxRunSteps: agent.config.MaxSteps,
+		Language:    agent.config.Language,
+	}
+
+	return graph.CompileGraph(gops, g, compose.WithGraphName("ReActAgent"))
 }

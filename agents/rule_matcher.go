@@ -286,7 +286,7 @@ func NewRuleMatcher(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *R
 	_ = g.AddEdge("extract_tool_output", "update_state")
 	_ = g.AddEdge("final_output", compose.END)
 
-	runnable, err := graph.CompileGraph(rail, ops.genops, g, compose.WithGraphName("RuleMatcher"), compose.WithNodeTriggerMode(compose.AnyPredecessor))
+	runnable, err := graph.CompileGraph(ops.genops, g, compose.WithGraphName("RuleMatcher"), compose.WithNodeTriggerMode(compose.AnyPredecessor))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
