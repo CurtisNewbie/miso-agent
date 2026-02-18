@@ -89,6 +89,18 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 		compose.WithStatePreHandler(modelPreHandle),
 		compose.WithNodeName("Chat Model"))
 
+	// Update state node - append assistant message from chat_model to state
+	_ = g.AddLambdaNode("update_state", compose.InvokableLambda(func(ctx context.Context, input *schema.Message) (*schema.Message, error) {
+		err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+			state.messages = append(state.messages, input)
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		return input, nil
+	}), compose.WithNodeName("Update State"))
+
 	// Tools node - executes tool calls
 	toolNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
 		Tools: toolInfos,
@@ -98,8 +110,30 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 	}
 	_ = g.AddToolsNode("tools", toolNode)
 
+	// Final output node
+	_ = g.AddLambdaNode("final_output", compose.InvokableLambda(func(ctx context.Context, input any) (finalOutput, error) {
+		var lastMessage *schema.Message
+		err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+			if len(state.messages) > 0 {
+				lastMessage = state.messages[len(state.messages)-1]
+			}
+			return nil
+		})
+
+		if err != nil {
+			return finalOutput{}, err
+		}
+
+		response := ""
+		if lastMessage != nil && lastMessage.Role == schema.Assistant {
+			response = lastMessage.Content
+		}
+
+		return finalOutput{response: response}, nil
+	}), compose.WithNodeName("Final Output"))
+
 	// Branch: continue loop or finish
-	_ = g.AddBranch("decide_continue", compose.NewGraphBranch(func(ctx context.Context, input []*schema.Message) (string, error) {
+	_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
 		shouldContinue := false
 		err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
 			// Check if the last message has tool calls
@@ -124,36 +158,10 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 		"final_output": true,
 	}))
 
-	// Final output node
-	_ = g.AddLambdaNode("final_output", compose.InvokableLambda(func(ctx context.Context, input TaskInput) (finalOutput, error) {
-		var lastMessage *schema.Message
-		err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
-			if len(state.messages) > 0 {
-				lastMessage = state.messages[len(state.messages)-1]
-			}
-			return nil
-		})
-
-		if err != nil {
-			return finalOutput{}, err
-		}
-
-		response := ""
-		if lastMessage != nil && lastMessage.Role == schema.Assistant {
-			response = lastMessage.Content
-		}
-
-		return finalOutput{response: response}, nil
-	}), compose.WithNodeName("Final Output"))
-
 	// Add edges - ReAct loop pattern (matching Eino)
 	_ = g.AddEdge(compose.START, "prepare_messages")
 	_ = g.AddEdge("prepare_messages", "chat_model")
-	_ = g.AddEdge("chat_model", "decide_continue")
-
-	// decide_continue branch routes to either tools or final_output
-	_ = g.AddEdge("decide_continue", "tools")
-	_ = g.AddEdge("decide_continue", "final_output")
+	_ = g.AddEdge("chat_model", "update_state")
 
 	// Loop back: tools → chat_model
 	_ = g.AddEdge("tools", "chat_model")
@@ -163,9 +171,10 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 
 	// Create GenericOps from AgentConfig
 	gops := &graph.GenericOps{
-		MaxRunSteps: agent.config.MaxSteps,
-		Language:    agent.config.Language,
+		MaxRunSteps:  agent.config.MaxSteps,
+		Language:     agent.config.Language,
+		VisualizeDir: agent.config.VisualizeDir,
 	}
 
-	return graph.CompileGraph(gops, g, compose.WithGraphName("ReActAgent"))
+	return graph.CompileGraph(gops, g, compose.WithGraphName("AgentLoop"))
 }

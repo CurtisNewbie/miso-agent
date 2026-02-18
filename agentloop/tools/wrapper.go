@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -39,14 +40,33 @@ func (w *Wrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 	}, nil
 }
 
-// Invokable executes the tool.
-func (w *Wrapper) Invokable(ctx context.Context, args map[string]any) (any, error) {
-	return w.tool.Execute(ctx, args)
-}
-
-// Stream is not supported.
-func (w *Wrapper) Stream(ctx context.Context, args map[string]any) (*schema.StreamReader[any], error) {
-	return nil, errs.NewErrf("stream not supported")
+// InvokableRun executes the tool.
+func (w *Wrapper) InvokableRun(ctx context.Context, argsInJSON string, opts ...tool.Option) (string, error) {
+	var args map[string]any
+	if argsInJSON != "" {
+		if err := json.Unmarshal([]byte(argsInJSON), &args); err != nil {
+			return "", err
+		}
+	}
+	result, err := w.tool.Execute(ctx, args)
+	if err != nil {
+		return "", err
+	}
+	// Convert result to string
+	switch v := any(result).(type) {
+	case string:
+		return v, nil
+	case []byte:
+		return string(v), nil
+	case interface{}:
+		// Try to convert to JSON
+		if b, err := json.Marshal(v); err == nil {
+			return string(b), nil
+		}
+		return "", errs.NewErrf("unsupported result type: %T", result)
+	default:
+		return "", errs.NewErrf("unsupported result type: %T", result)
+	}
 }
 
 // ConvertToEinoTools converts a list of types.Tool to Eino BaseTools.

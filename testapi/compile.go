@@ -1,6 +1,8 @@
 package testapi
 
 import (
+	"github.com/curtisnewbie/miso-agent/agentloop"
+	"github.com/curtisnewbie/miso-agent/agentloop/types"
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/miso"
@@ -36,5 +38,20 @@ func compileGraph() error {
 	}
 
 	_, err = agents.NewMaterialExtract(rail, model, agents.NewMaterialExtractOps(gop))
+	if err != nil {
+		return err
+	}
+
+	// Add agentloop agent
+	_, err = agentloop.NewAgent(types.AgentConfig{
+		Model:                       model,
+		MaxSteps:                    100,
+		Language:                    "English",
+		MaxTokens:                   32000,
+		TokenizerModelName:          "gpt-3.5-turbo",
+		EvictToolResultsThreshold:   1000,
+		EvictToolResultsKeepPreview: 100,
+		VisualizeDir:                "../doc",
+	})
 	return err
 }

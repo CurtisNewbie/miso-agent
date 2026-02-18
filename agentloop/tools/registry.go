@@ -72,16 +72,12 @@ func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 	}, nil
 }
 
-func (w *toolWrapper) Invoke(ctx context.Context, input string) (string, error) {
+func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...tool.Option) (string, error) {
 	args := make(map[string]interface{})
 	if input != "" {
 		_ = json.Unmarshal([]byte(input), &args)
 	}
 	return w.tool.Execute(ctx, args)
-}
-
-func (w *toolWrapper) Streamable(ctx context.Context) bool {
-	return false
 }
 
 // ToEinoTools converts the registry to Eino tool instances.

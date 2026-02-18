@@ -71,6 +71,8 @@ type AgentConfig struct {
 	// If 0, no preview is kept (only metadata).
 	// Default: 0 (no preview)
 	EvictToolResultsKeepPreview int
+
+	VisualizeDir string
 }
 
 // Tool represents a tool that can be used by the agent.
