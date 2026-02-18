@@ -17,6 +17,7 @@ type Agent struct {
 	skills      *skills.Middleware
 	tools       *tools.Registry
 	todoManager *tools.TodoManager
+	tokenizer   *Tokenizer
 	graph       compose.Runnable[TaskInput, finalOutput]
 }
 
@@ -28,6 +29,12 @@ func NewAgent(config types.AgentConfig) (*Agent, error) {
 	}
 	if config.Language == "" {
 		config.Language = "English"
+	}
+
+	// Initialize tokenizer for accurate token counting
+	tokenizer, err := NewTokenizer(config.TokenizerModelName)
+	if err != nil {
+		return nil, errs.Wrapf(err, "failed to initialize tokenizer for model %s", config.TokenizerModelName)
 	}
 
 	// Initialize backend
@@ -75,6 +82,7 @@ func NewAgent(config types.AgentConfig) (*Agent, error) {
 		skills:      skillsMiddleware,
 		tools:       toolRegistry,
 		todoManager: todoManager,
+		tokenizer:   tokenizer,
 	}
 
 	// Build the Eino graph

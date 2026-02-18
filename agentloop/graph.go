@@ -70,6 +70,12 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 	// StatePreHandler: appends new messages to state and returns all accumulated messages
 	modelPreHandle := func(ctx context.Context, input []*schema.Message, state *agentLoopState) ([]*schema.Message, error) {
 		state.messages = append(state.messages, input...)
+
+		// Prune messages if MaxTokens is set and exceeded
+		if agent.config.MaxTokens > 0 && agent.tokenizer != nil {
+			state.messages = agent.tokenizer.PruneMessagesToTokenLimit(state.messages, agent.config.MaxTokens)
+		}
+
 		return state.messages, nil
 	}
 

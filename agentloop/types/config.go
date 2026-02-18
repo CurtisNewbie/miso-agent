@@ -46,6 +46,18 @@ type AgentConfig struct {
 
 	// Timezone is the timezone offset in hours for time display.
 	Timezone float64
+
+	// MaxTokens is the maximum number of tokens allowed in the conversation history.
+	// When exceeded, old messages will be pruned (except system messages).
+	// If 0 or negative, no token limit is enforced.
+	// Default: 0 (no limit)
+	MaxTokens int
+
+	// TokenizerModelName is the name of the model used for token counting.
+	// This is used to select the appropriate tiktoken encoding (e.g., cl100k_base for gpt-3.5-turbo, o200k_base for gpt-4o).
+	// If empty, defaults to "gpt-3.5-turbo".
+	// Common values: "gpt-3.5-turbo", "gpt-4", "gpt-4o", "qwen-plus", "deepseek-chat"
+	TokenizerModelName string
 }
 
 // Tool represents a tool that can be used by the agent.
