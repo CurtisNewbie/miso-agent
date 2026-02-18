@@ -18,11 +18,19 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 
 	registry.Register(types.NewToolFunc(
 		"read_file",
-		"Read the entire content of a file. Use this when you need to see the file contents.",
+		"Read file content. Supports chunked reading with offset/limit for large files. Use offset and limit to read specific sections.",
 		map[string]interface{}{
 			"path": map[string]interface{}{
 				"type":        "string",
 				"description": "The absolute path to the file to read",
+			},
+			"offset": map[string]interface{}{
+				"type":        "number",
+				"description": "Optional: Line number to start reading from (0-based). Default: 0",
+			},
+			"limit": map[string]interface{}{
+				"type":        "number",
+				"description": "Optional: Maximum number of lines to read. Default: read entire file",
 			},
 		},
 		func(ctx context.Context, args map[string]interface{}) (string, error) {

@@ -58,6 +58,19 @@ type AgentConfig struct {
 	// If empty, defaults to "gpt-3.5-turbo".
 	// Common values: "gpt-3.5-turbo", "gpt-4", "gpt-4o", "qwen-plus", "deepseek-chat"
 	TokenizerModelName string
+
+	// EvictToolResultsThreshold is the maximum token count for tool results before eviction.
+	// Tool results exceeding this threshold are evicted to the filesystem and replaced with a reference.
+	// If 0 or negative, no eviction is performed.
+	// Default: 0 (no eviction)
+	// Recommended: 1000-2000 tokens for most use cases
+	EvictToolResultsThreshold int
+
+	// EvictToolResultsKeepPreview is the number of tokens to keep as a preview in the reference message.
+	// Allows the agent to see context without loading the full content.
+	// If 0, no preview is kept (only metadata).
+	// Default: 0 (no preview)
+	EvictToolResultsKeepPreview int
 }
 
 // Tool represents a tool that can be used by the agent.

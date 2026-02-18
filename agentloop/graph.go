@@ -71,6 +71,11 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 	modelPreHandle := func(ctx context.Context, input []*schema.Message, state *agentLoopState) ([]*schema.Message, error) {
 		state.messages = append(state.messages, input...)
 
+		// Evict large tool results if configured
+		if agent.config.EvictToolResultsThreshold > 0 && agent.tokenizer != nil {
+			state.messages = agent.evictLargeToolResults(state.messages)
+		}
+
 		// Prune messages if MaxTokens is set and exceeded
 		if agent.config.MaxTokens > 0 && agent.tokenizer != nil {
 			state.messages = agent.tokenizer.PruneMessagesToTokenLimit(state.messages, agent.config.MaxTokens)
