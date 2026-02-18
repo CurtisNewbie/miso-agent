@@ -1,4 +1,4 @@
-package agents
+package graph
 
 import (
 	"context"
@@ -32,9 +32,9 @@ import (
 // Usage:
 //
 //	buf := &bytes.Buffer{}
-//	gen := visualize.NewMermaidGenerator(buf)                // for Graph/Chain
+//	gen := graph.NewMermaidGenerator(buf)                // for Graph/Chain
 //	// or
-//	gen := visualize.NewMermaidGeneratorWorkflow(buf)        // for Workflow with labeled edges
+//	gen := graph.NewMermaidGeneratorWorkflow(buf)        // for Workflow with labeled edges
 //	_, _ = g.Compile(ctx, compose.WithGraphCompileCallbacks(gen), compose.WithGraphName("MyGraph"))
 //	// Write to a Markdown file:
 //	md := "```mermaid\n" + buf.String() + "\n```\n"

@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/async"
@@ -57,7 +58,7 @@ type RuleMatcherOutput struct {
 }
 
 type RuleMatcherOps struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 
 	// Injected variables: ${taskInstruction}, ${language}, ${now}
 	SystemMessagePrompt string
@@ -68,8 +69,10 @@ type RuleMatcherOps struct {
 	TimeZoneHourOffset float64
 }
 
-func NewRuleMatcherOps(g *GenericOps) *RuleMatcherOps {
+func NewRuleMatcherOps(g *graph.GenericOps) *RuleMatcherOps {
+
 	return &RuleMatcherOps{
+
 		genops: g,
 		SystemMessagePrompt: `
 You are a rule matcher. Your task is to carefully review the provided context information and check if the given rule matches for the given context.
@@ -283,7 +286,7 @@ func NewRuleMatcher(rail flow.Rail, chatModel model.ToolCallingChatModel, ops *R
 	_ = g.AddEdge("extract_tool_output", "update_state")
 	_ = g.AddEdge("final_output", compose.END)
 
-	runnable, err := CompileGraph(rail, ops.genops, g, compose.WithGraphName("RuleMatcher"), compose.WithNodeTriggerMode(compose.AnyPredecessor))
+	runnable, err := graph.CompileGraph(rail, ops.genops, g, compose.WithGraphName("RuleMatcher"), compose.WithNodeTriggerMode(compose.AnyPredecessor))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
@@ -307,7 +310,7 @@ func (b *RuleMatcher) Execute(rail flow.Rail, input RuleMatcherInput) (RuleMatch
 
 	cops := []compose.Option{}
 	if b.ops.genops.LogOnStart {
-		cops = append(cops, WithTraceCallback("RuleMatcher", b.ops.genops.LogInputs))
+		cops = append(cops, graph.WithTraceCallback("RuleMatcher", b.ops.genops.LogInputs))
 	}
 	out, err := b.graph.Invoke(rail, input, cops...)
 	if err != nil {

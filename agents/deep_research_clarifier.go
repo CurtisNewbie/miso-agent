@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/json"
@@ -17,7 +18,7 @@ import (
 )
 
 type DeepResearchClarifier struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 	graph  compose.Runnable[DeepResearchClarifierInput, DeepResearchClarifierOutput]
 }
 
@@ -33,7 +34,7 @@ type DeepResearchClarifierOutput struct {
 }
 
 type DeepResearchClarifierOps struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 
 	// Injected variables: ${language}
 	SystemMessagePrompt string
@@ -42,8 +43,10 @@ type DeepResearchClarifierOps struct {
 	UserMessagePrompt string
 }
 
-func NewDeepResearchClarifierOps(g *GenericOps) *DeepResearchClarifierOps {
+func NewDeepResearchClarifierOps(g *graph.GenericOps) *DeepResearchClarifierOps {
+
 	return &DeepResearchClarifierOps{
+
 		genops: g,
 		SystemMessagePrompt: `
 You are a research expert, you are given a historical conversation between you and the user.
@@ -172,7 +175,7 @@ func NewDeepResearchClarifier(rail flow.Rail, chatModel model.ToolCallingChatMod
 	_ = g.AddEdge("tools", "extract_tool_output")
 	_ = g.AddEdge("extract_tool_output", compose.END)
 
-	runnable, err := CompileGraph(rail, ops.genops, g, compose.WithGraphName("DeepResearchClarifier"))
+	runnable, err := graph.CompileGraph(rail, ops.genops, g, compose.WithGraphName("DeepResearchClarifier"))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
@@ -186,7 +189,7 @@ func (w *DeepResearchClarifier) Execute(rail flow.Rail, input DeepResearchClarif
 
 	cops := []compose.Option{}
 	if w.genops.LogOnStart {
-		cops = append(cops, WithTraceCallback("DeepResearchClarifier", w.genops.LogInputs))
+		cops = append(cops, graph.WithTraceCallback("DeepResearchClarifier", w.genops.LogInputs))
 	}
 	return w.graph.Invoke(rail, input, cops...)
 }

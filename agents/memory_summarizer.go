@@ -8,6 +8,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/llm"
@@ -15,7 +16,7 @@ import (
 )
 
 type MemorySummarizer struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 	graph  compose.Runnable[MemorySummarizerInput, MemorySummarizerOutput]
 }
 
@@ -29,7 +30,7 @@ type MemorySummarizerOutput struct {
 }
 
 type MemorySummarizerOps struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 
 	// Injected variables: ${language}
 	SystemMessagePrompt string
@@ -38,8 +39,10 @@ type MemorySummarizerOps struct {
 	UserMessagePrompt string
 }
 
-func NewMemorySummarizerOps(g *GenericOps) *MemorySummarizerOps {
+func NewMemorySummarizerOps(g *graph.GenericOps) *MemorySummarizerOps {
+
 	return &MemorySummarizerOps{
+
 		genops: g,
 		SystemMessagePrompt: `
 Your task is to create a short but context rich summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
@@ -102,7 +105,7 @@ func NewMemorySummarizer(rail flow.Rail, chatModel model.ToolCallingChatModel, o
 	_ = g.AddEdge("compact_memory", "remove_think")
 	_ = g.AddEdge("remove_think", compose.END)
 
-	runnable, err := CompileGraph(rail, ops.genops, g, compose.WithGraphName("MemorySummarizer"))
+	runnable, err := graph.CompileGraph(rail, ops.genops, g, compose.WithGraphName("MemorySummarizer"))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
@@ -116,7 +119,7 @@ func (w *MemorySummarizer) Execute(rail flow.Rail, input MemorySummarizerInput) 
 
 	cops := []compose.Option{}
 	if w.genops.LogOnStart {
-		cops = append(cops, WithTraceCallback("MemorySummarizer", w.genops.LogInputs))
+		cops = append(cops, graph.WithTraceCallback("MemorySummarizer", w.genops.LogInputs))
 	}
 	return w.graph.Invoke(rail, input, cops...)
 }

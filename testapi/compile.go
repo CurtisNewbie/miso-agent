@@ -2,6 +2,7 @@ package testapi
 
 import (
 	"github.com/curtisnewbie/miso-agent/agents"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/miso"
 )
 
@@ -11,7 +12,7 @@ func compileGraph() error {
 	if err != nil {
 		return err
 	}
-	gop := agents.NewGenericOps()
+	gop := graph.NewGenericOps()
 	gop.RepeatPrompt = true
 	gop.VisualizeDir = "../doc"
 	_, err = agents.NewMemorySummarizer(rail, model, agents.NewMemorySummarizerOps(gop))

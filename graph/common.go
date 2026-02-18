@@ -1,4 +1,4 @@
-package agents
+package graph
 
 type GenericOps struct {
 	MaxRunSteps  int
