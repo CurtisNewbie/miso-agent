@@ -127,8 +127,8 @@ func (tm *TodoManager) Format() string {
 
 	for _, todo := range todos {
 		status := "[ ]"
-		switch todo.Status {
-		case "completed":
+		switch strings.ToUpper(todo.Status) {
+		case "COMPLETED":
 			status = "[x]"
 		}
 
