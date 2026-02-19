@@ -10,14 +10,6 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 )
 
-var (
-	fileStoreCtxKey ctxKey
-)
-
-const (
-	ArgKeyAgentLoopFileStore = "AgentLoopFileStore"
-)
-
 // FileStore defines the interface for file operations.
 // This abstraction allows different storage backends (filesystem, in-memory, etc.)
 type FileStore interface {

@@ -87,6 +87,10 @@ func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...to
 		args[ArgKeyAgentLoopFileStore] = st
 	}
 
+	if tm, ok := ctx.Value(todoManagerCtxKey).(*TodoManager); ok && tm != nil {
+		args[ArgKeyAgentLoopTodoManager] = tm
+	}
+
 	return w.tool.Execute(ctx, args)
 }
 

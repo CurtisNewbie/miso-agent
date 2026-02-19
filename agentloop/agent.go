@@ -14,6 +14,16 @@ import (
 
 type ctxKey int
 
+var (
+	fileStoreCtxKey   ctxKey
+	todoManagerCtxKey ctxKey
+)
+
+const (
+	ArgKeyAgentLoopFileStore   = "AgentLoopFileStore"
+	ArgKeyAgentLoopTodoManager = "AgentLoopTodoManager"
+)
+
 // Agent is a ReAct (Reasoning + Acting) agent that can process tasks using tools and skills.
 // The graph is compiled once and can be reused across multiple Execute calls for efficiency.
 // Each Execute call receives fresh skills and backend via taskInput, allowing for stateful backends.
@@ -24,11 +34,10 @@ type ctxKey int
 //   - Tool result eviction for large outputs
 //   - Support for finish_tool to signal task completion
 type Agent struct {
-	config      AgentConfig
-	tools       *ToolRegistry
-	todoManager *TodoManager
-	tokenizer   *Tokenizer
-	graph       compose.Runnable[taskInput, finalOutput]
+	config    AgentConfig
+	tools     *ToolRegistry
+	tokenizer *Tokenizer
+	graph     compose.Runnable[taskInput, finalOutput]
 }
 
 // NewAgent creates a new ReAct agent.
@@ -54,11 +63,8 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	// Initialize tools
 	toolRegistry := NewToolRegistry()
 
-	// Create todo manager
-	todoManager := NewTodoManager()
-
-	// Add built-in tools (will receive backend via context)
-	builtinTools := BuiltinTools(todoManager, config.EnableFinishTool)
+	// Add built-in tools (will receive backend and todoManager via context)
+	builtinTools := BuiltinTools(config.EnableFinishTool)
 	toolRegistry.Merge(builtinTools)
 
 	// Add custom tools
@@ -67,10 +73,9 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	}
 
 	agent := &Agent{
-		config:      config,
-		tools:       toolRegistry,
-		todoManager: todoManager,
-		tokenizer:   tokenizer,
+		config:    config,
+		tools:     toolRegistry,
+		tokenizer: tokenizer,
 	}
 
 	// Build the Eino graph (compiled once)
@@ -120,8 +125,14 @@ func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 		store:  backend,
 	}
 
+	// Initialize todo manager (fresh on each execution)
+	todoManager := NewTodoManager()
+
 	// Propagate backend via context
 	rail = rail.WithCtxVal(fileStoreCtxKey, backend)
+
+	// Propagate TodoManager via context
+	rail = rail.WithCtxVal(todoManagerCtxKey, todoManager)
 
 	// Execute graph
 	result, err := graph.InvokeGraph(rail, a.config.GenericOps, a.graph, "AgentLoop", taskInput)

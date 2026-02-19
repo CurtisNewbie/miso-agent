@@ -75,6 +75,24 @@ func NewStoreAwareToolFunc(
 		})
 }
 
+func NewTodoAwareToolFunc(
+	name string,
+	description string,
+	parameters map[string]interface{},
+	execute func(ctx context.Context, store *TodoManager, args map[string]interface{}) (string, error),
+) Tool {
+	return NewToolFunc(name, description, parameters,
+		func(ctx context.Context, args map[string]interface{}) (string, error) {
+			var st *TodoManager
+			if v, ok := args[ArgKeyAgentLoopTodoManager]; ok {
+				if vv, ok := v.(*TodoManager); ok {
+					st = vv
+				}
+			}
+			return execute(ctx, st, args)
+		})
+}
+
 // getString safely gets a string value from a map.
 func getString(m map[string]interface{}, key string) string {
 	if val, ok := m[key]; ok {

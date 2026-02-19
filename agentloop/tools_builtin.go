@@ -14,7 +14,7 @@ import (
 const finishToolName = "finish_tool"
 
 // BuiltinTools returns the built-in tools.
-func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry {
+func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry := NewToolRegistry()
 
 	registry.Register(NewStoreAwareToolFunc(
@@ -241,7 +241,7 @@ func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry
 	))
 
 	// Add todo tools
-	registry.Register(NewToolFunc(
+	registry.Register(NewTodoAwareToolFunc(
 		"add_todo",
 		"Add a new todo item to the list.",
 		map[string]interface{}{
@@ -254,11 +254,11 @@ func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry
 				"description": "Additional details about the task",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
 			task, _ := args["task"].(string)
 			description, _ := args["description"].(string)
 
-			id, err := todoManager.AddTodo(task, description)
+			id, err := tm.AddTodo(task, description)
 			if err != nil {
 				return "", err
 			}
@@ -267,7 +267,7 @@ func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry
 		},
 	))
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewTodoAwareToolFunc(
 		"update_todo",
 		"Update the status of a todo item.",
 		map[string]interface{}{
@@ -280,11 +280,11 @@ func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry
 				"description": "New status: pending or completed",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
 			id, _ := args["id"].(string)
 			status, _ := args["status"].(string)
 
-			if err := todoManager.UpdateTodoStatus(id, status); err != nil {
+			if err := tm.UpdateTodoStatus(id, status); err != nil {
 				return "", err
 			}
 
@@ -292,16 +292,16 @@ func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry
 		},
 	))
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewTodoAwareToolFunc(
 		"list_todos",
 		"List all todo items.",
 		map[string]interface{}{},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			return todoManager.Format(), nil
+		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
+			return tm.Format(), nil
 		},
 	))
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewTodoAwareToolFunc(
 		"delete_todo",
 		"Delete a todo item.",
 		map[string]interface{}{
@@ -310,10 +310,10 @@ func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry
 				"description": "The todo item ID",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
 			id, _ := args["id"].(string)
 
-			if err := todoManager.DeleteTodo(id); err != nil {
+			if err := tm.DeleteTodo(id); err != nil {
 				return "", err
 			}
 
