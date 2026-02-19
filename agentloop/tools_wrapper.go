@@ -7,6 +7,7 @@ import (
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
+	"github.com/curtisnewbie/miso/util/llm"
 )
 
 // Wrapper wraps a Tool into an Eino BaseTool.
@@ -43,9 +44,11 @@ func (w *Wrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 func (w *Wrapper) InvokableRun(ctx context.Context, argsInJSON string, opts ...tool.Option) (string, error) {
 	var args map[string]any
 	if argsInJSON != "" {
-		if err := json.Unmarshal([]byte(argsInJSON), &args); err != nil {
+		parsedArgs, err := llm.ParseLLMJsonAs[map[string]any](argsInJSON)
+		if err != nil {
 			return "", err
 		}
+		args = parsedArgs
 	}
 	result, err := w.tool.Execute(ctx, args)
 	if err != nil {

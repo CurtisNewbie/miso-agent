@@ -532,7 +532,7 @@ func TestAgent_StoreAwareTools(t *testing.T) {
 	toolRegistry := NewToolRegistry()
 
 	// Add built-in tools
-	builtinTools := BuiltinTools(be, todoManager)
+	builtinTools := BuiltinTools(be, todoManager, false)
 	toolRegistry.Merge(builtinTools)
 
 	// Add store-aware tools
@@ -609,7 +609,7 @@ func TestAgent_StoreAwareToolsWithCustomTools(t *testing.T) {
 	toolRegistry := NewToolRegistry()
 
 	// Add built-in tools
-	builtinTools := BuiltinTools(be, todoManager)
+	builtinTools := BuiltinTools(be, todoManager, false)
 	toolRegistry.Merge(builtinTools)
 
 	// Add custom tools

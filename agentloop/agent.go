@@ -73,7 +73,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	todoManager := NewTodoManager()
 
 	// Add built-in tools (including todo tools)
-	builtinTools := BuiltinTools(config.Backend, todoManager)
+	builtinTools := BuiltinTools(config.Backend, todoManager, config.EnableFinishTool)
 	toolRegistry.Merge(builtinTools)
 
 	// Add custom tools

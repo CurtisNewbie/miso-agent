@@ -2,10 +2,10 @@ package agentloop
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso/util/llm"
 )
 
 // Registry manages tool registration and retrieval.
@@ -74,7 +74,10 @@ func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...tool.Option) (string, error) {
 	args := make(map[string]interface{})
 	if input != "" {
-		_ = json.Unmarshal([]byte(input), &args)
+		parsedArgs, err := llm.ParseLLMJsonAs[map[string]interface{}](input)
+		if err == nil {
+			args = parsedArgs
+		}
 	}
 	return w.tool.Execute(ctx, args)
 }

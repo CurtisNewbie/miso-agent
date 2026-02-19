@@ -11,8 +11,10 @@ import (
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
+const finishToolName = "finish_tool"
+
 // BuiltinTools returns the built-in tools.
-func BuiltinTools(backend FileStore, todoManager *TodoManager) *ToolRegistry {
+func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool bool) *ToolRegistry {
 	registry := NewToolRegistry()
 
 	registry.Register(NewToolFunc(
@@ -318,6 +320,27 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager) *ToolRegistry {
 			return fmt.Sprintf("Deleted todo %s", id), nil
 		},
 	))
+
+	// Add finish_tool if enabled
+	if enableFinishTool {
+		registry.Register(NewToolFunc(
+			finishToolName,
+			"Call this tool when you have completed the task and have a final answer. This signals the end of the ReAct loop and your final response will be provided to the user.",
+			map[string]interface{}{
+				"response": map[string]interface{}{
+					"type":        "string",
+					"description": "Your final answer to the task. This will be returned to the user as the final response.",
+				},
+			},
+			func(ctx context.Context, args map[string]interface{}) (string, error) {
+				response, _ := args["response"].(string)
+				if response == "" {
+					return "Task completed", nil
+				}
+				return response, nil
+			},
+		))
+	}
 
 	return registry
 }

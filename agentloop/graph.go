@@ -6,6 +6,7 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/graph"
+	"github.com/curtisnewbie/miso/util/llm"
 )
 
 type agentLoopState struct {
@@ -14,6 +15,11 @@ type agentLoopState struct {
 
 type finalOutput struct {
 	response string
+}
+
+// finishToolArgs represents the arguments for the finish_tool.
+type finishToolArgs struct {
+	Response string `json:"response"`
 }
 
 // taskInput is the input to the ReAct agent graph.
@@ -39,7 +45,8 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 			WithTaskPrompt(agent.config.TaskPrompt).
 			WithSkills(agent.skills).
 			WithLanguage(agent.config.Language).
-			WithCurrentTime(GetCurrentTime(agent.config.Timezone))
+			WithCurrentTime(GetCurrentTime(agent.config.Timezone)).
+			WithFinishToolEnabled(agent.config.EnableFinishTool)
 
 		systemMsg, err := promptBuilder.Build(ctx)
 		if err != nil {
@@ -125,8 +132,26 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 		}
 
 		response := ""
-		if lastMessage != nil && lastMessage.Role == schema.Assistant {
-			response = lastMessage.Content
+		if lastMessage != nil {
+			// Check if the last message has a finish_tool call
+			if lastMessage.Role == schema.Assistant && len(lastMessage.ToolCalls) > 0 {
+				for _, toolCall := range lastMessage.ToolCalls {
+					if toolCall.Function.Name == finishToolName {
+						// Extract response from finish_tool call
+						// Arguments is a JSON string, parse it
+						if toolCall.Function.Arguments != "" {
+							if args, err := llm.ParseLLMJsonAs[finishToolArgs](toolCall.Function.Arguments); err == nil {
+								response = args.Response
+							}
+						}
+						break
+					}
+				}
+			}
+			// If no finish_tool response, use the assistant's content
+			if response == "" && lastMessage.Role == schema.Assistant {
+				response = lastMessage.Content
+			}
 		}
 
 		return finalOutput{response: response}, nil
@@ -140,6 +165,17 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 			if len(state.messages) > 0 {
 				lastMsg := state.messages[len(state.messages)-1]
 				if lastMsg.Role == schema.Assistant && len(lastMsg.ToolCalls) > 0 {
+					// Check if finish_tool was called
+					if agent.config.EnableFinishTool {
+						for _, toolCall := range lastMsg.ToolCalls {
+							if toolCall.Function.Name == finishToolName {
+								// Finish tool was called, exit the loop
+								shouldContinue = false
+								return nil
+							}
+						}
+					}
+					// Other tool calls, continue loop
 					shouldContinue = true
 				}
 			}
@@ -147,6 +183,26 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 		})
 		if err != nil {
 			return "", err
+		}
+
+		// If finish_tool is enabled and no tool calls were made, continue the loop
+		// This allows the agent to call finish_tool on the next iteration
+		if !shouldContinue && agent.config.EnableFinishTool {
+			// Check if we should continue to allow the agent to call finish_tool
+			// We continue if the last message doesn't have tool calls and we haven't finished yet
+			err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+				if len(state.messages) > 0 {
+					lastMsg := state.messages[len(state.messages)-1]
+					if lastMsg.Role == schema.Assistant && len(lastMsg.ToolCalls) == 0 {
+						// Assistant made a regular response, continue loop so it can call finish_tool
+						shouldContinue = true
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				return "", err
+			}
 		}
 
 		if shouldContinue {
