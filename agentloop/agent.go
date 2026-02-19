@@ -18,7 +18,7 @@ type Agent struct {
 	tools       *ToolRegistry
 	todoManager *TodoManager
 	tokenizer   *Tokenizer
-	graph       compose.Runnable[TaskInput, finalOutput]
+	graph       compose.Runnable[taskInput, finalOutput]
 }
 
 // NewAgent creates a new ReAct agent.
@@ -104,7 +104,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 // Execute runs the agent with the given user input.
 func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 	// Prepare input
-	taskInput := TaskInput{
+	taskInput := taskInput{
 		task: userInput,
 	}
 

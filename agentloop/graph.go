@@ -16,14 +16,14 @@ type finalOutput struct {
 	response string
 }
 
-// TaskInput is the input to the ReAct agent graph.
-type TaskInput struct {
+// taskInput is the input to the ReAct agent graph.
+type taskInput struct {
 	task string
 }
 
 // buildGraph builds the Eino graph for the ReAct agent.
-func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) {
-	g := compose.NewGraph[TaskInput, finalOutput](
+func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) {
+	g := compose.NewGraph[taskInput, finalOutput](
 		compose.WithGenLocalState(func(ctx context.Context) *agentLoopState {
 			return &agentLoopState{
 				messages: make([]*schema.Message, 0, agent.config.MaxSteps+1),
@@ -32,7 +32,7 @@ func buildGraph(agent *Agent) (compose.Runnable[TaskInput, finalOutput], error) 
 	)
 
 	// Prepare messages node - runs once at start
-	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, input TaskInput) ([]*schema.Message, error) {
+	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, input taskInput) ([]*schema.Message, error) {
 		// Build system prompt
 		promptBuilder := NewPromptBuilder().
 			WithCustomPrompt(agent.config.SystemPrompt).

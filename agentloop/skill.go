@@ -64,6 +64,8 @@ func LoadSkill(path string, content []byte) (*Skill, error) {
 	}, nil
 }
 
+var nameRegex = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
+
 // validateMetadata validates the skill metadata according to Agent Skills specification.
 func validateMetadata(metadata SkillMetadata) error {
 	// Name validation (per Agent Skills spec)
@@ -74,7 +76,6 @@ func validateMetadata(metadata SkillMetadata) error {
 	if len(metadata.Name) > 64 {
 		return errs.NewErrf("skill name must be 64 characters or less")
 	}
-	nameRegex := regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 	if !nameRegex.MatchString(metadata.Name) {
 		return errs.NewErrf("skill name must be lowercase alphanumeric with hyphens, not starting/ending with hyphen")
 	}
