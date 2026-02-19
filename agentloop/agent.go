@@ -10,14 +10,13 @@ import (
 	"github.com/curtisnewbie/miso-agent/agentloop/backend"
 	"github.com/curtisnewbie/miso-agent/agentloop/skills"
 	"github.com/curtisnewbie/miso-agent/agentloop/tools"
-	"github.com/curtisnewbie/miso-agent/agentloop/types"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 )
 
 // Agent represents a ReAct agent with skills and tools.
 type Agent struct {
-	config      types.AgentConfig
+	config      AgentConfig
 	skills      *skills.Middleware
 	tools       *tools.Registry
 	todoManager *tools.TodoManager
@@ -26,7 +25,7 @@ type Agent struct {
 }
 
 // NewAgent creates a new ReAct agent.
-func NewAgent(config types.AgentConfig) (*Agent, error) {
+func NewAgent(config AgentConfig) (*Agent, error) {
 	// Set defaults
 	if config.MaxSteps <= 0 {
 		config.MaxSteps = 100

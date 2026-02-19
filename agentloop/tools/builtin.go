@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/curtisnewbie/miso-agent/agentloop/backend"
-	"github.com/curtisnewbie/miso-agent/agentloop/types"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
@@ -16,7 +15,7 @@ import (
 func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager) *Registry {
 	registry := NewRegistry()
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"read_file",
 		"Read file content. Supports chunked reading with offset/limit for large files. Use offset and limit to read specific sections.",
 		map[string]interface{}{
@@ -74,7 +73,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"write_file",
 		"Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
 		map[string]interface{}{
@@ -105,7 +104,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"list_directory",
 		"List the names of files and subdirectories in a directory.",
 		map[string]interface{}{
@@ -138,7 +137,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"glob",
 		"Find files matching a pattern (e.g., '*.go', 'src/**/*.ts', '**/*.md'). Supports * (any characters in path component), ** (zero or more directories), and ? (single character).",
 		map[string]interface{}{
@@ -163,7 +162,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 	))
 
 	// Add todo tools
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"add_todo",
 		"Add a new todo item to the list.",
 		map[string]interface{}{
@@ -194,7 +193,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"update_todo",
 		"Update the status of a todo item.",
 		map[string]interface{}{
@@ -219,7 +218,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"list_todos",
 		"List all todo items.",
 		map[string]interface{}{},
@@ -228,7 +227,7 @@ func BuiltinTools(backend backend.FileBackendProtocol, todoManager *TodoManager)
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"delete_todo",
 		"Delete a todo item.",
 		map[string]interface{}{

@@ -2,7 +2,6 @@ package testapi
 
 import (
 	"github.com/curtisnewbie/miso-agent/agentloop"
-	"github.com/curtisnewbie/miso-agent/agentloop/types"
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/miso"
@@ -43,7 +42,7 @@ func compileGraph() error {
 	}
 
 	// Add agentloop agent
-	_, err = agentloop.NewAgent(types.AgentConfig{
+	_, err = agentloop.NewAgent(agentloop.AgentConfig{
 		Model:                       model,
 		MaxSteps:                    100,
 		Language:                    "English",

@@ -6,17 +6,16 @@ import (
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/agentloop/types"
 	"github.com/curtisnewbie/miso/errs"
 )
 
-// Wrapper wraps a types.Tool into an Eino BaseTool.
+// Wrapper wraps a Tool into an Eino BaseTool.
 type Wrapper struct {
-	tool types.Tool
+	tool Tool
 }
 
 // NewWrapper creates a new tool wrapper.
-func NewWrapper(tool types.Tool) *Wrapper {
+func NewWrapper(tool Tool) *Wrapper {
 	return &Wrapper{
 		tool: tool,
 	}
@@ -69,8 +68,8 @@ func (w *Wrapper) InvokableRun(ctx context.Context, argsInJSON string, opts ...t
 	}
 }
 
-// ConvertToEinoTools converts a list of types.Tool to Eino BaseTools.
-func ConvertToEinoTools(tools []types.Tool) ([]tool.BaseTool, error) {
+// ConvertToEinoTools converts a list of Tool to Eino BaseTools.
+func ConvertToEinoTools(tools []Tool) ([]tool.BaseTool, error) {
 	result := make([]tool.BaseTool, len(tools))
 	for i, t := range tools {
 		result[i] = NewWrapper(t)

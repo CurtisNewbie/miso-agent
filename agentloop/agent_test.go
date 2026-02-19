@@ -6,20 +6,19 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agentloop/backend"
-	"github.com/curtisnewbie/miso-agent/agentloop/types"
 )
 
 func TestAgent_shouldEvictToolResult(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      types.AgentConfig
+		config      AgentConfig
 		msg         *schema.Message
 		wantEvict   bool
 		description string
 	}{
 		{
 			name: "Eviction disabled (threshold = 0)",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 0,
 			},
 			msg: &schema.Message{
@@ -32,7 +31,7 @@ func TestAgent_shouldEvictToolResult(t *testing.T) {
 		},
 		{
 			name: "Eviction disabled (threshold negative)",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: -1,
 			},
 			msg: &schema.Message{
@@ -45,7 +44,7 @@ func TestAgent_shouldEvictToolResult(t *testing.T) {
 		},
 		{
 			name: "Not a tool message",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			msg: &schema.Message{
@@ -57,7 +56,7 @@ func TestAgent_shouldEvictToolResult(t *testing.T) {
 		},
 		{
 			name: "Tool message without ToolCallID",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			msg: &schema.Message{
@@ -69,7 +68,7 @@ func TestAgent_shouldEvictToolResult(t *testing.T) {
 		},
 		{
 			name: "Small tool result",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			msg: &schema.Message{
@@ -82,7 +81,7 @@ func TestAgent_shouldEvictToolResult(t *testing.T) {
 		},
 		{
 			name: "Large tool result",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			msg: &schema.Message{
@@ -95,7 +94,7 @@ func TestAgent_shouldEvictToolResult(t *testing.T) {
 		},
 		{
 			name: "Exactly at threshold",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			msg: &schema.Message{
@@ -131,14 +130,14 @@ func TestAgent_shouldEvictToolResult(t *testing.T) {
 func TestAgent_evictLargeToolResults(t *testing.T) {
 	tests := []struct {
 		name        string
-		config      types.AgentConfig
+		config      AgentConfig
 		messages    []*schema.Message
 		wantEvicted int
 		description string
 	}{
 		{
 			name: "Eviction disabled",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 0,
 			},
 			messages: []*schema.Message{
@@ -153,7 +152,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 		},
 		{
 			name: "No tool messages",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			messages: []*schema.Message{
@@ -165,7 +164,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 		},
 		{
 			name: "Last message is large tool result",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			messages: []*schema.Message{
@@ -181,7 +180,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 		},
 		{
 			name: "Multiple messages, last is large tool result",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			messages: []*schema.Message{
@@ -203,7 +202,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 		},
 		{
 			name: "Multiple large tool results",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			messages: []*schema.Message{
@@ -226,7 +225,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 		},
 		{
 			name: "Mixed small and large tool results",
-			config: types.AgentConfig{
+			config: AgentConfig{
 				EvictToolResultsThreshold: 1000,
 			},
 			messages: []*schema.Message{
@@ -292,7 +291,7 @@ func TestAgent_evictToolResult(t *testing.T) {
 		t.Fatalf("Failed to create tokenizer: %v", err)
 	}
 
-	config := types.AgentConfig{
+	config := AgentConfig{
 		Backend:                     be,
 		EvictToolResultsKeepPreview: 100,
 	}
@@ -340,7 +339,7 @@ func TestAgent_evictToolResult_WithPreview(t *testing.T) {
 		t.Fatalf("Failed to create tokenizer: %v", err)
 	}
 
-	config := types.AgentConfig{
+	config := AgentConfig{
 		Backend:                     be,
 		EvictToolResultsKeepPreview: 100,
 	}
@@ -375,7 +374,7 @@ func TestAgent_evictToolResult_NoPreview(t *testing.T) {
 		t.Fatalf("Failed to create tokenizer: %v", err)
 	}
 
-	config := types.AgentConfig{
+	config := AgentConfig{
 		Backend:                     be,
 		EvictToolResultsKeepPreview: 0,
 	}
@@ -406,7 +405,7 @@ func TestAgent_evictToolResult_WriteFailure(t *testing.T) {
 		t.Fatalf("Failed to create tokenizer: %v", err)
 	}
 
-	config := types.AgentConfig{
+	config := AgentConfig{
 		Backend: be,
 	}
 	agent := &Agent{

@@ -6,35 +6,34 @@ import (
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/agentloop/types"
 )
 
 // Registry manages tool registration and retrieval.
 type Registry struct {
-	tools map[string]types.Tool
+	tools map[string]Tool
 }
 
 // NewRegistry creates a new tool registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		tools: make(map[string]types.Tool),
+		tools: make(map[string]Tool),
 	}
 }
 
 // Register registers a tool in the registry.
-func (r *Registry) Register(tool types.Tool) {
+func (r *Registry) Register(tool Tool) {
 	r.tools[tool.Name()] = tool
 }
 
 // Get retrieves a tool by name.
-func (r *Registry) Get(name string) (types.Tool, bool) {
+func (r *Registry) Get(name string) (Tool, bool) {
 	t, ok := r.tools[name]
 	return t, ok
 }
 
 // List returns all registered tools.
-func (r *Registry) List() []types.Tool {
-	result := make([]types.Tool, 0, len(r.tools))
+func (r *Registry) List() []Tool {
+	result := make([]Tool, 0, len(r.tools))
 	for _, t := range r.tools {
 		result = append(result, t)
 	}
@@ -51,9 +50,9 @@ func (r *Registry) Merge(other *Registry) {
 	}
 }
 
-// toolWrapper wraps a types.Tool to implement tool.BaseTool.
+// toolWrapper wraps a Tool to implement tool.BaseTool.
 type toolWrapper struct {
-	tool types.Tool
+	tool Tool
 }
 
 func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {

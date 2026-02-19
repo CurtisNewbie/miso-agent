@@ -6,21 +6,20 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/curtisnewbie/miso-agent/agentloop/types"
 	"github.com/curtisnewbie/miso/errs"
 )
 
 // TodoManager manages the todo list for the agent.
 type TodoManager struct {
 	mu     sync.RWMutex
-	todos  []types.TodoItem
+	todos  []TodoItem
 	nextID int
 }
 
 // NewTodoManager creates a new todo manager.
 func NewTodoManager() *TodoManager {
 	return &TodoManager{
-		todos:  make([]types.TodoItem, 0),
+		todos:  make([]TodoItem, 0),
 		nextID: 1,
 	}
 }
@@ -41,7 +40,7 @@ func (tm *TodoManager) AddTodo(task, priority, description string) (string, erro
 	id := fmt.Sprintf("todo-%d", tm.nextID)
 	tm.nextID++
 
-	todo := types.TodoItem{
+	todo := TodoItem{
 		ID:          id,
 		Task:        task,
 		Status:      "pending",
@@ -69,17 +68,17 @@ func (tm *TodoManager) UpdateTodoStatus(id, status string) error {
 }
 
 // ListTodos returns all todo items.
-func (tm *TodoManager) ListTodos() []types.TodoItem {
+func (tm *TodoManager) ListTodos() []TodoItem {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 
-	result := make([]types.TodoItem, len(tm.todos))
+	result := make([]TodoItem, len(tm.todos))
 	copy(result, tm.todos)
 	return result
 }
 
 // GetTodo returns a specific todo item.
-func (tm *TodoManager) GetTodo(id string) (types.TodoItem, bool) {
+func (tm *TodoManager) GetTodo(id string) (TodoItem, bool) {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
 
@@ -89,7 +88,7 @@ func (tm *TodoManager) GetTodo(id string) (types.TodoItem, bool) {
 		}
 	}
 
-	return types.TodoItem{}, false
+	return TodoItem{}, false
 }
 
 // DeleteTodo deletes a todo item.
@@ -112,7 +111,7 @@ func (tm *TodoManager) ClearCompleted() {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	var remaining []types.TodoItem
+	var remaining []TodoItem
 	for _, todo := range tm.todos {
 		if todo.Status != "completed" {
 			remaining = append(remaining, todo)
@@ -163,12 +162,12 @@ func (tm *TodoManager) Format() string {
 }
 
 // ToState returns the todos as a slice for state persistence.
-func (tm *TodoManager) ToState() []types.TodoItem {
+func (tm *TodoManager) ToState() []TodoItem {
 	return tm.ListTodos()
 }
 
 // FromState restores the todos from state.
-func (tm *TodoManager) FromState(todos []types.TodoItem) {
+func (tm *TodoManager) FromState(todos []TodoItem) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
@@ -189,7 +188,7 @@ func (tm *TodoManager) FromState(todos []types.TodoItem) {
 func TodoTools(todoManager *TodoManager) *Registry {
 	registry := NewRegistry()
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"add_todo",
 		"Add a new todo item to the list.",
 		map[string]interface{}{
@@ -220,7 +219,7 @@ func TodoTools(todoManager *TodoManager) *Registry {
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"update_todo",
 		"Update the status of a todo item.",
 		map[string]interface{}{
@@ -245,7 +244,7 @@ func TodoTools(todoManager *TodoManager) *Registry {
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"list_todos",
 		"List all todo items.",
 		map[string]interface{}{},
@@ -254,7 +253,7 @@ func TodoTools(todoManager *TodoManager) *Registry {
 		},
 	))
 
-	registry.Register(types.NewToolFunc(
+	registry.Register(NewToolFunc(
 		"delete_todo",
 		"Delete a todo item.",
 		map[string]interface{}{
