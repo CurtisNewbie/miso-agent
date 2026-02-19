@@ -1,4 +1,4 @@
-package tools
+package agentloop
 
 import (
 	"context"
@@ -6,14 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/curtisnewbie/miso-agent/agentloop/backend"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
 // BuiltinTools returns the built-in tools.
-func BuiltinTools(backend backend.FileBackend, todoManager *TodoManager) *Registry {
-	registry := NewRegistry()
+func BuiltinTools(backend FileStore, todoManager *TodoManager) *ToolRegistry {
+	registry := NewToolRegistry()
 
 	registry.Register(NewToolFunc(
 		"read_file",
@@ -253,7 +252,7 @@ func BuiltinTools(backend backend.FileBackend, todoManager *TodoManager) *Regist
 // globRecursive performs recursive glob matching with ** support.
 // pattern: glob pattern (e.g., "**/*.go", "src/**/*.ts")
 // basePath: current directory to search from (normalized, no leading/trailing slashes)
-func globRecursive(ctx context.Context, be backend.FileBackend, pattern, basePath string) ([]string, error) {
+func globRecursive(ctx context.Context, be FileStore, pattern, basePath string) ([]string, error) {
 	// Normalize paths
 	pattern = normalizeGlobPath(pattern)
 	basePath = normalizeGlobPath(basePath)
@@ -271,7 +270,7 @@ func globRecursive(ctx context.Context, be backend.FileBackend, pattern, basePat
 }
 
 // globWalk recursively walks the directory tree and matches paths against pattern segments
-func globWalk(ctx context.Context, be backend.FileBackend, patternSegments []string, currentPath, accumulatedPath string, matches *[]string) error {
+func globWalk(ctx context.Context, be FileStore, patternSegments []string, currentPath, accumulatedPath string, matches *[]string) error {
 	if len(patternSegments) == 0 {
 		// All segments consumed - check if accumulatedPath exists and is a file
 		if accumulatedPath == "" {
@@ -329,7 +328,7 @@ func globWalk(ctx context.Context, be backend.FileBackend, patternSegments []str
 }
 
 // globWalkMatchAll matches all files recursively (used for ** at the end)
-func globWalkMatchAll(ctx context.Context, be backend.FileBackend, currentPath, accumulatedPath string, matches *[]string) error {
+func globWalkMatchAll(ctx context.Context, be FileStore, currentPath, accumulatedPath string, matches *[]string) error {
 	// List current directory
 	files, err := be.ListDirectory(ctx, currentPath)
 	if err != nil {
@@ -353,7 +352,7 @@ func globWalkMatchAll(ctx context.Context, be backend.FileBackend, currentPath, 
 }
 
 // matchSegment matches a single segment against directory entries
-func matchSegment(ctx context.Context, be backend.FileBackend, segment string, remainingSegments []string, currentPath, accumulatedPath string, matches *[]string) error {
+func matchSegment(ctx context.Context, be FileStore, segment string, remainingSegments []string, currentPath, accumulatedPath string, matches *[]string) error {
 	files, err := be.ListDirectory(ctx, currentPath)
 	if err != nil {
 		return nil // Ignore errors

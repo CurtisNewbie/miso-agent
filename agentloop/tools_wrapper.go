@@ -1,4 +1,4 @@
-package tools
+package agentloop
 
 import (
 	"context"
@@ -78,7 +78,7 @@ func ConvertToEinoTools(tools []Tool) ([]tool.BaseTool, error) {
 }
 
 // ConvertRegistryToBaseTools converts a registry to Eino BaseTools.
-func ConvertRegistryToBaseTools(registry *Registry) ([]tool.BaseTool, error) {
+func ConvertRegistryToBaseTools(registry *ToolRegistry) ([]tool.BaseTool, error) {
 	tools := registry.List()
 	return ConvertToEinoTools(tools)
 }

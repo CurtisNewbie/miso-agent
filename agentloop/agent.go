@@ -7,8 +7,6 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/agentloop/backend"
-	"github.com/curtisnewbie/miso-agent/agentloop/tools"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 )
@@ -17,8 +15,8 @@ import (
 type Agent struct {
 	config      AgentConfig
 	skills      *Skills
-	tools       *tools.Registry
-	todoManager *tools.TodoManager
+	tools       *ToolRegistry
+	todoManager *TodoManager
 	tokenizer   *Tokenizer
 	graph       compose.Runnable[TaskInput, finalOutput]
 }
@@ -41,7 +39,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 
 	// Initialize backend
 	if config.Backend == nil {
-		config.Backend = backend.NewMemFileBackend()
+		config.Backend = NewMemFileStore()
 	}
 
 	// Write preloaded skills into the backend
@@ -64,13 +62,13 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	}
 
 	// Initialize tools
-	toolRegistry := tools.NewRegistry()
+	toolRegistry := NewToolRegistry()
 
 	// Create todo manager
-	todoManager := tools.NewTodoManager()
+	todoManager := NewTodoManager()
 
 	// Add built-in tools (including todo tools)
-	builtinTools := tools.BuiltinTools(config.Backend, todoManager)
+	builtinTools := BuiltinTools(config.Backend, todoManager)
 	toolRegistry.Merge(builtinTools)
 
 	// Add custom tools

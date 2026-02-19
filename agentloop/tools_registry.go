@@ -1,4 +1,4 @@
-package tools
+package agentloop
 
 import (
 	"context"
@@ -9,30 +9,30 @@ import (
 )
 
 // Registry manages tool registration and retrieval.
-type Registry struct {
+type ToolRegistry struct {
 	tools map[string]Tool
 }
 
 // NewRegistry creates a new tool registry.
-func NewRegistry() *Registry {
-	return &Registry{
+func NewToolRegistry() *ToolRegistry {
+	return &ToolRegistry{
 		tools: make(map[string]Tool),
 	}
 }
 
 // Register registers a tool in the registry.
-func (r *Registry) Register(tool Tool) {
+func (r *ToolRegistry) Register(tool Tool) {
 	r.tools[tool.Name()] = tool
 }
 
 // Get retrieves a tool by name.
-func (r *Registry) Get(name string) (Tool, bool) {
+func (r *ToolRegistry) Get(name string) (Tool, bool) {
 	t, ok := r.tools[name]
 	return t, ok
 }
 
 // List returns all registered tools.
-func (r *Registry) List() []Tool {
+func (r *ToolRegistry) List() []Tool {
 	result := make([]Tool, 0, len(r.tools))
 	for _, t := range r.tools {
 		result = append(result, t)
@@ -41,7 +41,7 @@ func (r *Registry) List() []Tool {
 }
 
 // Merge merges another registry into this one.
-func (r *Registry) Merge(other *Registry) {
+func (r *ToolRegistry) Merge(other *ToolRegistry) {
 	if other == nil {
 		return
 	}
@@ -80,7 +80,7 @@ func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...to
 }
 
 // ToEinoTools converts the registry to Eino tool instances.
-func (r *Registry) ToEinoTools() []tool.BaseTool {
+func (r *ToolRegistry) ToEinoTools() []tool.BaseTool {
 	result := make([]tool.BaseTool, 0, len(r.tools))
 	for _, t := range r.tools {
 		wrapper := &toolWrapper{tool: t}

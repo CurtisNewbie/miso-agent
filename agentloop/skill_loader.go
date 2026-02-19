@@ -5,17 +5,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/curtisnewbie/miso-agent/agentloop/backend"
 	"github.com/curtisnewbie/miso/errs"
 )
 
 // SkillLoader loads skills from a backend.
 type SkillLoader struct {
-	backend backend.FileBackend
+	backend FileStore
 }
 
 // NewSkillLoader creates a new skill loader.
-func NewSkillLoader(backend backend.FileBackend) *SkillLoader {
+func NewSkillLoader(backend FileStore) *SkillLoader {
 	return &SkillLoader{
 		backend: backend,
 	}

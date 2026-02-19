@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/agentloop/backend"
 )
 
 func TestAgent_shouldEvictToolResult(t *testing.T) {
@@ -255,7 +254,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 				t.Fatalf("Failed to create tokenizer: %v", err)
 			}
 
-			be := backend.NewMemFileBackend()
+			be := NewMemFileStore()
 			config := tt.config
 			config.Backend = be
 
@@ -285,7 +284,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 }
 
 func TestAgent_evictToolResult(t *testing.T) {
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	tokenizer, err := NewTokenizer("gpt-3.5-turbo")
 	if err != nil {
 		t.Fatalf("Failed to create tokenizer: %v", err)
@@ -333,7 +332,7 @@ func TestAgent_evictToolResult(t *testing.T) {
 }
 
 func TestAgent_evictToolResult_WithPreview(t *testing.T) {
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	tokenizer, err := NewTokenizer("gpt-3.5-turbo")
 	if err != nil {
 		t.Fatalf("Failed to create tokenizer: %v", err)
@@ -368,7 +367,7 @@ func TestAgent_evictToolResult_WithPreview(t *testing.T) {
 }
 
 func TestAgent_evictToolResult_NoPreview(t *testing.T) {
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	tokenizer, err := NewTokenizer("gpt-3.5-turbo")
 	if err != nil {
 		t.Fatalf("Failed to create tokenizer: %v", err)
@@ -468,7 +467,7 @@ func (m *mockFailingBackend) WriteFile(ctx context.Context, path string, content
 	return &mockError{msg: "write failed"}
 }
 
-func (m *mockFailingBackend) ListDirectory(ctx context.Context, path string) ([]backend.FileInfo, error) {
+func (m *mockFailingBackend) ListDirectory(ctx context.Context, path string) ([]FileInfo, error) {
 	return nil, nil
 }
 

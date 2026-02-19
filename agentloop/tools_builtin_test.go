@@ -1,16 +1,14 @@
-package tools
+package agentloop
 
 import (
 	"context"
 	"strings"
 	"testing"
-
-	"github.com/curtisnewbie/miso-agent/agentloop/backend"
 )
 
 func TestBuiltinTools_ReadFile(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -41,7 +39,7 @@ func TestBuiltinTools_ReadFile(t *testing.T) {
 
 func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -60,7 +58,7 @@ func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 
 func TestBuiltinTools_WriteFile(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -97,7 +95,7 @@ func TestBuiltinTools_WriteFile(t *testing.T) {
 
 func TestBuiltinTools_ListDirectory(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -125,7 +123,7 @@ func TestBuiltinTools_ListDirectory(t *testing.T) {
 
 func TestBuiltinTools_Glob_Simple(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -154,7 +152,7 @@ func TestBuiltinTools_Glob_Simple(t *testing.T) {
 
 func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -187,7 +185,7 @@ func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 
 func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -227,7 +225,7 @@ func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 
 func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -258,7 +256,7 @@ func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 
 func TestBuiltinTools_Glob_DoubleStarAtEnd(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -290,7 +288,7 @@ func TestBuiltinTools_Glob_DoubleStarAtEnd(t *testing.T) {
 
 func TestBuiltinTools_AddTodo(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -329,7 +327,7 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 
 func TestBuiltinTools_UpdateTodo(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -366,7 +364,7 @@ func TestBuiltinTools_UpdateTodo(t *testing.T) {
 
 func TestBuiltinTools_ListTodos(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -391,7 +389,7 @@ func TestBuiltinTools_ListTodos(t *testing.T) {
 
 func TestBuiltinTools_DeleteTodo(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -427,7 +425,7 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 
 func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 	ctx := context.Background()
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 
@@ -445,7 +443,7 @@ func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 }
 
 func TestBuiltinTools_AllToolsRegistered(t *testing.T) {
-	be := backend.NewMemFileBackend()
+	be := NewMemFileStore()
 	todoManager := NewTodoManager()
 	registry := BuiltinTools(be, todoManager)
 

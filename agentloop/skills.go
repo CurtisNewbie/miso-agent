@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/agentloop/backend"
 	"github.com/curtisnewbie/miso/errs"
 )
 
@@ -15,7 +14,7 @@ type Skills struct {
 }
 
 // NewSkills creates a new skills manager.
-func NewSkills(backend backend.FileBackend) *Skills {
+func NewSkills(backend FileStore) *Skills {
 	return &Skills{
 		loader: NewSkillLoader(backend),
 	}

@@ -1,4 +1,4 @@
-package tools
+package agentloop
 
 import (
 	"context"
@@ -185,8 +185,8 @@ func (tm *TodoManager) FromState(todos []TodoItem) {
 }
 
 // TodoTools returns the todo tools.
-func TodoTools(todoManager *TodoManager) *Registry {
-	registry := NewRegistry()
+func TodoTools(todoManager *TodoManager) *ToolRegistry {
+	registry := NewToolRegistry()
 
 	registry.Register(NewToolFunc(
 		"add_todo",

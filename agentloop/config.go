@@ -6,12 +6,11 @@ import (
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
-	"github.com/curtisnewbie/miso-agent/agentloop/backend"
-	"github.com/curtisnewbie/miso-agent/agentloop/tools"
 )
 
 // AgentConfig is the configuration for creating an agent.
 type AgentConfig struct {
+
 	// Model is the LLM model to use.
 	Model model.ToolCallingChatModel
 
@@ -20,7 +19,7 @@ type AgentConfig struct {
 	Skills []string
 
 	// PreloadedSkills is a map of file paths to content that will be written to the backend
-	// before loading skills. This is useful for predefining skills when using MemFileBackend.
+	// before loading skills. This is useful for predefining skills when using MemFileStore.
 	// Example: {"/skills/web-research/SKILL.md": "# Web Research\n\n..."}
 	//
 	// See [BuildPreloadedSkills], [BuildPreloadedSkillsWithFilter]
@@ -28,7 +27,7 @@ type AgentConfig struct {
 
 	// Tools is a list of tools available to the agent.
 	// If nil, built-in tools will be used.
-	Tools []tools.Tool
+	Tools []Tool
 
 	// TaskPrompt is the main task prompt for the agent.
 	TaskPrompt string
@@ -38,8 +37,8 @@ type AgentConfig struct {
 	SystemPrompt string
 
 	// Backend is the file storage backend.
-	// If nil, a new MemFileBackend will be created.
-	Backend backend.FileBackend
+	// If nil, a new MemFileStore will be created.
+	Backend FileStore
 
 	// MaxSteps is the maximum number of steps in the ReAct loop.
 	MaxSteps int
@@ -47,7 +46,7 @@ type AgentConfig struct {
 	// Language is the language for the agent (default: "English").
 	Language string
 
-	// Timezone is the timezone offset in hours for time display.
+	// Timezone is the timezone offset in hours for time display (default: 0, UTC).
 	Timezone float64
 
 	// MaxTokens is the maximum number of tokens allowed in the conversation history.
