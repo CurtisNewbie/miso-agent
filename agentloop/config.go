@@ -6,10 +6,12 @@ import (
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
+	"github.com/curtisnewbie/miso-agent/graph"
 )
 
 // AgentConfig is the configuration for creating an agent.
 type AgentConfig struct {
+	*graph.GenericOps
 
 	// Model is the LLM model to use.
 	Model model.ToolCallingChatModel
@@ -40,12 +42,6 @@ type AgentConfig struct {
 	// If nil, a new MemFileStore will be created.
 	Backend FileStore
 
-	// MaxSteps is the maximum number of steps in the ReAct loop.
-	MaxSteps int
-
-	// Language is the language for the agent (default: "English").
-	Language string
-
 	// Timezone is the timezone offset in hours for time display (default: 0, UTC).
 	Timezone float64
 
@@ -73,11 +69,6 @@ type AgentConfig struct {
 	// If 0, no preview is kept (only metadata).
 	// Default: 0 (no preview)
 	EvictToolResultsKeepPreview int
-
-	// VisualizeDir is the directory path where Mermaid graph visualizations will be written.
-	// If empty or not provided, no visualizations will be generated.
-	// The directory will be created if it doesn't exist.
-	VisualizeDir string
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.
@@ -201,13 +192,4 @@ func BuildPreloadedSkillsWithFilter(efs embed.FS, filter func(path string) bool,
 	}
 
 	return result
-}
-
-// DefaultConfig returns a default agent configuration.
-func DefaultConfig() AgentConfig {
-	return AgentConfig{
-		MaxSteps: 100,
-		Language: "English",
-		Timezone: 0,
-	}
 }

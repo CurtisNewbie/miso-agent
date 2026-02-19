@@ -26,7 +26,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 	g := compose.NewGraph[taskInput, finalOutput](
 		compose.WithGenLocalState(func(ctx context.Context) *agentLoopState {
 			return &agentLoopState{
-				messages: make([]*schema.Message, 0, agent.config.MaxSteps+1),
+				messages: make([]*schema.Message, 0, agent.config.MaxRunSteps+1),
 			}
 		}),
 	)
@@ -169,12 +169,5 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 	// Finish: final_output → END
 	_ = g.AddEdge("final_output", compose.END)
 
-	// Create GenericOps from AgentConfig
-	gops := &graph.GenericOps{
-		MaxRunSteps:  agent.config.MaxSteps,
-		Language:     agent.config.Language,
-		VisualizeDir: agent.config.VisualizeDir,
-	}
-
-	return graph.CompileGraph(gops, g, compose.WithGraphName("AgentLoop"))
+	return graph.CompileGraph(agent.config.GenericOps, g, compose.WithGraphName("AgentLoop"))
 }

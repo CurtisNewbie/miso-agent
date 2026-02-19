@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 )
@@ -23,9 +24,13 @@ type Agent struct {
 
 // NewAgent creates a new ReAct agent.
 func NewAgent(config AgentConfig) (*Agent, error) {
+	if config.GenericOps == nil {
+		config.GenericOps = graph.NewGenericOps()
+	}
+
 	// Set defaults
-	if config.MaxSteps <= 0 {
-		config.MaxSteps = 100
+	if config.GenericOps.MaxRunSteps <= 0 {
+		config.GenericOps.MaxRunSteps = 100
 	}
 	if config.Language == "" {
 		config.Language = "English"

@@ -44,13 +44,13 @@ func compileGraph() error {
 	// Add agentloop agent
 	_, err = agentloop.NewAgent(agentloop.AgentConfig{
 		Model:                       model,
-		MaxSteps:                    100,
-		Language:                    "English",
 		MaxTokens:                   32000,
 		TokenizerModelName:          "gpt-3.5-turbo",
 		EvictToolResultsThreshold:   1000,
 		EvictToolResultsKeepPreview: 100,
-		VisualizeDir:                "../doc",
+		GenericOps: &graph.GenericOps{
+			VisualizeDir: "../doc",
+		},
 	})
 	return err
 }

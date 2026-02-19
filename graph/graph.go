@@ -10,11 +10,13 @@ import (
 )
 
 func CompileGraph[T, V any](o *GenericOps, g *compose.Graph[T, V], opts ...compose.GraphCompileOption) (compose.Runnable[T, V], error) {
-	if o.VisualizeDir != "" {
-		opts = append(opts, compose.WithGraphCompileCallbacks(NewMermaidGenerator(o.VisualizeDir)))
-	}
-	if o.MaxRunSteps > 0 {
-		opts = append(opts, compose.WithMaxRunSteps(o.MaxRunSteps))
+	if o != nil {
+		if o.VisualizeDir != "" {
+			opts = append(opts, compose.WithGraphCompileCallbacks(NewMermaidGenerator(o.VisualizeDir)))
+		}
+		if o.MaxRunSteps > 0 {
+			opts = append(opts, compose.WithMaxRunSteps(o.MaxRunSteps))
+		}
 	}
 	return g.Compile(context.Background(), opts...)
 }
