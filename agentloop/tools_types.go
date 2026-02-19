@@ -57,22 +57,35 @@ func NewToolFunc(
 	}
 }
 
+// newAwareToolFunc creates a tool that automatically extracts a dependency from args.
+// This is a generic helper for creating tools that need access to stateful components
+// like FileStore or TodoManager, which are injected via context and args.
+func newAwareToolFunc[T any](
+	name string,
+	description string,
+	parameters map[string]interface{},
+	key string,
+	execute func(ctx context.Context, deps T, args map[string]interface{}) (string, error),
+) Tool {
+	return NewToolFunc(name, description, parameters,
+		func(ctx context.Context, args map[string]interface{}) (string, error) {
+			var deps T
+			if v, ok := args[key]; ok {
+				if vv, ok := v.(T); ok {
+					deps = vv
+				}
+			}
+			return execute(ctx, deps, args)
+		})
+}
+
 func NewStoreAwareToolFunc(
 	name string,
 	description string,
 	parameters map[string]interface{},
 	execute func(ctx context.Context, store FileStore, args map[string]interface{}) (string, error),
 ) Tool {
-	return NewToolFunc(name, description, parameters,
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			var st FileStore
-			if v, ok := args[ArgKeyAgentLoopFileStore]; ok {
-				if vv, ok := v.(FileStore); ok {
-					st = vv
-				}
-			}
-			return execute(ctx, st, args)
-		})
+	return newAwareToolFunc(name, description, parameters, ArgKeyAgentLoopFileStore, execute)
 }
 
 func NewTodoAwareToolFunc(
@@ -81,16 +94,7 @@ func NewTodoAwareToolFunc(
 	parameters map[string]interface{},
 	execute func(ctx context.Context, store *TodoManager, args map[string]interface{}) (string, error),
 ) Tool {
-	return NewToolFunc(name, description, parameters,
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			var st *TodoManager
-			if v, ok := args[ArgKeyAgentLoopTodoManager]; ok {
-				if vv, ok := v.(*TodoManager); ok {
-					st = vv
-				}
-			}
-			return execute(ctx, st, args)
-		})
+	return newAwareToolFunc(name, description, parameters, ArgKeyAgentLoopTodoManager, execute)
 }
 
 // getString safely gets a string value from a map.
