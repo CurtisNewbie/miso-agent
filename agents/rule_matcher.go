@@ -308,11 +308,7 @@ func (b *RuleMatcher) Execute(rail flow.Rail, input RuleMatcherInput) (RuleMatch
 	}
 	input.now = now
 
-	cops := []compose.Option{}
-	if b.ops.genops.LogOnStart {
-		cops = append(cops, graph.WithTraceCallback("RuleMatcher", b.ops.genops.LogInputs))
-	}
-	out, err := b.graph.Invoke(rail, input, cops...)
+	out, err := graph.InvokeGraph(rail, b.ops.genops, b.graph, "RuleMatcher", input)
 	if err != nil {
 		return out, err
 	}

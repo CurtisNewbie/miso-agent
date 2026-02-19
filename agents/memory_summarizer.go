@@ -117,9 +117,5 @@ func (w *MemorySummarizer) Execute(rail flow.Rail, input MemorySummarizerInput) 
 	start := time.Now()
 	defer rail.TimeOp(start, "MemorySummarizer")
 
-	cops := []compose.Option{}
-	if w.genops.LogOnStart {
-		cops = append(cops, graph.WithTraceCallback("MemorySummarizer", w.genops.LogInputs))
-	}
-	return w.graph.Invoke(rail, input, cops...)
+	return graph.InvokeGraph(rail, w.genops, w.graph, "MemorySummarizer", input)
 }

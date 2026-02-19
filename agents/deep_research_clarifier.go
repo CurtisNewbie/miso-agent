@@ -187,9 +187,5 @@ func (w *DeepResearchClarifier) Execute(rail flow.Rail, input DeepResearchClarif
 	start := time.Now()
 	defer rail.TimeOp(start, "DeepResearchClarifier")
 
-	cops := []compose.Option{}
-	if w.genops.LogOnStart {
-		cops = append(cops, graph.WithTraceCallback("DeepResearchClarifier", w.genops.LogInputs))
-	}
-	return w.graph.Invoke(rail, input, cops...)
+	return graph.InvokeGraph(rail, w.genops, w.graph, "DeepResearchClarifier", input)
 }

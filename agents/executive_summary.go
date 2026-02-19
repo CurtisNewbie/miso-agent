@@ -119,9 +119,5 @@ func (w *ExecutiveSummaryWriter) Execute(rail flow.Rail, input ExecutiveSummaryW
 	start := time.Now()
 	defer rail.TimeOp(start, "ExecutiveSummaryWriter")
 
-	cops := []compose.Option{}
-	if w.genops.LogOnStart {
-		cops = append(cops, graph.WithTraceCallback("ExecutiveSummaryWriter", w.genops.LogInputs))
-	}
-	return w.graph.Invoke(rail, input, cops...)
+	return graph.InvokeGraph(rail, w.genops, w.graph, "ExecutiveSummaryWriter", input)
 }

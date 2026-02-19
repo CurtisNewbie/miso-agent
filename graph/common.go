@@ -7,13 +7,17 @@ type GenericOps struct {
 	Language     string
 	VisualizeDir string
 	LogOnStart   bool
+	LogOnEnd     bool
 	LogInputs    bool
+	LogOutputs   bool
 }
 
 func NewGenericOps() *GenericOps {
 	return &GenericOps{
 		Language:   "English",
 		LogOnStart: true,
+		LogOnEnd:   true,
 		LogInputs:  false,
+		LogOutputs: false,
 	}
 }

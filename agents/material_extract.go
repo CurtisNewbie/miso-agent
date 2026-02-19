@@ -385,11 +385,7 @@ func (b *MaterialExtract) Execute(rail flow.Rail, input MaterialExtractInput) (M
 	}
 	input.Fields = append(reasonFields, input.Fields...)
 
-	cops := []compose.Option{}
-	if b.ops.genops.LogOnStart {
-		cops = append(cops, graph.WithTraceCallback("MaterialExtract", b.ops.genops.LogInputs))
-	}
-	out, err := b.graph.Invoke(rail, input, cops...)
+	out, err := graph.InvokeGraph(rail, b.ops.genops, b.graph, "MaterialExtract", input)
 	if err != nil {
 		return out, err
 	}

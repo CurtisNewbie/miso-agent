@@ -114,7 +114,7 @@ func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 	}
 
 	// Execute graph
-	result, err := a.graph.Invoke(rail, taskInput)
+	result, err := graph.InvokeGraph(rail, a.config.GenericOps, a.graph, "AgentLoop", taskInput)
 	if err != nil {
 		return "", errs.Wrapf(err, "failed to execute graph")
 	}
