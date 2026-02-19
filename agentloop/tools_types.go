@@ -91,7 +91,6 @@ func (t *ToolFunc) Execute(ctx context.Context, args map[string]interface{}) (st
 type TodoItem struct {
 	ID          string `json:"id"`
 	Task        string `json:"task"`
-	Status      string `json:"status"`             // "pending", "in_progress", "completed", "failed"
-	Priority    string `json:"priority,omitempty"` // "high", "medium", "low"
+	Status      string `json:"status"` // "pending", "completed"
 	Description string `json:"description,omitempty"`
 }

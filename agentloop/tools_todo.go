@@ -25,16 +25,12 @@ func NewTodoManager() *TodoManager {
 }
 
 // AddTodo adds a new todo item.
-func (tm *TodoManager) AddTodo(task, priority, description string) (string, error) {
+func (tm *TodoManager) AddTodo(task, description string) (string, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
 	if task == "" {
 		return "", errs.NewErrf("task cannot be empty")
-	}
-
-	if priority == "" {
-		priority = "medium"
 	}
 
 	id := fmt.Sprintf("todo-%d", tm.nextID)
@@ -44,7 +40,6 @@ func (tm *TodoManager) AddTodo(task, priority, description string) (string, erro
 		ID:          id,
 		Task:        task,
 		Status:      "pending",
-		Priority:    priority,
 		Description: description,
 	}
 
@@ -131,27 +126,13 @@ func (tm *TodoManager) Format() string {
 	sb.WriteString("Todo List:\n")
 
 	for _, todo := range todos {
-		priorityIcon := "○"
-		switch todo.Priority {
-		case "high":
-			priorityIcon = "🔴"
-		case "medium":
-			priorityIcon = "🟡"
-		case "low":
-			priorityIcon = "🟢"
-		}
-
-		statusIcon := "⬜"
+		status := "[ ]"
 		switch todo.Status {
-		case "in_progress":
-			statusIcon = "🔄"
 		case "completed":
-			statusIcon = "✅"
-		case "failed":
-			statusIcon = "❌"
+			status = "[x]"
 		}
 
-		sb.WriteString(fmt.Sprintf("%s %s [%s] %s", statusIcon, priorityIcon, todo.ID, todo.Task))
+		sb.WriteString(fmt.Sprintf("%s [%s] %s", status, todo.ID, todo.Task))
 		if todo.Description != "" {
 			sb.WriteString(fmt.Sprintf(" - %s", todo.Description))
 		}
@@ -196,10 +177,6 @@ func TodoTools(todoManager *TodoManager) *ToolRegistry {
 				"type":        "string",
 				"description": "The task description",
 			},
-			"priority": map[string]interface{}{
-				"type":        "string",
-				"description": "Priority level: high, medium, or low (default: medium)",
-			},
 			"description": map[string]interface{}{
 				"type":        "string",
 				"description": "Additional details about the task",
@@ -207,10 +184,9 @@ func TodoTools(todoManager *TodoManager) *ToolRegistry {
 		},
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
 			task, _ := args["task"].(string)
-			priority, _ := args["priority"].(string)
 			description, _ := args["description"].(string)
 
-			id, err := todoManager.AddTodo(task, priority, description)
+			id, err := todoManager.AddTodo(task, description)
 			if err != nil {
 				return "", err
 			}
@@ -229,7 +205,7 @@ func TodoTools(todoManager *TodoManager) *ToolRegistry {
 			},
 			"status": map[string]interface{}{
 				"type":        "string",
-				"description": "New status: pending, in_progress, completed, or failed",
+				"description": "New status: pending or completed",
 			},
 		},
 		func(ctx context.Context, args map[string]interface{}) (string, error) {

@@ -299,7 +299,6 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 
 	result, err := tool.Execute(ctx, map[string]interface{}{
 		"task":        "Test task",
-		"priority":    "high",
 		"description": "Test description",
 	})
 	if err != nil {
@@ -319,10 +318,6 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 	if todos[0].Task != "Test task" {
 		t.Errorf("Expected task 'Test task', got %q", todos[0].Task)
 	}
-
-	if todos[0].Priority != "high" {
-		t.Errorf("Expected priority 'high', got %q", todos[0].Priority)
-	}
 }
 
 func TestBuiltinTools_UpdateTodo(t *testing.T) {
@@ -332,7 +327,7 @@ func TestBuiltinTools_UpdateTodo(t *testing.T) {
 	registry := BuiltinTools(be, todoManager)
 
 	// Add a todo first
-	id, _ := todoManager.AddTodo("Test task", "medium", "Test description")
+	id, _ := todoManager.AddTodo("Test task", "Test description")
 
 	tool, ok := registry.Get("update_todo")
 	if !ok {
@@ -369,8 +364,8 @@ func TestBuiltinTools_ListTodos(t *testing.T) {
 	registry := BuiltinTools(be, todoManager)
 
 	// Add some todos
-	todoManager.AddTodo("Task 1", "high", "Description 1")
-	todoManager.AddTodo("Task 2", "medium", "Description 2")
+	todoManager.AddTodo("Task 1", "Description 1")
+	todoManager.AddTodo("Task 2", "Description 2")
 
 	tool, ok := registry.Get("list_todos")
 	if !ok {
@@ -394,7 +389,7 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 	registry := BuiltinTools(be, todoManager)
 
 	// Add a todo first
-	id, _ := todoManager.AddTodo("Test task", "medium", "Test description")
+	id, _ := todoManager.AddTodo("Test task", "Test description")
 
 	tool, ok := registry.Get("delete_todo")
 	if !ok {

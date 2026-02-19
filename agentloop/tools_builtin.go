@@ -169,10 +169,6 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager) *ToolRegistry {
 				"type":        "string",
 				"description": "The task description",
 			},
-			"priority": map[string]interface{}{
-				"type":        "string",
-				"description": "Priority level: high, medium, or low (default: medium)",
-			},
 			"description": map[string]interface{}{
 				"type":        "string",
 				"description": "Additional details about the task",
@@ -180,10 +176,9 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager) *ToolRegistry {
 		},
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
 			task, _ := args["task"].(string)
-			priority, _ := args["priority"].(string)
 			description, _ := args["description"].(string)
 
-			id, err := todoManager.AddTodo(task, priority, description)
+			id, err := todoManager.AddTodo(task, description)
 			if err != nil {
 				return "", err
 			}
@@ -202,7 +197,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager) *ToolRegistry {
 			},
 			"status": map[string]interface{}{
 				"type":        "string",
-				"description": "New status: pending, in_progress, completed, or failed",
+				"description": "New status: pending or completed",
 			},
 		},
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
