@@ -81,6 +81,11 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		toolRegistry.Register(t)
 	}
 
+	// Add store-aware tools (created with backend access)
+	for _, factory := range config.StoreAwareTools {
+		toolRegistry.Register(factory(config.Backend))
+	}
+
 	// Load skills
 	if len(config.Skills) > 0 {
 		if err := skillsMiddleware.Load(context.Background(), config.Skills); err != nil {
