@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/agentloop/skills"
 	"github.com/curtisnewbie/miso/util/atom"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
@@ -56,7 +55,7 @@ type PromptBuilder struct {
 	basePrompt   string
 	customPrompt string
 	taskPrompt   string
-	skills       *skills.Middleware
+	skills       *Skills
 	language     string
 	currentTime  string
 }
@@ -82,7 +81,7 @@ func (pb *PromptBuilder) WithTaskPrompt(prompt string) *PromptBuilder {
 }
 
 // WithSkills sets the skills middleware.
-func (pb *PromptBuilder) WithSkills(skills *skills.Middleware) *PromptBuilder {
+func (pb *PromptBuilder) WithSkills(skills *Skills) *PromptBuilder {
 	pb.skills = skills
 	return pb
 }

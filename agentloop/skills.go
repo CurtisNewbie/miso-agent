@@ -1,4 +1,4 @@
-package skills
+package agentloop
 
 import (
 	"context"
@@ -8,37 +8,37 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 )
 
-// Middleware injects loaded skills into the system prompt.
-type Middleware struct {
-	loader *Loader
+// Skills injects loaded skills into the system prompt.
+type Skills struct {
+	loader *SkillLoader
 	skills SkillsMap
 }
 
-// NewMiddleware creates a new skills middleware.
-func NewMiddleware(backend backend.FileBackendProtocol, sources []string) *Middleware {
-	return &Middleware{
-		loader: NewLoader(backend),
+// NewSkills creates a new skills manager.
+func NewSkills(backend backend.FileBackend) *Skills {
+	return &Skills{
+		loader: NewSkillLoader(backend),
 	}
 }
 
 // Load loads skills from the configured sources.
-func (m *Middleware) Load(ctx context.Context, sources []string) error {
-	skills, err := m.loader.LoadFromSources(ctx, sources)
+func (s *Skills) Load(ctx context.Context, sources []string) error {
+	skills, err := s.loader.LoadFromSources(ctx, sources)
 	if err != nil {
 		return errs.Wrapf(err, "failed to load skills")
 	}
-	m.skills = skills
+	s.skills = skills
 	return nil
 }
 
 // InjectSkills injects the loaded skills into the system prompt.
 // This is typically called during the graph construction phase.
-func (m *Middleware) InjectSkills(basePrompt string) string {
-	if m.skills == nil || len(m.skills) == 0 {
+func (s *Skills) InjectSkills(basePrompt string) string {
+	if s.skills == nil || len(s.skills) == 0 {
 		return basePrompt
 	}
 
-	skillsPrompt := m.skills.FormatForPrompt()
+	skillsPrompt := s.skills.FormatForPrompt()
 	if skillsPrompt == "" {
 		return basePrompt
 	}
@@ -48,12 +48,12 @@ func (m *Middleware) InjectSkills(basePrompt string) string {
 
 // InjectMetadataOnly injects only skill metadata for progressive disclosure.
 // The LLM is instructed to read full skill content on-demand using tools.
-func (m *Middleware) InjectMetadataOnly(basePrompt string) string {
-	if m.skills == nil || len(m.skills) == 0 {
+func (s *Skills) InjectMetadataOnly(basePrompt string) string {
+	if s.skills == nil || len(s.skills) == 0 {
 		return basePrompt
 	}
 
-	skillsPrompt := m.skills.FormatMetadataOnly()
+	skillsPrompt := s.skills.FormatMetadataOnly()
 	if skillsPrompt == "" {
 		return basePrompt
 	}
@@ -62,16 +62,16 @@ func (m *Middleware) InjectMetadataOnly(basePrompt string) string {
 }
 
 // GetSkills returns the loaded skills map.
-func (m *Middleware) GetSkills() SkillsMap {
-	return m.skills
+func (s *Skills) GetSkills() SkillsMap {
+	return s.skills
 }
 
 // PrepareSystemMessage prepares a system message with skills injected.
-func PrepareSystemMessage(middleware *Middleware, basePrompt string) *schema.Message {
-	if middleware == nil {
+func PrepareSystemMessage(skills *Skills, basePrompt string) *schema.Message {
+	if skills == nil {
 		return schema.SystemMessage(basePrompt)
 	}
 
-	skillsPrompt := middleware.InjectSkills(basePrompt)
+	skillsPrompt := skills.InjectSkills(basePrompt)
 	return schema.SystemMessage(skillsPrompt)
 }

@@ -1,10 +1,9 @@
-package skills
+package agentloop
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
-
-	"fmt"
 
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/strutil"

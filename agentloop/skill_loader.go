@@ -1,4 +1,4 @@
-package skills
+package agentloop
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 )
 
-// Loader loads skills from a backend.
-type Loader struct {
-	backend backend.FileBackendProtocol
+// SkillLoader loads skills from a backend.
+type SkillLoader struct {
+	backend backend.FileBackend
 }
 
-// NewLoader creates a new skill loader.
-func NewLoader(backend backend.FileBackendProtocol) *Loader {
-	return &Loader{
+// NewSkillLoader creates a new skill loader.
+func NewSkillLoader(backend backend.FileBackend) *SkillLoader {
+	return &SkillLoader{
 		backend: backend,
 	}
 }
@@ -25,7 +25,7 @@ func NewLoader(backend backend.FileBackendProtocol) *Loader {
 // Sources are paths to skill directories (e.g., "/skills/user/", "/skills/project/").
 // Each source directory should contain skill subdirectories with SKILL.md files.
 // Later sources override earlier sources for skills with the same name.
-func (l *Loader) LoadFromSources(ctx context.Context, sources []string) (SkillsMap, error) {
+func (l *SkillLoader) LoadFromSources(ctx context.Context, sources []string) (SkillsMap, error) {
 	result := make(SkillsMap)
 
 	for _, source := range sources {
@@ -44,7 +44,7 @@ func (l *Loader) LoadFromSources(ctx context.Context, sources []string) (SkillsM
 }
 
 // LoadFromSource loads skills from a single source directory.
-func (l *Loader) LoadFromSource(ctx context.Context, source string) (SkillsMap, error) {
+func (l *SkillLoader) LoadFromSource(ctx context.Context, source string) (SkillsMap, error) {
 	// Normalize source path
 	source = normalizePath(source)
 
@@ -73,7 +73,7 @@ func (l *Loader) LoadFromSource(ctx context.Context, source string) (SkillsMap, 
 }
 
 // LoadSkillFile loads a single skill from a SKILL.md file.
-func (l *Loader) LoadSkillFile(ctx context.Context, path string) (*Skill, error) {
+func (l *SkillLoader) LoadSkillFile(ctx context.Context, path string) (*Skill, error) {
 	// Normalize path
 	path = normalizePath(path)
 

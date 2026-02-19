@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-// FileBackendProtocol defines the interface for file operations.
+// FileBackend defines the interface for file operations.
 // This abstraction allows different storage backends (filesystem, in-memory, etc.)
-type FileBackendProtocol interface {
+type FileBackend interface {
 	// ReadFile reads a file from the backend.
 	ReadFile(ctx context.Context, path string) ([]byte, error)
 
@@ -32,5 +32,5 @@ type FileInfo struct {
 	ModifiedAt time.Time `json:"modified_at"`
 }
 
-// BackendFactory is a function that creates a FileBackendProtocol.
-type BackendFactory func(ctx context.Context) (FileBackendProtocol, error)
+// BackendFactory is a function that creates a FileBackend.
+type BackendFactory func(ctx context.Context) (FileBackend, error)

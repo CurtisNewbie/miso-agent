@@ -39,7 +39,7 @@ type AgentConfig struct {
 
 	// Backend is the file storage backend.
 	// If nil, a new MemFileBackend will be created.
-	Backend backend.FileBackendProtocol
+	Backend backend.FileBackend
 
 	// MaxSteps is the maximum number of steps in the ReAct loop.
 	MaxSteps int

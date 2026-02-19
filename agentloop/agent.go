@@ -8,7 +8,6 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agentloop/backend"
-	"github.com/curtisnewbie/miso-agent/agentloop/skills"
 	"github.com/curtisnewbie/miso-agent/agentloop/tools"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -17,7 +16,7 @@ import (
 // Agent represents a ReAct agent with skills and tools.
 type Agent struct {
 	config      AgentConfig
-	skills      *skills.Middleware
+	skills      *Skills
 	tools       *tools.Registry
 	todoManager *tools.TodoManager
 	tokenizer   *Tokenizer
@@ -56,7 +55,13 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	}
 
 	// Initialize skills middleware
-	skillsMiddleware := skills.NewMiddleware(config.Backend, config.Skills)
+	skillsMiddleware := NewSkills(config.Backend)
+	if len(config.Skills) > 0 {
+		ctx := context.Background()
+		if err := skillsMiddleware.Load(ctx, config.Skills); err != nil {
+			return nil, errs.Wrapf(err, "failed to load skills")
+		}
+	}
 
 	// Initialize tools
 	toolRegistry := tools.NewRegistry()
