@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/curtisnewbie/miso/errs"
+	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -100,6 +101,83 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager) *ToolRegistry {
 			}
 
 			return fmt.Sprintf("Successfully wrote to %s", path), nil
+		},
+	))
+
+	registry.Register(NewToolFunc(
+		"edit_file",
+		"Performs exact string replacements in files. You must read the file before editing. Preserve exact indentation from the read output. Prefer editing existing files over creating new ones.",
+		map[string]interface{}{
+			"path": map[string]interface{}{
+				"type":        "string",
+				"description": "The absolute path to the file to edit",
+			},
+			"old_string": map[string]interface{}{
+				"type":        "string",
+				"description": "The exact text to find and replace. Must be unique in the file unless replace_all is True",
+			},
+			"new_string": map[string]interface{}{
+				"type":        "string",
+				"description": "The text to replace old_string with. Must be different from old_string",
+			},
+			"replace_all": map[string]interface{}{
+				"type":        "boolean",
+				"description": "If True, replace all occurrences of old_string. If False (default), old_string must be unique",
+			},
+		},
+		func(ctx context.Context, args map[string]interface{}) (string, error) {
+			path, ok := args["path"].(string)
+			if !ok {
+				return "", errs.NewErrf("path is required")
+			}
+			oldString, ok := args["old_string"].(string)
+			if !ok {
+				return "", errs.NewErrf("old_string is required")
+			}
+			newString, ok := args["new_string"].(string)
+			if !ok {
+				return "", errs.NewErrf("new_string is required")
+			}
+
+			// Check if old_string and new_string are different
+			if oldString == newString {
+				return "", errs.NewErrf("old_string and new_string must be different")
+			}
+
+			// Get replace_all flag (default: false)
+			replaceAll := false
+			if ra, ok := args["replace_all"].(bool); ok {
+				replaceAll = ra
+			}
+
+			// Read the file
+			content, err := backend.ReadFile(ctx, path)
+			if err != nil {
+				return "", errs.Wrapf(err, "failed to read file for editing")
+			}
+
+			contentStr := string(content)
+
+			// Count occurrences of old_string
+			occurrences := strings.Count(contentStr, oldString)
+
+			if occurrences == 0 {
+				return "", errs.NewErrf("String not found in file: '%s'", oldString)
+			}
+
+			if occurrences > 1 && !replaceAll {
+				return "", errs.NewErrf("String '%s' appears %d times in file. Use replace_all=true to replace all instances, or provide a more specific string with surrounding context", oldString, occurrences)
+			}
+
+			// Perform replacement
+			newContent := strings.ReplaceAll(contentStr, oldString, newString)
+
+			// Write the modified content back
+			if err := backend.WriteFile(ctx, path, []byte(newContent)); err != nil {
+				return "", errs.Wrapf(err, "failed to write edited file")
+			}
+
+			return fmt.Sprintf("Successfully replaced %d instance(s) of the string in '%s'", occurrences, path), nil
 		},
 	))
 
@@ -407,4 +485,48 @@ func joinGlobPath(base, component string) string {
 		return component
 	}
 	return base + "/" + component
+}
+
+// NewThinkTool creates a think tool for strategic reflection on research progress and decision-making.
+// This tool is not included in the built-in tools by default, but can be added by users if needed.
+// Use this tool after each search to analyze results and plan next steps systematically.
+// This creates a deliberate pause in the research workflow for quality decision-making.
+//
+// When to use:
+// - After receiving search results: What key information did I find?
+// - Before deciding next steps: Do I have enough to answer comprehensively?
+// - When assessing research gaps: What specific information am I still missing?
+// - Before concluding research: Can I provide a complete answer now?
+//
+// Reflection should address:
+// 1. Analysis of current findings - What concrete information have I gathered?
+// 2. Gap assessment - What crucial information is still missing?
+// 3. Quality evaluation - Do I have sufficient evidence/examples for a good answer?
+// 4. Strategic decision - Should I continue searching or provide my answer?
+//
+// Example:
+//
+//	agent := agentloop.NewAgent(agentloop.AgentConfig{
+//	    Model: chatModel,
+//	    Tools: []agentloop.Tool{agentloop.NewThinkTool()},
+//	})
+func NewThinkTool(toolName ...string) Tool {
+	return NewToolFunc(
+		slutil.VarArgAny(toolName, func() string { return "think_tool" }),
+		"Tool for strategic reflection on research progress and decision-making. Use this tool after each search to analyze results and plan next steps systematically. This creates a deliberate pause in the research workflow for quality decision-making.",
+		map[string]interface{}{
+			"reflection": map[string]interface{}{
+				"type":        "string",
+				"description": "Your detailed reflection on research progress, findings, gaps, and next steps. Reflection should address: 1) Analysis of current findings, 2) Gap assessment, 3) Quality evaluation, 4) Strategic decision",
+			},
+		},
+		func(ctx context.Context, args map[string]interface{}) (string, error) {
+			reflection, ok := args["reflection"].(string)
+			if !ok {
+				return "", errs.NewErrf("reflection is required")
+			}
+
+			return fmt.Sprintf("Reflection recorded: %s", reflection), nil
+		},
+	)
 }

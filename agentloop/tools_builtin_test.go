@@ -93,6 +93,268 @@ func TestBuiltinTools_WriteFile(t *testing.T) {
 	}
 }
 
+func TestBuiltinTools_EditFile_Success(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(be, todoManager)
+
+	// Create a test file
+	testPath := "edit_test.txt"
+	initialContent := "Hello, World!\nThis is a test.\nGoodbye again."
+	if err := be.WriteFile(ctx, testPath, []byte(initialContent)); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool, ok := registry.Get("edit_file")
+	if !ok {
+		t.Fatal("edit_file tool not found")
+	}
+
+	// Test single replacement
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		"path":       testPath,
+		"old_string": "Hello",
+		"new_string": "Hi",
+	})
+	if err != nil {
+		t.Fatalf("Failed to edit file: %v", err)
+	}
+
+	if !strings.Contains(result, "Successfully replaced 1 instance(s)") {
+		t.Errorf("Expected success message with 1 occurrence, got %q", result)
+	}
+
+	// Verify the replacement
+	content, err := be.ReadFile(ctx, testPath)
+	if err != nil {
+		t.Fatalf("Failed to read edited file: %v", err)
+	}
+
+	expectedContent := "Hi, World!\nThis is a test.\nGoodbye again."
+	if string(content) != expectedContent {
+		t.Errorf("Expected content %q, got %q", expectedContent, string(content))
+	}
+}
+
+func TestBuiltinTools_EditFile_ReplaceAll(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(be, todoManager)
+
+	// Create a test file
+	testPath := "edit_all_test.txt"
+	initialContent := "Hello, World!\nHello test.\nHello again."
+	if err := be.WriteFile(ctx, testPath, []byte(initialContent)); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool, ok := registry.Get("edit_file")
+	if !ok {
+		t.Fatal("edit_file tool not found")
+	}
+
+	// Test replace all
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		"path":        testPath,
+		"old_string":  "Hello",
+		"new_string":  "Hi",
+		"replace_all": true,
+	})
+	if err != nil {
+		t.Fatalf("Failed to edit file: %v", err)
+	}
+
+	if !strings.Contains(result, "Successfully replaced 3 instance(s)") {
+		t.Errorf("Expected success message with 3 occurrences, got %q", result)
+	}
+
+	// Verify the replacement
+	content, err := be.ReadFile(ctx, testPath)
+	if err != nil {
+		t.Fatalf("Failed to read edited file: %v", err)
+	}
+
+	expectedContent := "Hi, World!\nHi test.\nHi again."
+	if string(content) != expectedContent {
+		t.Errorf("Expected content %q, got %q", expectedContent, string(content))
+	}
+}
+
+func TestBuiltinTools_EditFile_NotFound(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(be, todoManager)
+
+	// Create a test file
+	testPath := "edit_notfound_test.txt"
+	initialContent := "Hello, World!"
+	if err := be.WriteFile(ctx, testPath, []byte(initialContent)); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool, ok := registry.Get("edit_file")
+	if !ok {
+		t.Fatal("edit_file tool not found")
+	}
+
+	// Test string not found
+	_, err := tool.Execute(ctx, map[string]interface{}{
+		"path":       testPath,
+		"old_string": "Goodbye",
+		"new_string": "Hi",
+	})
+	if err == nil {
+		t.Error("Expected error for string not found, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "String not found") {
+		t.Errorf("Expected 'String not found' error, got %v", err)
+	}
+}
+
+func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(be, todoManager)
+
+	// Create a test file with multiple occurrences
+	testPath := "edit_multi_test.txt"
+	initialContent := "Hello, World!\nHello test.\nHello again."
+	if err := be.WriteFile(ctx, testPath, []byte(initialContent)); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool, ok := registry.Get("edit_file")
+	if !ok {
+		t.Fatal("edit_file tool not found")
+	}
+
+	// Test multiple occurrences without replace_all flag
+	_, err := tool.Execute(ctx, map[string]interface{}{
+		"path":       testPath,
+		"old_string": "Hello",
+		"new_string": "Hi",
+	})
+	if err == nil {
+		t.Error("Expected error for multiple occurrences without replace_all, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "appears 3 times") {
+		t.Errorf("Expected error about multiple occurrences, got %v", err)
+	}
+}
+
+func TestBuiltinTools_EditFile_SameStrings(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(be, todoManager)
+
+	// Create a test file
+	testPath := "edit_same_test.txt"
+	initialContent := "Hello, World!"
+	if err := be.WriteFile(ctx, testPath, []byte(initialContent)); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	tool, ok := registry.Get("edit_file")
+	if !ok {
+		t.Fatal("edit_file tool not found")
+	}
+
+	// Test same old_string and new_string
+	_, err := tool.Execute(ctx, map[string]interface{}{
+		"path":       testPath,
+		"old_string": "Hello",
+		"new_string": "Hello",
+	})
+	if err == nil {
+		t.Error("Expected error for same old_string and new_string, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "must be different") {
+		t.Errorf("Expected error about different strings, got %v", err)
+	}
+}
+
+func TestBuiltinTools_EditFile_FileNotFound(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(be, todoManager)
+
+	tool, ok := registry.Get("edit_file")
+	if !ok {
+		t.Fatal("edit_file tool not found")
+	}
+
+	// Test editing nonexistent file
+	_, err := tool.Execute(ctx, map[string]interface{}{
+		"path":       "nonexistent.txt",
+		"old_string": "Hello",
+		"new_string": "Hi",
+	})
+	if err == nil {
+		t.Error("Expected error for nonexistent file, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to read file") {
+		t.Errorf("Expected error about reading file, got %v", err)
+	}
+}
+
+func TestNewThinkTool_Success(t *testing.T) {
+	ctx := context.Background()
+	tool := NewThinkTool()
+
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		"reflection": "I have gathered information about the topic. I need to search for more specific details.",
+	})
+	if err != nil {
+		t.Fatalf("Failed to execute think tool: %v", err)
+	}
+
+	expected := "Reflection recorded: I have gathered information about the topic. I need to search for more specific details."
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestNewThinkTool_MissingReflection(t *testing.T) {
+	ctx := context.Background()
+	tool := NewThinkTool()
+
+	_, err := tool.Execute(ctx, map[string]interface{}{})
+	if err == nil {
+		t.Error("Expected error for missing reflection, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "reflection is required") {
+		t.Errorf("Expected 'reflection is required' error, got %v", err)
+	}
+}
+
+func TestNewThinkTool_EmptyReflection(t *testing.T) {
+	ctx := context.Background()
+	tool := NewThinkTool()
+
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		"reflection": "",
+	})
+	if err != nil {
+		t.Fatalf("Failed to execute think tool with empty reflection: %v", err)
+	}
+
+	expected := "Reflection recorded: "
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
 func TestBuiltinTools_ListDirectory(t *testing.T) {
 	ctx := context.Background()
 	be := NewMemFileStore()
@@ -445,6 +707,7 @@ func TestBuiltinTools_AllToolsRegistered(t *testing.T) {
 	expectedTools := []string{
 		"read_file",
 		"write_file",
+		"edit_file",
 		"list_directory",
 		"glob",
 		"add_todo",
