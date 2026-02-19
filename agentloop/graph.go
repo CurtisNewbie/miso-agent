@@ -10,7 +10,8 @@ import (
 )
 
 type agentLoopState struct {
-	messages []*schema.Message
+	taskInput taskInput
+	messages  []*schema.Message
 }
 
 type finalOutput struct {
@@ -24,10 +25,13 @@ type finishToolArgs struct {
 
 // taskInput is the input to the ReAct agent graph.
 type taskInput struct {
-	task string
+	task   string
+	skills *Skills
+	store  FileStore
 }
 
 // buildGraph builds the Eino graph for the ReAct agent.
+// The graph is compiled once, but backend/skills are passed via taskInput for each execution.
 func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) {
 	g := compose.NewGraph[taskInput, finalOutput](
 		compose.WithGenLocalState(func(ctx context.Context) *agentLoopState {
@@ -39,11 +43,11 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 
 	// Prepare messages node - runs once at start
 	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, input taskInput) ([]*schema.Message, error) {
-		// Build system prompt
+		// Build system prompt with skills from taskInput
 		promptBuilder := NewPromptBuilder().
 			WithCustomPrompt(agent.config.SystemPrompt).
 			WithTaskPrompt(agent.config.TaskPrompt).
-			WithSkills(agent.skills).
+			WithSkills(input.skills).
 			WithLanguage(agent.config.Language).
 			WithCurrentTime(GetCurrentTime(agent.config.Timezone)).
 			WithFinishToolEnabled(agent.config.EnableFinishTool)
@@ -55,6 +59,11 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 
 		// Build user message with task
 		userMsg := schema.UserMessage(input.task)
+
+		_ = compose.ProcessState(ctx, func(ctx context.Context, st *agentLoopState) error {
+			st.taskInput = input
+			return nil
+		})
 
 		return []*schema.Message{systemMsg, userMsg}, nil
 	}), compose.WithNodeName("Prepare Messages"))
@@ -81,7 +90,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 
 		// Evict large tool results if configured
 		if agent.config.EvictToolResultsThreshold > 0 && agent.tokenizer != nil {
-			state.messages = agent.evictLargeToolResults(state.messages)
+			state.messages = agent.evictLargeToolResults(state.taskInput.store, state.messages)
 		}
 
 		// Prune messages if MaxTokens is set and exceeded

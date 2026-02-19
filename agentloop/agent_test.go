@@ -256,14 +256,13 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 
 			be := NewMemFileStore()
 			config := tt.config
-			config.Backend = be
+			config.BackendFactory = func() FileStore { return be }
 
 			agent := &Agent{
 				config:    config,
 				tokenizer: tokenizer,
 			}
-
-			result := agent.evictLargeToolResults(tt.messages)
+			result := agent.evictLargeToolResults(be, tt.messages)
 
 			// Count evicted messages
 			evicted := 0
@@ -291,7 +290,6 @@ func TestAgent_evictToolResult(t *testing.T) {
 	}
 
 	config := AgentConfig{
-		Backend:                     be,
 		EvictToolResultsKeepPreview: 100,
 	}
 	agent := &Agent{
@@ -305,7 +303,7 @@ func TestAgent_evictToolResult(t *testing.T) {
 		ToolCallID: "call_123",
 	}
 
-	result := agent.evictToolResult(originalMsg)
+	result := agent.evictToolResult(be, originalMsg)
 
 	// Verify reference message structure
 	if !containsString(result.Content, "[Tool result evicted to:") {
@@ -339,7 +337,6 @@ func TestAgent_evictToolResult_WithPreview(t *testing.T) {
 	}
 
 	config := AgentConfig{
-		Backend:                     be,
 		EvictToolResultsKeepPreview: 100,
 	}
 	agent := &Agent{
@@ -353,7 +350,7 @@ func TestAgent_evictToolResult_WithPreview(t *testing.T) {
 		ToolCallID: "call_123",
 	}
 
-	result := agent.evictToolResult(originalMsg)
+	result := agent.evictToolResult(be, originalMsg)
 
 	// Verify preview is included
 	if !containsString(result.Content, "Preview:") {
@@ -374,7 +371,6 @@ func TestAgent_evictToolResult_NoPreview(t *testing.T) {
 	}
 
 	config := AgentConfig{
-		Backend:                     be,
 		EvictToolResultsKeepPreview: 0,
 	}
 	agent := &Agent{
@@ -388,7 +384,7 @@ func TestAgent_evictToolResult_NoPreview(t *testing.T) {
 		ToolCallID: "call_123",
 	}
 
-	result := agent.evictToolResult(originalMsg)
+	result := agent.evictToolResult(be, originalMsg)
 
 	// Verify preview is empty when disabled (no truncated marker)
 	if containsString(result.Content, "... [truncated]") {
@@ -404,9 +400,7 @@ func TestAgent_evictToolResult_WriteFailure(t *testing.T) {
 		t.Fatalf("Failed to create tokenizer: %v", err)
 	}
 
-	config := AgentConfig{
-		Backend: be,
-	}
+	config := AgentConfig{}
 	agent := &Agent{
 		config:    config,
 		tokenizer: tokenizer,
@@ -418,7 +412,7 @@ func TestAgent_evictToolResult_WriteFailure(t *testing.T) {
 		ToolCallID: "call_123",
 	}
 
-	result := agent.evictToolResult(originalMsg)
+	result := agent.evictToolResult(be, originalMsg)
 
 	// On write failure, should return original message
 	if result.Content != originalMsg.Content {
@@ -485,150 +479,4 @@ type mockError struct {
 
 func (e *mockError) Error() string {
 	return e.msg
-}
-
-func TestAgent_StoreAwareTools(t *testing.T) {
-	// Create a store-aware tool factory
-	backendAccessed := false
-	storeAwareFactory := func(backend FileStore) Tool {
-		backendAccessed = true
-		return NewToolFunc(
-			"custom_backend_tool",
-			"A custom tool that uses the backend",
-			map[string]interface{}{
-				"path": map[string]interface{}{
-					"type":        "string",
-					"description": "File path",
-				},
-			},
-			func(ctx context.Context, args map[string]interface{}) (string, error) {
-				// Verify backend is accessible
-				if backend == nil {
-					return "", &mockError{msg: "backend is nil"}
-				}
-				return "backend tool executed successfully", nil
-			},
-		)
-	}
-
-	// Create agent config with StoreAwareTools
-	config := AgentConfig{
-		StoreAwareTools: []StoreAwareToolFunc{storeAwareFactory},
-	}
-
-	// Initialize agent
-	be := NewMemFileStore()
-	config.Backend = be
-
-	// Create tokenizer for potential use (not used in this test but needed for agent structure)
-	tokenizer, err := NewTokenizer("gpt-3.5-turbo")
-	if err != nil {
-		t.Fatalf("Failed to create tokenizer: %v", err)
-	}
-	_ = tokenizer // Not used in this test
-
-	// Manually create agent structure for testing (without full graph)
-	todoManager := NewTodoManager()
-	toolRegistry := NewToolRegistry()
-
-	// Add built-in tools
-	builtinTools := BuiltinTools(be, todoManager, false)
-	toolRegistry.Merge(builtinTools)
-
-	// Add store-aware tools
-	for _, factory := range config.StoreAwareTools {
-		tool := factory(be)
-		toolRegistry.Register(tool)
-	}
-
-	// Verify factory was called with backend
-	if !backendAccessed {
-		t.Error("StoreAwareToolFunc was not called with backend")
-	}
-
-	// Verify tool was registered
-	tool, ok := toolRegistry.Get("custom_backend_tool")
-	if !ok {
-		t.Fatal("Store-aware tool was not registered")
-	}
-
-	// Execute the tool to verify backend access
-	result, err := tool.Execute(context.Background(), map[string]interface{}{
-		"path": "test.txt",
-	})
-	if err != nil {
-		t.Fatalf("Failed to execute store-aware tool: %v", err)
-	}
-
-	expected := "backend tool executed successfully"
-	if result != expected {
-		t.Errorf("Expected %q, got %q", expected, result)
-	}
-}
-
-func TestAgent_MultipleStoreAwareTools(t *testing.T) {
-	// Create multiple store-aware tool factories
-	factories := []StoreAwareToolFunc{
-		func(backend FileStore) Tool {
-			return NewToolFunc("tool1", "Tool 1", nil, nil)
-		},
-		func(backend FileStore) Tool {
-			return NewToolFunc("tool2", "Tool 2", nil, nil)
-		},
-		func(backend FileStore) Tool {
-			return NewToolFunc("tool3", "Tool 3", nil, nil)
-		},
-	}
-
-	be := NewMemFileStore()
-	toolRegistry := NewToolRegistry()
-
-	// Register all store-aware tools
-	for _, factory := range factories {
-		tool := factory(be)
-		toolRegistry.Register(tool)
-	}
-
-	// Verify all tools were registered
-	for _, name := range []string{"tool1", "tool2", "tool3"} {
-		if _, ok := toolRegistry.Get(name); !ok {
-			t.Errorf("Tool %q was not registered", name)
-		}
-	}
-}
-
-func TestAgent_StoreAwareToolsWithCustomTools(t *testing.T) {
-	// Verify that both Tools and StoreAwareTools are registered
-	customTool := NewToolFunc("custom", "Custom tool", nil, nil)
-	storeAwareFactory := func(backend FileStore) Tool {
-		return NewToolFunc("store_aware", "Store aware tool", nil, nil)
-	}
-
-	be := NewMemFileStore()
-	todoManager := NewTodoManager()
-	toolRegistry := NewToolRegistry()
-
-	// Add built-in tools
-	builtinTools := BuiltinTools(be, todoManager, false)
-	toolRegistry.Merge(builtinTools)
-
-	// Add custom tools
-	toolRegistry.Register(customTool)
-
-	// Add store-aware tools
-	storeAwareTool := storeAwareFactory(be)
-	toolRegistry.Register(storeAwareTool)
-
-	// Verify all tools are registered
-	expectedTools := []string{
-		"read_file", "write_file", "edit_file", "list_directory", "glob",
-		"add_todo", "update_todo", "list_todos", "delete_todo",
-		"custom", "store_aware",
-	}
-
-	for _, name := range expectedTools {
-		if _, ok := toolRegistry.Get(name); !ok {
-			t.Errorf("Expected tool %q to be registered", name)
-		}
-	}
 }

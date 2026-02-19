@@ -9,31 +9,6 @@ import (
 	"github.com/curtisnewbie/miso-agent/graph"
 )
 
-// StoreAwareToolFunc is a factory function that creates a tool with access to the backend.
-// This allows tools to be created with the backend for file operations or other backend-dependent functionality.
-//
-// Example:
-//
-//	// Create a tool that needs file access
-//	myFileTool := func(backend FileStore) Tool {
-//	    return NewToolFunc(
-//	        "my_file_tool",
-//	        "A tool that uses the backend",
-//	        parameters,
-//	        func(ctx context.Context, args map[string]interface{}) (string, error) {
-//	            // Can use backend here
-//	            content, err := backend.ReadFile(ctx, path)
-//	            ...
-//	        },
-//	    )
-//	}
-//
-//	// Add to agent config
-//	config := agentloop.AgentConfig{
-//	    StoreAwareTools: []agentloop.StoreAwareToolFunc{myFileTool},
-//	}
-type StoreAwareToolFunc func(backend FileStore) Tool
-
 // AgentConfig is the configuration for creating an agent.
 type AgentConfig struct {
 	*graph.GenericOps
@@ -56,12 +31,6 @@ type AgentConfig struct {
 	// If nil, built-in tools will be used.
 	Tools []Tool
 
-	// StoreAwareTools is a list of factory functions that create tools with access to the backend.
-	// Each function receives the backend and returns a Tool that can be registered.
-	// This is useful for creating tools that need file access or other backend-dependent functionality.
-	// These tools are added after built-in tools and custom Tools.
-	StoreAwareTools []StoreAwareToolFunc
-
 	// TaskPrompt is the main task prompt for the agent.
 	TaskPrompt string
 
@@ -69,9 +38,10 @@ type AgentConfig struct {
 	// If provided, it will be prepended to the base system prompt.
 	SystemPrompt string
 
-	// Backend is the file storage backend.
-	// If nil, a new MemFileStore will be created.
-	Backend FileStore
+	// BackendFactory is a factory function that creates a fresh FileStore for each execution.
+	// If nil, a new MemFileStore will be created for each execution.
+	// This allows stateful backends to be created fresh per execution.
+	BackendFactory func() FileStore
 
 	// Timezone is the timezone offset in hours for time display (default: 0, UTC).
 	Timezone float64

@@ -14,10 +14,10 @@ import (
 const finishToolName = "finish_tool"
 
 // BuiltinTools returns the built-in tools.
-func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool bool) *ToolRegistry {
+func BuiltinTools(todoManager *TodoManager, enableFinishTool bool) *ToolRegistry {
 	registry := NewToolRegistry()
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewStoreAwareToolFunc(
 		"read_file",
 		"Read file content. Supports chunked reading with offset/limit for large files. Use offset and limit to read specific sections.",
 		map[string]interface{}{
@@ -34,7 +34,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 				"description": "Optional: Maximum number of lines to read. Default: read entire file",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, ok := args["path"].(string)
 			if !ok {
 				return "", errs.NewErrf("path is required")
@@ -75,7 +75,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 		},
 	))
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewStoreAwareToolFunc(
 		"write_file",
 		"Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
 		map[string]interface{}{
@@ -88,7 +88,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 				"description": "The content to write to the file",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, ok := args["path"].(string)
 			if !ok {
 				return "", errs.NewErrf("path is required")
@@ -106,7 +106,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 		},
 	))
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewStoreAwareToolFunc(
 		"edit_file",
 		"Performs exact string replacements in files. You must read the file before editing. Preserve exact indentation from the read output. Prefer editing existing files over creating new ones.",
 		map[string]interface{}{
@@ -127,7 +127,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 				"description": "If True, replace all occurrences of old_string. If False (default), old_string must be unique",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, ok := args["path"].(string)
 			if !ok {
 				return "", errs.NewErrf("path is required")
@@ -183,7 +183,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 		},
 	))
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewStoreAwareToolFunc(
 		"list_directory",
 		"List the names of files and subdirectories in a directory.",
 		map[string]interface{}{
@@ -192,7 +192,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 				"description": "The absolute path to the directory to list",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, ok := args["path"].(string)
 			if !ok {
 				return "", errs.NewErrf("path is required")
@@ -216,7 +216,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 		},
 	))
 
-	registry.Register(NewToolFunc(
+	registry.Register(NewStoreAwareToolFunc(
 		"glob",
 		"Find files matching a pattern (e.g., '*.go', 'src/**/*.ts', '**/*.md'). Supports * (any characters in path component), ** (zero or more directories), and ? (single character).",
 		map[string]interface{}{
@@ -225,7 +225,7 @@ func BuiltinTools(backend FileStore, todoManager *TodoManager, enableFinishTool 
 				"description": "The glob pattern to match",
 			},
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			pattern, ok := args["pattern"].(string)
 			if !ok {
 				return "", errs.NewErrf("pattern is required")

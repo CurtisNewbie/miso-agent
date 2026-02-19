@@ -5,7 +5,7 @@ go 1.24.4
 require (
 	github.com/cloudwego/eino v0.7.18
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.7
-	github.com/curtisnewbie/miso v0.4.13-beta.2
+	github.com/curtisnewbie/miso v0.4.13-beta.2.0.20260219162455-9b05e79f12c7
 	github.com/curtisnewbie/miso-tavily v0.0.1
 	github.com/pkoukk/tiktoken-go v0.1.8
 	gopkg.in/yaml.v2 v2.4.0

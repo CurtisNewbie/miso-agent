@@ -57,6 +57,24 @@ func NewToolFunc(
 	}
 }
 
+func NewStoreAwareToolFunc(
+	name string,
+	description string,
+	parameters map[string]interface{},
+	execute func(ctx context.Context, store FileStore, args map[string]interface{}) (string, error),
+) Tool {
+	return NewToolFunc(name, description, parameters,
+		func(ctx context.Context, args map[string]interface{}) (string, error) {
+			var st FileStore
+			if v, ok := args[ArgKeyAgentLoopFileStore]; ok {
+				if vv, ok := v.(FileStore); ok {
+					st = vv
+				}
+			}
+			return execute(ctx, st, args)
+		})
+}
+
 // getString safely gets a string value from a map.
 func getString(m map[string]interface{}, key string) string {
 	if val, ok := m[key]; ok {

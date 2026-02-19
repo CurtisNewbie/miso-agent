@@ -72,13 +72,21 @@ func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 }
 
 func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...tool.Option) (string, error) {
-	args := make(map[string]interface{})
+	var args map[string]interface{}
 	if input != "" {
 		parsedArgs, err := llm.ParseLLMJsonAs[map[string]interface{}](input)
 		if err == nil {
 			args = parsedArgs
 		}
 	}
+	if args == nil {
+		args = map[string]interface{}{}
+	}
+
+	if st, ok := ctx.Value(fileStoreCtxKey).(FileStore); ok && st != nil {
+		args[ArgKeyAgentLoopFileStore] = st
+	}
+
 	return w.tool.Execute(ctx, args)
 }
 

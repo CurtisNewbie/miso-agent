@@ -12,10 +12,19 @@ import (
 	"github.com/curtisnewbie/miso/flow"
 )
 
-// Agent represents a ReAct agent with skills and tools.
+type ctxKey int
+
+// Agent is a ReAct (Reasoning + Acting) agent that can process tasks using tools and skills.
+// The graph is compiled once and can be reused across multiple Execute calls for efficiency.
+// Each Execute call receives fresh skills and backend via taskInput, allowing for stateful backends.
+// Capabilities:
+//   - Tool calling with automatic backend injection
+//   - Skills system with progressive disclosure
+//   - Token-aware message pruning
+//   - Tool result eviction for large outputs
+//   - Support for finish_tool to signal task completion
 type Agent struct {
 	config      AgentConfig
-	skills      *Skills
 	tools       *ToolRegistry
 	todoManager *TodoManager
 	tokenizer   *Tokenizer
@@ -42,38 +51,14 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		return nil, errs.Wrapf(err, "failed to initialize tokenizer for model %s", config.TokenizerModelName)
 	}
 
-	// Initialize backend
-	if config.Backend == nil {
-		config.Backend = NewMemFileStore()
-	}
-
-	// Write preloaded skills into the backend
-	if len(config.PreloadedSkills) > 0 {
-		ctx := context.Background()
-		for path, content := range config.PreloadedSkills {
-			if err := config.Backend.WriteFile(ctx, path, []byte(content)); err != nil {
-				return nil, errs.Wrapf(err, "failed to write preloaded skill %s", path)
-			}
-		}
-	}
-
-	// Initialize skills middleware
-	skillsMiddleware := NewSkills(config.Backend)
-	if len(config.Skills) > 0 {
-		ctx := context.Background()
-		if err := skillsMiddleware.Load(ctx, config.Skills); err != nil {
-			return nil, errs.Wrapf(err, "failed to load skills")
-		}
-	}
-
 	// Initialize tools
 	toolRegistry := NewToolRegistry()
 
 	// Create todo manager
 	todoManager := NewTodoManager()
 
-	// Add built-in tools (including todo tools)
-	builtinTools := BuiltinTools(config.Backend, todoManager, config.EnableFinishTool)
+	// Add built-in tools (will receive backend via context)
+	builtinTools := BuiltinTools(todoManager, config.EnableFinishTool)
 	toolRegistry.Merge(builtinTools)
 
 	// Add custom tools
@@ -81,27 +66,14 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		toolRegistry.Register(t)
 	}
 
-	// Add store-aware tools (created with backend access)
-	for _, factory := range config.StoreAwareTools {
-		toolRegistry.Register(factory(config.Backend))
-	}
-
-	// Load skills
-	if len(config.Skills) > 0 {
-		if err := skillsMiddleware.Load(context.Background(), config.Skills); err != nil {
-			return nil, errs.Wrapf(err, "failed to load skills")
-		}
-	}
-
 	agent := &Agent{
 		config:      config,
-		skills:      skillsMiddleware,
 		tools:       toolRegistry,
 		todoManager: todoManager,
 		tokenizer:   tokenizer,
 	}
 
-	// Build the Eino graph
+	// Build the Eino graph (compiled once)
 	graph, err := buildGraph(agent)
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to build graph")
@@ -113,10 +85,43 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 
 // Execute runs the agent with the given user input.
 func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
-	// Prepare input
-	taskInput := taskInput{
-		task: userInput,
+	// Initialize backend (fresh on each execution)
+	var backend FileStore
+	if a.config.BackendFactory != nil {
+		backend = a.config.BackendFactory()
 	}
+	if backend == nil {
+		backend = NewMemFileStore()
+	}
+
+	// Write preloaded skills into the backend
+	if len(a.config.PreloadedSkills) > 0 {
+		ctx := context.Background()
+		for path, content := range a.config.PreloadedSkills {
+			if err := backend.WriteFile(ctx, path, []byte(content)); err != nil {
+				return "", errs.Wrapf(err, "failed to write preloaded skill %s", path)
+			}
+		}
+	}
+
+	// Initialize skills middleware with fresh backend
+	skills := NewSkills(backend)
+	if len(a.config.Skills) > 0 {
+		ctx := context.Background()
+		if err := skills.Load(ctx, a.config.Skills); err != nil {
+			return "", errs.Wrapf(err, "failed to load skills")
+		}
+	}
+
+	// Prepare input with backend and skills
+	taskInput := taskInput{
+		task:   userInput,
+		skills: skills,
+		store:  backend,
+	}
+
+	// Propagate backend via context
+	rail = rail.WithCtxVal(fileStoreCtxKey, backend)
 
 	// Execute graph
 	result, err := graph.InvokeGraph(rail, a.config.GenericOps, a.graph, "AgentLoop", taskInput)
@@ -129,13 +134,13 @@ func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 
 // evictToolResult stores a large tool result to the backend and returns a reference message.
 // The agent can use read_file with offset/limit to retrieve specific sections of the evicted content.
-func (a *Agent) evictToolResult(msg *schema.Message) *schema.Message {
+func (a *Agent) evictToolResult(backend FileStore, msg *schema.Message) *schema.Message {
 	// Generate unique reference ID
 	refID := fmt.Sprintf("tool-result-%s", msg.ToolCallID)
 
 	// Store full content to backend
 	filePath := fmt.Sprintf("/tool-results/%s.txt", refID)
-	if err := a.config.Backend.WriteFile(context.Background(), filePath, []byte(msg.Content)); err != nil {
+	if err := backend.WriteFile(context.Background(), filePath, []byte(msg.Content)); err != nil {
 		// If write fails, return original message (better than losing data)
 		return msg
 	}
@@ -207,7 +212,7 @@ func (a *Agent) shouldEvictToolResult(msg *schema.Message) bool {
 }
 
 // evictLargeToolResults processes messages and evicts large tool results.
-func (a *Agent) evictLargeToolResults(messages []*schema.Message) []*schema.Message {
+func (a *Agent) evictLargeToolResults(backend FileStore, messages []*schema.Message) []*schema.Message {
 	result := make([]*schema.Message, len(messages))
 	copy(result, messages)
 
@@ -215,7 +220,7 @@ func (a *Agent) evictLargeToolResults(messages []*schema.Message) []*schema.Mess
 		if msg.Role == schema.Tool && len(msg.ToolCallID) > 0 && i != len(result)-1 {
 			// Check if this result should be evicted
 			if a.shouldEvictToolResult(msg) {
-				result[i] = a.evictToolResult(msg)
+				result[i] = a.evictToolResult(backend, msg)
 			}
 		}
 	}
