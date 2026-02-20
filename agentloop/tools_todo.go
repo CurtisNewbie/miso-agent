@@ -1,12 +1,13 @@
 package agentloop
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/curtisnewbie/miso/errs"
+	"github.com/curtisnewbie/miso/util/hash"
+	"github.com/curtisnewbie/miso/util/slutil"
 )
 
 // TodoManager manages the todo list for the agent.
@@ -45,6 +46,38 @@ func (tm *TodoManager) AddTodo(task, description string) (string, error) {
 
 	tm.todos = append(tm.todos, todo)
 	return id, nil
+}
+
+// AddTodos adds multiple todo items atomically.
+func (tm *TodoManager) AddTodos(todos []TodoItem) ([]string, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	if len(todos) == 0 {
+		return nil, errs.NewErrf("todos list cannot be empty")
+	}
+
+	ids := make([]string, 0, len(todos))
+	for _, td := range todos {
+		if td.Task == "" {
+			return nil, errs.NewErrf("task cannot be empty")
+		}
+
+		id := fmt.Sprintf("todo-%d", tm.nextID)
+		tm.nextID++
+
+		todo := TodoItem{
+			ID:          id,
+			Task:        td.Task,
+			Status:      "pending",
+			Description: td.Description,
+		}
+
+		tm.todos = append(tm.todos, todo)
+		ids = append(ids, id)
+	}
+
+	return ids, nil
 }
 
 // UpdateTodoStatus updates the status of a todo item.
@@ -99,6 +132,26 @@ func (tm *TodoManager) DeleteTodo(id string) error {
 	}
 
 	return errs.NewErrf("todo %s not found", id)
+}
+
+// DeleteTodos deletes multiple todo items atomically.
+func (tm *TodoManager) DeleteTodos(ids []string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	if len(ids) == 0 {
+		return errs.NewErrf("ids list cannot be empty")
+	}
+
+	// Create a set of IDs to delete for O(1) lookup
+	idSet := hash.NewSet(ids...)
+
+	// Filter out todos that are in the deletion set
+	var remaining []TodoItem = slutil.Filter(tm.todos,
+		func(ti TodoItem) (incl bool) { return !idSet.Has(ti.ID) })
+
+	tm.todos = remaining
+	return nil
 }
 
 // ClearCompleted removes all completed todos.
@@ -163,91 +216,4 @@ func (tm *TodoManager) FromState(todos []TodoItem) {
 			}
 		}
 	}
-}
-
-// TodoTools returns the todo tools.
-func TodoTools(todoManager *TodoManager) *ToolRegistry {
-	registry := NewToolRegistry()
-
-	registry.Register(NewToolFunc(
-		"add_todo",
-		"Add a new todo item to the list.",
-		map[string]interface{}{
-			"task": map[string]interface{}{
-				"type":        "string",
-				"description": "The task description",
-			},
-			"description": map[string]interface{}{
-				"type":        "string",
-				"description": "Additional details about the task",
-			},
-		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			task, _ := args["task"].(string)
-			description, _ := args["description"].(string)
-
-			id, err := todoManager.AddTodo(task, description)
-			if err != nil {
-				return "", err
-			}
-
-			return fmt.Sprintf("Added todo %s", id), nil
-		},
-	))
-
-	registry.Register(NewToolFunc(
-		"update_todo",
-		"Update the status of a todo item.",
-		map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "The todo item ID",
-			},
-			"status": map[string]interface{}{
-				"type":        "string",
-				"description": "New status: pending or completed",
-			},
-		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			id, _ := args["id"].(string)
-			status, _ := args["status"].(string)
-
-			if err := todoManager.UpdateTodoStatus(id, status); err != nil {
-				return "", err
-			}
-
-			return fmt.Sprintf("Updated todo %s to %s", id, status), nil
-		},
-	))
-
-	registry.Register(NewToolFunc(
-		"list_todos",
-		"List all todo items.",
-		map[string]interface{}{},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			return todoManager.Format(), nil
-		},
-	))
-
-	registry.Register(NewToolFunc(
-		"delete_todo",
-		"Delete a todo item.",
-		map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "The todo item ID",
-			},
-		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			id, _ := args["id"].(string)
-
-			if err := todoManager.DeleteTodo(id); err != nil {
-				return "", err
-			}
-
-			return fmt.Sprintf("Deleted todo %s", id), nil
-		},
-	))
-
-	return registry
 }

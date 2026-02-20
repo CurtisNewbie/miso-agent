@@ -13,6 +13,9 @@ type Tool interface {
 	// Parameters returns the JSON schema for the tool parameters.
 	Parameters() map[string]*ParameterInfo
 
+	// FullSchema returns the full JSON schema for the tool parameters (includes nested structures).
+	FullSchema() map[string]interface{}
+
 	// Execute executes the tool with the given arguments.
 	Execute(ctx context.Context, args map[string]interface{}) (string, error)
 }
@@ -28,6 +31,7 @@ type ToolFunc struct {
 	name        string
 	description string
 	parameters  map[string]*ParameterInfo
+	fullSchema  map[string]interface{} // Store full schema for Eino conversion
 	execute     func(ctx context.Context, args map[string]interface{}) (string, error)
 }
 
@@ -53,6 +57,7 @@ func NewToolFunc(
 		name:        name,
 		description: description,
 		parameters:  paramInfo,
+		fullSchema:  parameters, // Store full schema for Eino conversion
 		execute:     execute,
 	}
 }
@@ -120,6 +125,11 @@ func (t *ToolFunc) Description() string {
 // Parameters returns the JSON schema for the tool parameters.
 func (t *ToolFunc) Parameters() map[string]*ParameterInfo {
 	return t.parameters
+}
+
+// FullSchema returns the full JSON schema for the tool parameters.
+func (t *ToolFunc) FullSchema() map[string]interface{} {
+	return t.fullSchema
 }
 
 // Execute executes the tool with the given arguments.

@@ -243,27 +243,59 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	// Add todo tools
 	registry.Register(NewTodoAwareToolFunc(
 		"add_todo",
-		"Add a new todo item to the list.",
+		"Add multiple todo items to the list.",
 		map[string]interface{}{
-			"task": map[string]interface{}{
-				"type":        "string",
-				"description": "The task description",
-			},
-			"description": map[string]interface{}{
-				"type":        "string",
-				"description": "Additional details about the task",
+			"todos": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"task": map[string]interface{}{
+							"type":        "string",
+							"description": "The task description",
+						},
+						"description": map[string]interface{}{
+							"type":        "string",
+							"description": "Additional details about the task",
+						},
+					},
+					"required": []string{"task"},
+				},
+				"description": "Array of todo items to add",
 			},
 		},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
-			task, _ := args["task"].(string)
-			description, _ := args["description"].(string)
+			todosData, ok := args["todos"].([]interface{})
+			if !ok {
+				return "", errs.NewErrf("todos is required and must be an array")
+			}
 
-			id, err := tm.AddTodo(task, description)
+			if len(todosData) == 0 {
+				return "", errs.NewErrf("todos list cannot be empty")
+			}
+
+			todos := make([]TodoItem, 0, len(todosData))
+			for _, td := range todosData {
+				todoMap, ok := td.(map[string]interface{})
+				if !ok {
+					return "", errs.NewErrf("each todo must be an object")
+				}
+
+				task, _ := todoMap["task"].(string)
+				description, _ := todoMap["description"].(string)
+
+				todos = append(todos, TodoItem{
+					Task:        task,
+					Description: description,
+				})
+			}
+
+			ids, err := tm.AddTodos(todos)
 			if err != nil {
 				return "", err
 			}
 
-			return fmt.Sprintf("Added todo %s", id), nil
+			return fmt.Sprintf("Added %d todos: %s", len(ids), strings.Join(ids, ", ")), nil
 		},
 	))
 
@@ -303,21 +335,38 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 
 	registry.Register(NewTodoAwareToolFunc(
 		"delete_todo",
-		"Delete a todo item.",
+		"Delete multiple todo items.",
 		map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "The todo item ID",
+			"ids": map[string]interface{}{
+				"type":        "array",
+				"description": "Array of todo item IDs to delete",
+				"items": map[string]interface{}{
+					"type": "string",
+				},
 			},
 		},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
-			id, _ := args["id"].(string)
+			idsData, ok := args["ids"].([]interface{})
+			if !ok {
+				return "", errs.NewErrf("ids is required and must be an array")
+			}
 
-			if err := tm.DeleteTodo(id); err != nil {
+			if len(idsData) == 0 {
+				return "", errs.NewErrf("ids list cannot be empty")
+			}
+
+			ids := make([]string, 0, len(idsData))
+			for _, id := range idsData {
+				if idStr, ok := id.(string); ok {
+					ids = append(ids, idStr)
+				}
+			}
+
+			if err := tm.DeleteTodos(ids); err != nil {
 				return "", err
 			}
 
-			return fmt.Sprintf("Deleted todo %s", id), nil
+			return fmt.Sprintf("Deleted %d todos: %s", len(ids), strings.Join(ids, ", ")), nil
 		},
 	))
 

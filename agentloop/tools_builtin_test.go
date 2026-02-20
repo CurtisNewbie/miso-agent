@@ -560,14 +560,18 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 
 	result, err := tool.Execute(ctx, map[string]interface{}{
 		ArgKeyAgentLoopTodoManager: todoManager,
-		"task":                     "Test task",
-		"description":              "Test description",
+		"todos": []interface{}{
+			map[string]interface{}{
+				"task":        "Test task",
+				"description": "Test description",
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Failed to add todo: %v", err)
 	}
 
-	if !strings.Contains(result, "Added todo") {
+	if !strings.Contains(result, "Added 1 todos") {
 		t.Errorf("Expected success message, got %q", result)
 	}
 
@@ -579,6 +583,59 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 
 	if todos[0].Task != "Test task" {
 		t.Errorf("Expected task 'Test task', got %q", todos[0].Task)
+	}
+}
+
+func TestBuiltinTools_AddTodoMultiple(t *testing.T) {
+	ctx := context.Background()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(false)
+
+	tool, ok := registry.Get("add_todo")
+	if !ok {
+		t.Fatal("add_todo tool not found")
+	}
+
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		ArgKeyAgentLoopTodoManager: todoManager,
+		"todos": []interface{}{
+			map[string]interface{}{
+				"task":        "Task 1",
+				"description": "Description 1",
+			},
+			map[string]interface{}{
+				"task":        "Task 2",
+				"description": "Description 2",
+			},
+			map[string]interface{}{
+				"task":        "Task 3",
+				"description": "Description 3",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to add todos: %v", err)
+	}
+
+	if !strings.Contains(result, "Added 3 todos") {
+		t.Errorf("Expected success message, got %q", result)
+	}
+
+	// Verify todos were added
+	todos := todoManager.ListTodos()
+	if len(todos) != 3 {
+		t.Fatalf("Expected 3 todos, got %d", len(todos))
+	}
+
+	// Verify each todo
+	expectedTasks := []string{"Task 1", "Task 2", "Task 3"}
+	for i, expectedTask := range expectedTasks {
+		if todos[i].Task != expectedTask {
+			t.Errorf("Expected task '%s', got %q", expectedTask, todos[i].Task)
+		}
+		if todos[i].Status != "pending" {
+			t.Errorf("Expected status 'pending', got %q", todos[i].Status)
+		}
 	}
 }
 
@@ -660,13 +717,13 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 
 	result, err := tool.Execute(ctx, map[string]interface{}{
 		ArgKeyAgentLoopTodoManager: todoManager,
-		"id":                       id,
+		"ids":                      []interface{}{id},
 	})
 	if err != nil {
 		t.Fatalf("Failed to delete todo: %v", err)
 	}
 
-	if !strings.Contains(result, "Deleted todo") {
+	if !strings.Contains(result, "Deleted 1 todos") {
 		t.Errorf("Expected success message, got %q", result)
 	}
 
@@ -678,6 +735,59 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 
 	if len(todoManager.ListTodos()) != 0 {
 		t.Errorf("Expected 0 todos, got %d", len(todoManager.ListTodos()))
+	}
+}
+
+func TestBuiltinTools_DeleteTodoMultiple(t *testing.T) {
+	ctx := context.Background()
+	todoManager := NewTodoManager()
+	registry := BuiltinTools(false)
+
+	// Add multiple todos
+	id1, _ := todoManager.AddTodo("Task 1", "Description 1")
+	id2, _ := todoManager.AddTodo("Task 2", "Description 2")
+	id3, _ := todoManager.AddTodo("Task 3", "Description 3")
+
+	tool, ok := registry.Get("delete_todo")
+	if !ok {
+		t.Fatal("delete_todo tool not found")
+	}
+
+	// Delete two todos
+	result, err := tool.Execute(ctx, map[string]interface{}{
+		ArgKeyAgentLoopTodoManager: todoManager,
+		"ids":                      []interface{}{id1, id3},
+	})
+	if err != nil {
+		t.Fatalf("Failed to delete todos: %v", err)
+	}
+
+	if !strings.Contains(result, "Deleted 2 todos") {
+		t.Errorf("Expected success message, got %q", result)
+	}
+
+	// Verify todos were deleted
+	_, ok = todoManager.GetTodo(id1)
+	if ok {
+		t.Error("Expected todo 1 to be deleted, but it still exists")
+	}
+
+	_, ok = todoManager.GetTodo(id3)
+	if ok {
+		t.Error("Expected todo 3 to be deleted, but it still exists")
+	}
+
+	// Verify the remaining todo still exists
+	todo, ok := todoManager.GetTodo(id2)
+	if !ok {
+		t.Error("Expected todo 2 to still exist")
+	} else if todo.Task != "Task 2" {
+		t.Errorf("Expected task 'Task 2', got %q", todo.Task)
+	}
+
+	// Verify count
+	if len(todoManager.ListTodos()) != 1 {
+		t.Errorf("Expected 1 todo, got %d", len(todoManager.ListTodos()))
 	}
 }
 
@@ -693,7 +803,7 @@ func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 
 	_, err := tool.Execute(ctx, map[string]interface{}{
 		ArgKeyAgentLoopTodoManager: todoManager,
-		"id":                       "nonexistent-id",
+		"ids":                      []interface{}{"nonexistent-id"},
 	})
 	if err == nil {
 		t.Error("Expected error for nonexistent todo, got nil")
