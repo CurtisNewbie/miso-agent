@@ -8,7 +8,6 @@ require (
 	github.com/curtisnewbie/miso v0.4.13-beta.2.0.20260219162455-9b05e79f12c7
 	github.com/curtisnewbie/miso-tavily v0.0.1
 	github.com/pkoukk/tiktoken-go v0.1.8
-	github.com/spf13/cast v1.6.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -92,6 +91,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/slongfield/pyfmt v0.0.0-20220222012616-ea85ff4c361f // indirect
 	github.com/spf13/afero v1.9.2 // indirect
+	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.14.0 // indirect

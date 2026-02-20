@@ -64,7 +64,12 @@ func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 }
 
 func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...tool.Option) (string, error) {
-	// Parse input as JSON
+	// Check if the tool implements SelfInvokeTool (typed tools)
+	if selfInvokeTool, ok := w.tool.(SelfInvokeTool); ok {
+		return selfInvokeTool.ExecuteJson(ctx, input)
+	}
+
+	// Fall back to map-based execution for untyped tools
 	var args map[string]interface{}
 	if input != "" {
 		parsedArgs, err := llm.ParseLLMJsonAs[map[string]interface{}](input)

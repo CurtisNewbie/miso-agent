@@ -2,6 +2,7 @@ package agentloop
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -32,9 +33,10 @@ func TestBuiltinTools_ReadFile(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path": testPath,
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to read file: %v", err)
 	}
@@ -60,9 +62,10 @@ func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	_, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path": "nonexistent.txt",
 	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err == nil {
 		t.Error("Expected error for nonexistent file, got nil")
 	}
@@ -87,10 +90,11 @@ func TestBuiltinTools_WriteFile(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path":    testPath,
 		"content": testContent,
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to write file: %v", err)
 	}
@@ -134,11 +138,12 @@ func TestBuiltinTools_EditFile_Success(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test single replacement
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path":       testPath,
 		"old_string": "Hello",
 		"new_string": "Hi",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to edit file: %v", err)
 	}
@@ -183,12 +188,13 @@ func TestBuiltinTools_EditFile_ReplaceAll(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test replace all
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path":        testPath,
 		"old_string":  "Hello",
 		"new_string":  "Hi",
 		"replace_all": true,
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to edit file: %v", err)
 	}
@@ -233,11 +239,12 @@ func TestBuiltinTools_EditFile_NotFound(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test string not found
-	_, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path":       testPath,
 		"old_string": "Goodbye",
 		"new_string": "Hi",
 	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err == nil {
 		t.Error("Expected error for string not found, got nil")
 	}
@@ -271,11 +278,12 @@ func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
 	}
 
 	// Test multiple occurrences without replace_all flag
-	_, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path":       testPath,
 		"old_string": "Hello",
 		"new_string": "Hi",
 	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err == nil {
 		t.Error("Expected error for multiple occurrences without replace_all, got nil")
 	}
@@ -309,11 +317,12 @@ func TestBuiltinTools_EditFile_SameStrings(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test same old_string and new_string
-	_, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path":       testPath,
 		"old_string": "Hello",
 		"new_string": "Hello",
 	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err == nil {
 		t.Error("Expected error for same old_string and new_string, got nil")
 	}
@@ -340,11 +349,12 @@ func TestBuiltinTools_EditFile_FileNotFound(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test editing nonexistent file
-	_, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path":       "nonexistent.txt",
 		"old_string": "Hello",
 		"new_string": "Hi",
 	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err == nil {
 		t.Error("Expected error for nonexistent file, got nil")
 	}
@@ -358,9 +368,10 @@ func TestNewThinkTool_Success(t *testing.T) {
 	ctx := context.Background()
 	tool := NewThinkTool()
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"reflection": "I have gathered information about the topic. I need to search for more specific details.",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to execute think tool: %v", err)
 	}
@@ -375,7 +386,7 @@ func TestNewThinkTool_MissingReflection(t *testing.T) {
 	ctx := context.Background()
 	tool := NewThinkTool()
 
-	_, err := tool.Execute(ctx, map[string]interface{}{})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, "{}")
 	if err == nil {
 		t.Error("Expected error for missing reflection, got nil")
 	}
@@ -389,9 +400,10 @@ func TestNewThinkTool_EmptyReflection(t *testing.T) {
 	ctx := context.Background()
 	tool := NewThinkTool()
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"reflection": "",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to execute think tool with empty reflection: %v", err)
 	}
@@ -423,9 +435,10 @@ func TestBuiltinTools_ListDirectory(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"path": ".",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to list directory: %v", err)
 	}
@@ -456,9 +469,10 @@ func TestBuiltinTools_Glob_Simple(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"pattern": "*.go",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
 	}
@@ -493,9 +507,10 @@ func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test **/*.go
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"pattern": "**/*.go",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
 	}
@@ -531,9 +546,10 @@ func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test src/**/*.ts
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"pattern": "src/**/*.ts",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
 	}
@@ -575,9 +591,10 @@ func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test file?.go (should match file1.go and file2.go)
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"pattern": "file?.go",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
 	}
@@ -611,9 +628,10 @@ func TestBuiltinTools_Glob_DoubleStarAtEnd(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Test test/** (should match all files under test/)
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"pattern": "test/**",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
 	}
@@ -641,7 +659,7 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"todos": []interface{}{
 			map[string]interface{}{
 				"task":        "Test task",
@@ -649,6 +667,7 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 			},
 		},
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to add todo: %v", err)
 	}
@@ -684,7 +703,7 @@ func TestBuiltinTools_AddTodoMultiple(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"todos": []interface{}{
 			map[string]interface{}{
 				"task":        "Task 1",
@@ -700,6 +719,7 @@ func TestBuiltinTools_AddTodoMultiple(t *testing.T) {
 			},
 		},
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to add todos: %v", err)
 	}
@@ -745,10 +765,11 @@ func TestBuiltinTools_UpdateTodo(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"id":     id,
 		"status": "completed",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to update todo: %v", err)
 	}
@@ -788,7 +809,7 @@ func TestBuiltinTools_ListTodos(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, "{}")
 	if err != nil {
 		t.Fatalf("Failed to list todos: %v", err)
 	}
@@ -817,9 +838,10 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"ids": []interface{}{id},
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to delete todo: %v", err)
 	}
@@ -861,9 +883,10 @@ func TestBuiltinTools_DeleteTodoMultiple(t *testing.T) {
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
 	// Delete two todos
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"ids": []interface{}{id1, id3},
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to delete todos: %v", err)
 	}
@@ -913,9 +936,10 @@ func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 
-	_, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"ids": []interface{}{"nonexistent-id"},
 	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err == nil {
 		t.Error("Expected error for nonexistent todo, got nil")
 	}
@@ -954,9 +978,10 @@ func TestBuiltinTools_FinishTool_Enabled(t *testing.T) {
 		t.Fatal("finish_tool not found when enabled")
 	}
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
+	args, _ := json.Marshal(map[string]interface{}{
 		"response": "Task completed successfully",
 	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
 	if err != nil {
 		t.Fatalf("Failed to execute finish tool: %v", err)
 	}
@@ -988,7 +1013,7 @@ func TestBuiltinTools_FinishTool_EmptyResponse(t *testing.T) {
 		t.Fatal("finish_tool not found when enabled")
 	}
 
-	result, err := tool.Execute(ctx, map[string]interface{}{})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, "{}")
 	if err != nil {
 		t.Fatalf("Failed to execute finish tool with empty response: %v", err)
 	}

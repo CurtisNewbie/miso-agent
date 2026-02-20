@@ -10,8 +10,57 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
-	"github.com/spf13/cast"
 )
+
+// Typed argument structs for builtin tools
+
+type ReadFileArgs struct {
+	Path   string `json:"path"`
+	Offset int    `json:"offset,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+}
+
+type WriteFileArgs struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type EditFileArgs struct {
+	Path       string `json:"path"`
+	OldString  string `json:"old_string"`
+	NewString  string `json:"new_string"`
+	ReplaceAll bool   `json:"replace_all,omitempty"`
+}
+
+type ListDirectoryArgs struct {
+	Path string `json:"path"`
+}
+
+type GlobArgs struct {
+	Pattern string `json:"pattern"`
+}
+
+type TodoItemInput struct {
+	Task        string `json:"task"`
+	Description string `json:"description,omitempty"`
+}
+
+type AddTodoArgs struct {
+	Todos []TodoItemInput `json:"todos"`
+}
+
+type UpdateTodoArgs struct {
+	ID     string `json:"id,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+type DeleteTodoArgs struct {
+	IDs []string `json:"ids"`
+}
+
+type FinishToolArgs struct {
+	Response string `json:"response,omitempty"`
+}
 
 const finishToolName = "finish_tool"
 
@@ -19,7 +68,7 @@ const finishToolName = "finish_tool"
 func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry := NewToolRegistry()
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"read_file",
 		"Read file content. Supports chunked reading with offset/limit for large files. Use offset and limit to read specific sections.",
 		map[string]*schema.ParameterInfo{
@@ -27,38 +76,24 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			"offset": NumberParam("Optional: Line number to start reading from (0-based). Default: 0", false),
 			"limit":  NumberParam("Optional: Maximum number of lines to read. Default: read entire file", false),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			path, err := cast.ToStringE(args["path"])
-			if err != nil {
-				return "", errs.NewErrf("path is required and must be a string")
-			}
-			// Check if offset/limit are provided for pagination
-			offset := 0
-			if o, ok := args["offset"]; ok {
-				offset = cast.ToInt(o)
-			}
-			limit := 0
-			if l, ok := args["limit"]; ok {
-				limit = cast.ToInt(l)
-			}
-
-			content, err := agentCtx.Store.ReadFile(ctx, path)
+		func(ctx context.Context, agentCtx AgentContext, args ReadFileArgs) (string, error) {
+			content, err := agentCtx.Store.ReadFile(ctx, args.Path)
 			if err != nil {
 				return "", errs.Wrapf(err, "failed to read file")
 			}
 
 			// Apply pagination if requested
-			if offset > 0 || limit > 0 {
+			if args.Offset > 0 || args.Limit > 0 {
 				lines := strings.Split(string(content), "\n")
-				start := offset
+				start := args.Offset
 				if start < 0 {
 					start = 0
 				}
 				if start >= len(lines) {
 					return "", nil
 				}
-				end := start + limit
-				if limit <= 0 || end > len(lines) {
+				end := start + args.Limit
+				if args.Limit <= 0 || end > len(lines) {
 					end = len(lines)
 				}
 				content = []byte(strings.Join(lines[start:end], "\n"))
@@ -68,32 +103,23 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 		},
 	))
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"write_file",
 		"Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
 		map[string]*schema.ParameterInfo{
 			"path":    StringParam("The absolute path to the file to write", true),
 			"content": StringParam("The content to write to the file", true),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			path, err := cast.ToStringE(args["path"])
-			if err != nil {
-				return "", errs.NewErrf("path is required and must be a string")
-			}
-			content, err := cast.ToStringE(args["content"])
-			if err != nil {
-				return "", errs.NewErrf("content is required and must be a string")
-			}
-
-			if err := agentCtx.Store.WriteFile(ctx, path, []byte(content)); err != nil {
+		func(ctx context.Context, agentCtx AgentContext, args WriteFileArgs) (string, error) {
+			if err := agentCtx.Store.WriteFile(ctx, args.Path, strutil.UnsafeStr2Byt(args.Content)); err != nil {
 				return "", errs.Wrapf(err, "failed to write file")
 			}
 
-			return fmt.Sprintf("Successfully wrote to %s", path), nil
+			return fmt.Sprintf("Successfully wrote to %s", args.Path), nil
 		},
 	))
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"edit_file",
 		"Performs exact string replacements in files. You must read the file before editing. Preserve exact indentation from the read output. Prefer editing existing files over creating new ones.",
 		map[string]*schema.ParameterInfo{
@@ -102,30 +128,14 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			"new_string":  StringParam("The text to replace old_string with. Must be different from old_string", true),
 			"replace_all": BoolParam("If True, replace all occurrences of old_string. If False (default), old_string must be unique", false),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			path, err := cast.ToStringE(args["path"])
-			if err != nil {
-				return "", errs.NewErrf("path is required and must be a string")
-			}
-			oldString, err := cast.ToStringE(args["old_string"])
-			if err != nil {
-				return "", errs.NewErrf("old_string is required and must be a string")
-			}
-			newString, err := cast.ToStringE(args["new_string"])
-			if err != nil {
-				return "", errs.NewErrf("new_string is required and must be a string")
-			}
-
+		func(ctx context.Context, agentCtx AgentContext, args EditFileArgs) (string, error) {
 			// Check if old_string and new_string are different
-			if oldString == newString {
+			if args.OldString == args.NewString {
 				return "", errs.NewErrf("old_string and new_string must be different")
 			}
 
-			// Get replace_all flag (default: false)
-			replaceAll := cast.ToBool(args["replace_all"])
-
 			// Read the file
-			content, err := agentCtx.Store.ReadFile(ctx, path)
+			content, err := agentCtx.Store.ReadFile(ctx, args.Path)
 			if err != nil {
 				return "", errs.Wrapf(err, "failed to read file for editing")
 			}
@@ -133,41 +143,36 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			contentStr := string(content)
 
 			// Count occurrences of old_string
-			occurrences := strings.Count(contentStr, oldString)
+			occurrences := strings.Count(contentStr, args.OldString)
 
 			if occurrences == 0 {
-				return "", errs.NewErrf("String not found in file: '%s'", oldString)
+				return "", errs.NewErrf("String not found in file: '%s'", args.OldString)
 			}
 
-			if occurrences > 1 && !replaceAll {
-				return "", errs.NewErrf("String '%s' appears %d times in file. Use replace_all=true to replace all instances, or provide a more specific string with surrounding context", oldString, occurrences)
+			if occurrences > 1 && !args.ReplaceAll {
+				return "", errs.NewErrf("String '%s' appears %d times in file. Use replace_all=true to replace all instances, or provide a more specific string with surrounding context", args.OldString, occurrences)
 			}
 
 			// Perform replacement
-			newContent := strings.ReplaceAll(contentStr, oldString, newString)
+			newContent := strings.ReplaceAll(contentStr, args.OldString, args.NewString)
 
 			// Write the modified content back
-			if err := agentCtx.Store.WriteFile(ctx, path, []byte(newContent)); err != nil {
+			if err := agentCtx.Store.WriteFile(ctx, args.Path, []byte(newContent)); err != nil {
 				return "", errs.Wrapf(err, "failed to write edited file")
 			}
 
-			return fmt.Sprintf("Successfully replaced %d instance(s) of the string in '%s'", occurrences, path), nil
+			return fmt.Sprintf("Successfully replaced %d instance(s) of the string in '%s'", occurrences, args.Path), nil
 		},
 	))
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"list_directory",
 		"List the names of files and subdirectories in a directory.",
 		map[string]*schema.ParameterInfo{
 			"path": StringParam("The absolute path to the directory to list", true),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			path, err := cast.ToStringE(args["path"])
-			if err != nil {
-				return "", errs.NewErrf("path is required and must be a string")
-			}
-
-			files, err := agentCtx.Store.ListDirectory(ctx, path)
+		func(ctx context.Context, agentCtx AgentContext, args ListDirectoryArgs) (string, error) {
+			files, err := agentCtx.Store.ListDirectory(ctx, args.Path)
 			if err != nil {
 				return "", errs.Wrapf(err, "failed to list directory")
 			}
@@ -185,19 +190,14 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 		},
 	))
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"glob",
 		"Find files matching a pattern (e.g., '*.go', 'src/**/*.ts', '**/*.md'). Supports * (any characters in path component), ** (zero or more directories), and ? (single character).",
 		map[string]*schema.ParameterInfo{
 			"pattern": StringParam("The glob pattern to match", true),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			pattern, err := cast.ToStringE(args["pattern"])
-			if err != nil {
-				return "", errs.NewErrf("pattern is required and must be a string")
-			}
-
-			matches, err := globRecursive(ctx, agentCtx.Store, pattern, ".")
+		func(ctx context.Context, agentCtx AgentContext, args GlobArgs) (string, error) {
+			matches, err := globRecursive(ctx, agentCtx.Store, args.Pattern, ".")
 			if err != nil {
 				return "", errs.Wrapf(err, "failed to glob")
 			}
@@ -207,7 +207,7 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	))
 
 	// Add todo tools
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"add_todo",
 		"Add multiple todo items to the list.",
 		map[string]*schema.ParameterInfo{
@@ -217,29 +217,16 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 					"description": StringParam("Additional details about the task", false),
 				}, false), true),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			todosData, ok := args["todos"].([]interface{})
-			if !ok {
-				return "", errs.NewErrf("todos is required and must be an array")
-			}
-
-			if len(todosData) == 0 {
+		func(ctx context.Context, agentCtx AgentContext, args AddTodoArgs) (string, error) {
+			if len(args.Todos) == 0 {
 				return "", errs.NewErrf("todos list cannot be empty")
 			}
 
-			todos := make([]TodoItem, 0, len(todosData))
-			for _, td := range todosData {
-				todoMap, ok := td.(map[string]interface{})
-				if !ok {
-					return "", errs.NewErrf("each todo must be an object")
-				}
-
-				task := cast.ToString(todoMap["task"])
-				description := cast.ToString(todoMap["description"])
-
+			todos := make([]TodoItem, 0, len(args.Todos))
+			for _, td := range args.Todos {
 				todos = append(todos, TodoItem{
-					Task:        task,
-					Description: description,
+					Task:        td.Task,
+					Description: td.Description,
 				})
 			}
 
@@ -252,69 +239,63 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 		},
 	))
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"update_todo",
 		"Update the status of a todo item.",
 		map[string]*schema.ParameterInfo{
 			"id":     StringParam("The todo item ID", false),
 			"status": StringParam("New status: pending or completed", false),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			id := cast.ToString(args["id"])
-			status := cast.ToString(args["status"])
-
-			if err := agentCtx.Todos.UpdateTodoStatus(id, status); err != nil {
+		func(ctx context.Context, agentCtx AgentContext, args UpdateTodoArgs) (string, error) {
+			if err := agentCtx.Todos.UpdateTodoStatus(args.ID, args.Status); err != nil {
 				return "", err
 			}
 
-			return fmt.Sprintf("Updated todo %s to %s", id, status), nil
+			return fmt.Sprintf("Updated todo %s to %s", args.ID, args.Status), nil
 		},
 	))
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"list_todos",
 		"List all todo items.",
 		map[string]*schema.ParameterInfo{},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
+		func(ctx context.Context, agentCtx AgentContext, args struct{}) (string, error) {
 			return agentCtx.Todos.Format(), nil
 		},
 	))
 
-	registry.Register(NewCtxAwareToolFunc(
+	registry.Register(NewTypedCtxAwareToolFunc(
 		"delete_todo",
 		"Delete multiple todo items.",
 		map[string]*schema.ParameterInfo{
 			"ids": ArrayParam("Array of todo item IDs to delete", StringParam("", false), true),
 		},
-		func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
-			ids := cast.ToStringSlice(args["ids"])
-
-			if len(ids) == 0 {
+		func(ctx context.Context, agentCtx AgentContext, args DeleteTodoArgs) (string, error) {
+			if len(args.IDs) == 0 {
 				return "", errs.NewErrf("ids is required and must be an array")
 			}
 
-			if err := agentCtx.Todos.DeleteTodos(ids); err != nil {
+			if err := agentCtx.Todos.DeleteTodos(args.IDs); err != nil {
 				return "", err
 			}
 
-			return fmt.Sprintf("Deleted %d todos: %s", len(ids), strings.Join(ids, ", ")), nil
+			return fmt.Sprintf("Deleted %d todos: %s", len(args.IDs), strings.Join(args.IDs, ", ")), nil
 		},
 	))
 
 	// Add finish_tool if enabled
 	if enableFinishTool {
-		registry.Register(NewToolFunc(
+		registry.Register(NewTypedToolFunc(
 			finishToolName,
 			"Call this tool when you have completed the task and have a final answer. This signals the end of the ReAct loop and your final response will be provided to the user.",
 			map[string]*schema.ParameterInfo{
 				"response": StringParam("Your final answer to the task. This will be returned to the user as the final response.", false),
 			},
-			func(ctx context.Context, args map[string]interface{}) (string, error) {
-				response := cast.ToString(args["response"])
-				if response == "" {
+			func(ctx context.Context, args FinishToolArgs) (string, error) {
+				if args.Response == "" {
 					return "Task completed", nil
 				}
-				return response, nil
+				return args.Response, nil
 			}))
 	}
 
@@ -510,20 +491,22 @@ func joinGlobPath(base, component string) string {
 //	    Tools: []agentloop.Tool{agentloop.NewThinkTool()},
 //	})
 func NewThinkTool(toolName ...string) Tool {
-	return NewToolFunc(
+	type ThinkToolArgs struct {
+		Reflection *string `json:"reflection"`
+	}
+
+	return NewTypedToolFunc(
 		slutil.VarArgAny(toolName, func() string { return "think_tool" }),
 		"Tool for strategic reflection on research progress and decision-making. Use this tool after each search to analyze results and plan next steps systematically. This creates a deliberate pause in the research workflow for quality decision-making.",
 		map[string]*schema.ParameterInfo{
 			"reflection": StringParam("Your detailed reflection on research progress, findings, gaps, and next steps. Reflection should address: 1) Analysis of current findings, 2) Gap assessment, 3) Quality evaluation, 4) Strategic decision", true),
 		},
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			if args["reflection"] == nil {
+		func(ctx context.Context, args ThinkToolArgs) (string, error) {
+			if args.Reflection == nil {
 				return "", errs.NewErrf("reflection is required")
 			}
 
-			reflection := cast.ToString(args["reflection"])
-
-			return fmt.Sprintf("Reflection recorded: %s", reflection), nil
+			return fmt.Sprintf("Reflection recorded: %s", *args.Reflection), nil
 		},
 	)
 }
