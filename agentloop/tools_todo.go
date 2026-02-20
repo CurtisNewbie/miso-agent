@@ -150,6 +150,11 @@ func (tm *TodoManager) DeleteTodos(ids []string) error {
 	var remaining []TodoItem = slutil.Filter(tm.todos,
 		func(ti TodoItem) (incl bool) { return !idSet.Has(ti.ID) })
 
+	// Check if any todos were actually deleted
+	if len(remaining) == len(tm.todos) {
+		return errs.NewErrf("no matching todos found for ids: %v", ids)
+	}
+
 	tm.todos = remaining
 	return nil
 }

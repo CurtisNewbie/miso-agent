@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
@@ -21,19 +22,10 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewStoreAwareToolFunc(
 		"read_file",
 		"Read file content. Supports chunked reading with offset/limit for large files. Use offset and limit to read specific sections.",
-		map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "The absolute path to the file to read",
-			},
-			"offset": map[string]interface{}{
-				"type":        "number",
-				"description": "Optional: Line number to start reading from (0-based). Default: 0",
-			},
-			"limit": map[string]interface{}{
-				"type":        "number",
-				"description": "Optional: Maximum number of lines to read. Default: read entire file",
-			},
+		map[string]*schema.ParameterInfo{
+			"path":   StringParam("The absolute path to the file to read", true),
+			"offset": NumberParam("Optional: Line number to start reading from (0-based). Default: 0", false),
+			"limit":  NumberParam("Optional: Maximum number of lines to read. Default: read entire file", false),
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, err := cast.ToStringE(args["path"])
@@ -79,15 +71,9 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewStoreAwareToolFunc(
 		"write_file",
 		"Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
-		map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "The absolute path to the file to write",
-			},
-			"content": map[string]interface{}{
-				"type":        "string",
-				"description": "The content to write to the file",
-			},
+		map[string]*schema.ParameterInfo{
+			"path":    StringParam("The absolute path to the file to write", true),
+			"content": StringParam("The content to write to the file", true),
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, err := cast.ToStringE(args["path"])
@@ -110,23 +96,11 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewStoreAwareToolFunc(
 		"edit_file",
 		"Performs exact string replacements in files. You must read the file before editing. Preserve exact indentation from the read output. Prefer editing existing files over creating new ones.",
-		map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "The absolute path to the file to edit",
-			},
-			"old_string": map[string]interface{}{
-				"type":        "string",
-				"description": "The exact text to find and replace. Must be unique in the file unless replace_all is True",
-			},
-			"new_string": map[string]interface{}{
-				"type":        "string",
-				"description": "The text to replace old_string with. Must be different from old_string",
-			},
-			"replace_all": map[string]interface{}{
-				"type":        "boolean",
-				"description": "If True, replace all occurrences of old_string. If False (default), old_string must be unique",
-			},
+		map[string]*schema.ParameterInfo{
+			"path":        StringParam("The absolute path to the file to edit", true),
+			"old_string":  StringParam("The exact text to find and replace. Must be unique in the file unless replace_all is True", true),
+			"new_string":  StringParam("The text to replace old_string with. Must be different from old_string", true),
+			"replace_all": BoolParam("If True, replace all occurrences of old_string. If False (default), old_string must be unique", false),
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, err := cast.ToStringE(args["path"])
@@ -184,11 +158,8 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewStoreAwareToolFunc(
 		"list_directory",
 		"List the names of files and subdirectories in a directory.",
-		map[string]interface{}{
-			"path": map[string]interface{}{
-				"type":        "string",
-				"description": "The absolute path to the directory to list",
-			},
+		map[string]*schema.ParameterInfo{
+			"path": StringParam("The absolute path to the directory to list", true),
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			path, err := cast.ToStringE(args["path"])
@@ -217,11 +188,8 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewStoreAwareToolFunc(
 		"glob",
 		"Find files matching a pattern (e.g., '*.go', 'src/**/*.ts', '**/*.md'). Supports * (any characters in path component), ** (zero or more directories), and ? (single character).",
-		map[string]interface{}{
-			"pattern": map[string]interface{}{
-				"type":        "string",
-				"description": "The glob pattern to match",
-			},
+		map[string]*schema.ParameterInfo{
+			"pattern": StringParam("The glob pattern to match", true),
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
 			pattern, err := cast.ToStringE(args["pattern"])
@@ -242,25 +210,12 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewTodoAwareToolFunc(
 		"add_todo",
 		"Add multiple todo items to the list.",
-		map[string]interface{}{
-			"todos": map[string]interface{}{
-				"type": "array",
-				"items": map[string]interface{}{
-					"type": "object",
-					"properties": map[string]interface{}{
-						"task": map[string]interface{}{
-							"type":        "string",
-							"description": "The task description",
-						},
-						"description": map[string]interface{}{
-							"type":        "string",
-							"description": "Additional details about the task",
-						},
-					},
-					"required": []string{"task"},
-				},
-				"description": "Array of todo items to add",
-			},
+		map[string]*schema.ParameterInfo{
+			"todos": ArrayParam("Array of todo items to add",
+				ObjectParam("", map[string]*schema.ParameterInfo{
+					"task":        StringParam("The task description", true),
+					"description": StringParam("Additional details about the task", false),
+				}, false), true),
 		},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
 			todosData, ok := args["todos"].([]interface{})
@@ -300,15 +255,9 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewTodoAwareToolFunc(
 		"update_todo",
 		"Update the status of a todo item.",
-		map[string]interface{}{
-			"id": map[string]interface{}{
-				"type":        "string",
-				"description": "The todo item ID",
-			},
-			"status": map[string]interface{}{
-				"type":        "string",
-				"description": "New status: pending or completed",
-			},
+		map[string]*schema.ParameterInfo{
+			"id":     StringParam("The todo item ID", false),
+			"status": StringParam("New status: pending or completed", false),
 		},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
 			id := cast.ToString(args["id"])
@@ -325,7 +274,7 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewTodoAwareToolFunc(
 		"list_todos",
 		"List all todo items.",
-		map[string]interface{}{},
+		map[string]*schema.ParameterInfo{},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
 			return tm.Format(), nil
 		},
@@ -334,14 +283,8 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 	registry.Register(NewTodoAwareToolFunc(
 		"delete_todo",
 		"Delete multiple todo items.",
-		map[string]interface{}{
-			"ids": map[string]interface{}{
-				"type":        "array",
-				"description": "Array of todo item IDs to delete",
-				"items": map[string]interface{}{
-					"type": "string",
-				},
-			},
+		map[string]*schema.ParameterInfo{
+			"ids": ArrayParam("Array of todo item IDs to delete", StringParam("", false), true),
 		},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
 			ids := cast.ToStringSlice(args["ids"])
@@ -363,11 +306,8 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 		registry.Register(NewToolFunc(
 			finishToolName,
 			"Call this tool when you have completed the task and have a final answer. This signals the end of the ReAct loop and your final response will be provided to the user.",
-			map[string]interface{}{
-				"response": map[string]interface{}{
-					"type":        "string",
-					"description": "Your final answer to the task. This will be returned to the user as the final response.",
-				},
+			map[string]*schema.ParameterInfo{
+				"response": StringParam("Your final answer to the task. This will be returned to the user as the final response.", false),
 			},
 			func(ctx context.Context, args map[string]interface{}) (string, error) {
 				response := cast.ToString(args["response"])
@@ -573,11 +513,8 @@ func NewThinkTool(toolName ...string) Tool {
 	return NewToolFunc(
 		slutil.VarArgAny(toolName, func() string { return "think_tool" }),
 		"Tool for strategic reflection on research progress and decision-making. Use this tool after each search to analyze results and plan next steps systematically. This creates a deliberate pause in the research workflow for quality decision-making.",
-		map[string]interface{}{
-			"reflection": map[string]interface{}{
-				"type":        "string",
-				"description": "Your detailed reflection on research progress, findings, gaps, and next steps. Reflection should address: 1) Analysis of current findings, 2) Gap assessment, 3) Quality evaluation, 4) Strategic decision",
-			},
+		map[string]*schema.ParameterInfo{
+			"reflection": StringParam("Your detailed reflection on research progress, findings, gaps, and next steps. Reflection should address: 1) Analysis of current findings, 2) Gap assessment, 3) Quality evaluation, 4) Strategic decision", true),
 		},
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
 			if args["reflection"] == nil {

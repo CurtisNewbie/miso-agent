@@ -24,19 +24,10 @@ func NewWrapper(tool Tool) *Wrapper {
 
 // Info returns the tool info for Eino.
 func (w *Wrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
-	// Convert our ParameterInfo to schema.ParameterInfo
-	params := make(map[string]*schema.ParameterInfo)
-	for key, val := range w.tool.Parameters() {
-		params[key] = &schema.ParameterInfo{
-			Type: schema.DataType(val.Type),
-			Desc: val.Description,
-		}
-	}
-
 	return &schema.ToolInfo{
 		Name:        w.tool.Name(),
 		Desc:        w.tool.Description(),
-		ParamsOneOf: schema.NewParamsOneOfByParams(params),
+		ParamsOneOf: schema.NewParamsOneOfByParams(w.tool.Parameters()),
 	}, nil
 }
 
