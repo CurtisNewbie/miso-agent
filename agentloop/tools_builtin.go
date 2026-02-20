@@ -9,6 +9,7 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
+	"github.com/spf13/cast"
 )
 
 const finishToolName = "finish_tool"
@@ -35,18 +36,18 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			},
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
-			path, ok := args["path"].(string)
-			if !ok {
-				return "", errs.NewErrf("path is required")
+			path, err := cast.ToStringE(args["path"])
+			if err != nil {
+				return "", errs.NewErrf("path is required and must be a string")
 			}
 			// Check if offset/limit are provided for pagination
 			offset := 0
-			if o, ok := args["offset"].(float64); ok {
-				offset = int(o)
+			if o, ok := args["offset"]; ok {
+				offset = cast.ToInt(o)
 			}
 			limit := 0
-			if l, ok := args["limit"].(float64); ok {
-				limit = int(l)
+			if l, ok := args["limit"]; ok {
+				limit = cast.ToInt(l)
 			}
 
 			content, err := backend.ReadFile(ctx, path)
@@ -89,13 +90,13 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			},
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
-			path, ok := args["path"].(string)
-			if !ok {
-				return "", errs.NewErrf("path is required")
+			path, err := cast.ToStringE(args["path"])
+			if err != nil {
+				return "", errs.NewErrf("path is required and must be a string")
 			}
-			content, ok := args["content"].(string)
-			if !ok {
-				return "", errs.NewErrf("content is required")
+			content, err := cast.ToStringE(args["content"])
+			if err != nil {
+				return "", errs.NewErrf("content is required and must be a string")
 			}
 
 			if err := backend.WriteFile(ctx, path, []byte(content)); err != nil {
@@ -128,17 +129,17 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			},
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
-			path, ok := args["path"].(string)
-			if !ok {
-				return "", errs.NewErrf("path is required")
+			path, err := cast.ToStringE(args["path"])
+			if err != nil {
+				return "", errs.NewErrf("path is required and must be a string")
 			}
-			oldString, ok := args["old_string"].(string)
-			if !ok {
-				return "", errs.NewErrf("old_string is required")
+			oldString, err := cast.ToStringE(args["old_string"])
+			if err != nil {
+				return "", errs.NewErrf("old_string is required and must be a string")
 			}
-			newString, ok := args["new_string"].(string)
-			if !ok {
-				return "", errs.NewErrf("new_string is required")
+			newString, err := cast.ToStringE(args["new_string"])
+			if err != nil {
+				return "", errs.NewErrf("new_string is required and must be a string")
 			}
 
 			// Check if old_string and new_string are different
@@ -147,10 +148,7 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			}
 
 			// Get replace_all flag (default: false)
-			replaceAll := false
-			if ra, ok := args["replace_all"].(bool); ok {
-				replaceAll = ra
-			}
+			replaceAll := cast.ToBool(args["replace_all"])
 
 			// Read the file
 			content, err := backend.ReadFile(ctx, path)
@@ -193,9 +191,9 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			},
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
-			path, ok := args["path"].(string)
-			if !ok {
-				return "", errs.NewErrf("path is required")
+			path, err := cast.ToStringE(args["path"])
+			if err != nil {
+				return "", errs.NewErrf("path is required and must be a string")
 			}
 
 			files, err := backend.ListDirectory(ctx, path)
@@ -226,9 +224,9 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			},
 		},
 		func(ctx context.Context, backend FileStore, args map[string]interface{}) (string, error) {
-			pattern, ok := args["pattern"].(string)
-			if !ok {
-				return "", errs.NewErrf("pattern is required")
+			pattern, err := cast.ToStringE(args["pattern"])
+			if err != nil {
+				return "", errs.NewErrf("pattern is required and must be a string")
 			}
 
 			matches, err := globRecursive(ctx, backend, pattern, ".")
@@ -281,8 +279,8 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 					return "", errs.NewErrf("each todo must be an object")
 				}
 
-				task, _ := todoMap["task"].(string)
-				description, _ := todoMap["description"].(string)
+				task := cast.ToString(todoMap["task"])
+				description := cast.ToString(todoMap["description"])
 
 				todos = append(todos, TodoItem{
 					Task:        task,
@@ -313,8 +311,8 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			},
 		},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
-			id, _ := args["id"].(string)
-			status, _ := args["status"].(string)
+			id := cast.ToString(args["id"])
+			status := cast.ToString(args["status"])
 
 			if err := tm.UpdateTodoStatus(id, status); err != nil {
 				return "", err
@@ -346,20 +344,10 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			},
 		},
 		func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
-			idsData, ok := args["ids"].([]interface{})
-			if !ok {
+			ids := cast.ToStringSlice(args["ids"])
+
+			if len(ids) == 0 {
 				return "", errs.NewErrf("ids is required and must be an array")
-			}
-
-			if len(idsData) == 0 {
-				return "", errs.NewErrf("ids list cannot be empty")
-			}
-
-			ids := make([]string, 0, len(idsData))
-			for _, id := range idsData {
-				if idStr, ok := id.(string); ok {
-					ids = append(ids, idStr)
-				}
 			}
 
 			if err := tm.DeleteTodos(ids); err != nil {
@@ -382,13 +370,12 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 				},
 			},
 			func(ctx context.Context, args map[string]interface{}) (string, error) {
-				response, _ := args["response"].(string)
+				response := cast.ToString(args["response"])
 				if response == "" {
 					return "Task completed", nil
 				}
 				return response, nil
-			},
-		))
+			}))
 	}
 
 	return registry
@@ -593,10 +580,11 @@ func NewThinkTool(toolName ...string) Tool {
 			},
 		},
 		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			reflection, ok := args["reflection"].(string)
-			if !ok {
+			if args["reflection"] == nil {
 				return "", errs.NewErrf("reflection is required")
 			}
+
+			reflection := cast.ToString(args["reflection"])
 
 			return fmt.Sprintf("Reflection recorded: %s", reflection), nil
 		},
