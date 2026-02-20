@@ -15,13 +15,7 @@ import (
 type ctxKey int
 
 var (
-	fileStoreCtxKey   ctxKey
-	todoManagerCtxKey ctxKey
-)
-
-const (
-	ArgKeyAgentLoopFileStore   = "AgentLoopFileStore"
-	ArgKeyAgentLoopTodoManager = "AgentLoopTodoManager"
+	agentCtxKey ctxKey
 )
 
 // Agent is a ReAct (Reasoning + Acting) agent that can process tasks using tools and skills.
@@ -88,6 +82,11 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	return agent, nil
 }
 
+type AgentContext struct {
+	Store FileStore
+	Todos *TodoManager
+}
+
 // Execute runs the agent with the given user input.
 func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 	// Initialize backend (fresh on each execution)
@@ -128,11 +127,11 @@ func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 	// Initialize todo manager (fresh on each execution)
 	todoManager := NewTodoManager()
 
-	// Propagate backend via context
-	rail = rail.WithCtxVal(fileStoreCtxKey, backend)
-
-	// Propagate TodoManager via context
-	rail = rail.WithCtxVal(todoManagerCtxKey, todoManager)
+	// Propagate stateful components via context
+	rail = rail.WithCtxVal(agentCtxKey, AgentContext{
+		Store: backend,
+		Todos: todoManager,
+	})
 
 	// Execute graph
 	result, err := graph.InvokeGraph(rail, a.config.GenericOps, a.graph, "AgentLoop", taskInput)

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso/util/llm"
 )
 
 // Tool represents a tool that can be used by the agent.
@@ -19,6 +20,10 @@ type Tool interface {
 
 	// Execute executes the tool with the given arguments.
 	Execute(ctx context.Context, args map[string]interface{}) (string, error)
+}
+
+type SelfInvokeTool interface {
+	ExecuteJson(ctx context.Context, jsonArg string) (string, error)
 }
 
 // ToolFunc is a function-based tool implementation.
@@ -66,30 +71,8 @@ func NewToolFunc(
 	}
 }
 
-// newAwareToolFunc creates a tool that automatically extracts a dependency from args.
-// This is a generic helper for creating tools that need access to stateful components
-// like FileStore or TodoManager, which are injected via context and args.
-func newAwareToolFunc[T any](
-	name string,
-	description string,
-	parameters map[string]*schema.ParameterInfo,
-	key string,
-	execute func(ctx context.Context, deps T, args map[string]interface{}) (string, error),
-) Tool {
-	return NewToolFunc(name, description, parameters,
-		func(ctx context.Context, args map[string]interface{}) (string, error) {
-			var deps T
-			if v, ok := args[key]; ok {
-				if vv, ok := v.(T); ok {
-					deps = vv
-				}
-			}
-			return execute(ctx, deps, args)
-		})
-}
-
-// NewStoreAwareToolFunc creates a tool that needs FileStore access.
-// The FileStore is automatically injected via context by the agent loop.
+// NewCtxAwareToolFunc creates a tool that needs access to AgentContext (Store and Todos).
+// The AgentContext is automatically injected via context by the agent loop.
 //
 // Parameters should be built using the typed helper functions:
 //   - [StringParam](desc, required) - for string parameters
@@ -101,29 +84,176 @@ func newAwareToolFunc[T any](
 //
 // Example:
 //
-//	NewStoreAwareToolFunc(
+//	NewCtxAwareToolFunc(
+//	    "read_file",
+//	    "Read file content",
+//	    map[string]*schema.ParameterInfo{
+//	        "path": StringParam("The absolute path to the file to read", true),
+//	    },
+//	    func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error) {
+//	        path := cast.ToString(args["path"])
+//	        content, err := agentCtx.Store.ReadFile(ctx, path)
+//	        return string(content), err
+//	    },
+//	)
+func NewCtxAwareToolFunc(
+	name string,
+	description string,
+	parameters map[string]*schema.ParameterInfo,
+	execute func(ctx context.Context, agentCtx AgentContext, args map[string]interface{}) (string, error),
+) Tool {
+	return NewToolFunc(name, description, parameters,
+		func(ctx context.Context, args map[string]interface{}) (string, error) {
+			var agentCtx AgentContext
+			if v := ctx.Value(agentCtxKey); v != nil {
+				if ac, ok := v.(AgentContext); ok {
+					agentCtx = ac
+				}
+			}
+			return execute(ctx, agentCtx, args)
+		})
+}
+
+// TypedToolFunc is a tool that accepts typed arguments via JSON deserialization.
+type TypedToolFunc[T any] struct {
+	name        string
+	description string
+	parameters  map[string]*schema.ParameterInfo
+	execute     func(ctx context.Context, args T) (string, error)
+}
+
+// Name returns the name of the tool.
+func (t *TypedToolFunc[T]) Name() string {
+	return t.name
+}
+
+// Description returns the description of the tool.
+func (t *TypedToolFunc[T]) Description() string {
+	return t.description
+}
+
+// Parameters returns the JSON schema for the tool parameters.
+func (t *TypedToolFunc[T]) Parameters() map[string]*schema.ParameterInfo {
+	return t.parameters
+}
+
+// Execute executes the tool with the given arguments (untyped).
+func (t *TypedToolFunc[T]) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+	return "", nil // This shouldn't be called since we implement SelfInvokeTool
+}
+
+// ExecuteJson executes the tool with JSON arguments.
+func (t *TypedToolFunc[T]) ExecuteJson(ctx context.Context, jsonArg string) (string, error) {
+	var args T
+	if jsonArg != "" {
+		parsedArgs, err := llm.ParseLLMJsonAs[T](jsonArg)
+		if err != nil {
+			return "", err
+		}
+		args = parsedArgs
+	}
+	return t.execute(ctx, args)
+}
+
+// NewTypedToolFunc creates a tool that accepts typed arguments via JSON deserialization.
+// The execute function receives a struct of type T instead of a map.
+//
+// Parameters should be built using the typed helper functions:
+//   - [StringParam](desc, required) - for string parameters
+//   - [IntParam](desc, required) - for integer parameters
+//   - [NumberParam](desc, required) - for numeric parameters
+//   - [BoolParam](desc, required) - for boolean parameters
+//   - [ArrayParam](desc, elemInfo, required) - for array parameters
+//   - [ObjectParam](desc, subParams, required) - for object parameters
+//
+// Example:
+//
+//	type ReadFileArgs struct {
+//	    Path   string `json:"path"`
+//	    Offset int    `json:"offset"`
+//	    Limit  int    `json:"limit"`
+//	}
+//
+//	NewTypedToolFunc(
 //	    "read_file",
 //	    "Read file content",
 //	    map[string]*schema.ParameterInfo{
 //	        "path":   StringParam("The absolute path to the file to read", true),
-//	        "offset": NumberParam("Optional: Line number to start reading from", false),
+//	        "offset": IntParam("Optional: Line number to start reading from", false),
+//	        "limit":  IntParam("Optional: Maximum number of lines to read", false),
 //	    },
-//	    func(ctx context.Context, store FileStore, args map[string]interface{}) (string, error) {
-//	        path := cast.ToString(args["path"])
-//	        // ... use store to read file
+//	    func(ctx context.Context, args ReadFileArgs) (string, error) {
+//	        // args is already typed as ReadFileArgs
+//	        // No need for cast.ToString or cast.ToInt
+//	        return "file content", nil
 //	    },
 //	)
-func NewStoreAwareToolFunc(
+func NewTypedToolFunc[T any](
 	name string,
 	description string,
 	parameters map[string]*schema.ParameterInfo,
-	execute func(ctx context.Context, store FileStore, args map[string]interface{}) (string, error),
+	execute func(ctx context.Context, args T) (string, error),
 ) Tool {
-	return newAwareToolFunc(name, description, parameters, ArgKeyAgentLoopFileStore, execute)
+	return &TypedToolFunc[T]{
+		name:        name,
+		description: description,
+		parameters:  parameters,
+		execute:     execute,
+	}
 }
 
-// NewTodoAwareToolFunc creates a tool that needs TodoManager access.
-// The TodoManager is automatically injected via context by the agent loop.
+// TypedCtxAwareToolFunc is a tool that accepts typed arguments and has AgentContext access.
+type TypedCtxAwareToolFunc[T any] struct {
+	name        string
+	description string
+	parameters  map[string]*schema.ParameterInfo
+	execute     func(ctx context.Context, agentCtx AgentContext, args T) (string, error)
+}
+
+// Name returns the name of the tool.
+func (t *TypedCtxAwareToolFunc[T]) Name() string {
+	return t.name
+}
+
+// Description returns the description of the tool.
+func (t *TypedCtxAwareToolFunc[T]) Description() string {
+	return t.description
+}
+
+// Parameters returns the JSON schema for the tool parameters.
+func (t *TypedCtxAwareToolFunc[T]) Parameters() map[string]*schema.ParameterInfo {
+	return t.parameters
+}
+
+// Execute executes the tool with the given arguments (untyped).
+func (t *TypedCtxAwareToolFunc[T]) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+	return "", nil // This shouldn't be called since we implement SelfInvokeTool
+}
+
+// ExecuteJson executes the tool with JSON arguments.
+func (t *TypedCtxAwareToolFunc[T]) ExecuteJson(ctx context.Context, jsonArg string) (string, error) {
+	var args T
+	if jsonArg != "" {
+		parsedArgs, err := llm.ParseLLMJsonAs[T](jsonArg)
+		if err != nil {
+			return "", err
+		}
+		args = parsedArgs
+	}
+
+	// Get AgentContext from context
+	var agentCtx AgentContext
+	if v := ctx.Value(agentCtxKey); v != nil {
+		if ac, ok := v.(AgentContext); ok {
+			agentCtx = ac
+		}
+	}
+
+	return t.execute(ctx, agentCtx, args)
+}
+
+// NewTypedCtxAwareToolFunc creates a tool that accepts typed arguments and has AgentContext access.
+// The execute function receives a struct of type T instead of a map.
 //
 // Parameters should be built using the typed helper functions:
 //   - [StringParam](desc, required) - for string parameters
@@ -135,24 +265,39 @@ func NewStoreAwareToolFunc(
 //
 // Example:
 //
-//	NewTodoAwareToolFunc(
-//	    "add_todo",
-//	    "Add a todo item",
+//	type ReadFileArgs struct {
+//	    Path   string `json:"path"`
+//	    Offset int    `json:"offset"`
+//	    Limit  int    `json:"limit"`
+//	}
+//
+//	NewTypedCtxAwareToolFunc(
+//	    "read_file",
+//	    "Read file content",
 //	    map[string]*schema.ParameterInfo{
-//	        "task": StringParam("The task description", true),
+//	        "path":   StringParam("The absolute path to the file to read", true),
+//	        "offset": IntParam("Optional: Line number to start reading from", false),
+//	        "limit":  IntParam("Optional: Maximum number of lines to read", false),
 //	    },
-//	    func(ctx context.Context, tm *TodoManager, args map[string]interface{}) (string, error) {
-//	        task := cast.ToString(args["task"])
-//	        // ... use tm to add todo
+//	    func(ctx context.Context, agentCtx AgentContext, args ReadFileArgs) (string, error) {
+//	        // args is already typed as ReadFileArgs
+//	        // No need for cast.ToString or cast.ToInt
+//	        content, err := agentCtx.Store.ReadFile(ctx, args.Path)
+//	        return string(content), err
 //	    },
 //	)
-func NewTodoAwareToolFunc(
+func NewTypedCtxAwareToolFunc[T any](
 	name string,
 	description string,
 	parameters map[string]*schema.ParameterInfo,
-	execute func(ctx context.Context, store *TodoManager, args map[string]interface{}) (string, error),
+	execute func(ctx context.Context, agentCtx AgentContext, args T) (string, error),
 ) Tool {
-	return newAwareToolFunc(name, description, parameters, ArgKeyAgentLoopTodoManager, execute)
+	return &TypedCtxAwareToolFunc[T]{
+		name:        name,
+		description: description,
+		parameters:  parameters,
+		execute:     execute,
+	}
 }
 
 // Name returns the name of the tool.

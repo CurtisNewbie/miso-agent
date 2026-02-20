@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/cloudwego/eino/schema"
 )
 
 func TestBuiltinTools_ReadFile(t *testing.T) {
@@ -24,9 +26,14 @@ func TestBuiltinTools_ReadFile(t *testing.T) {
 		t.Fatal("read_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   testPath,
+		"path": testPath,
 	})
 	if err != nil {
 		t.Fatalf("Failed to read file: %v", err)
@@ -47,9 +54,14 @@ func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 		t.Fatal("read_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	_, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   "nonexistent.txt",
+		"path": "nonexistent.txt",
 	})
 	if err == nil {
 		t.Error("Expected error for nonexistent file, got nil")
@@ -69,10 +81,15 @@ func TestBuiltinTools_WriteFile(t *testing.T) {
 		t.Fatal("write_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   testPath,
-		"content":                testContent,
+		"path":    testPath,
+		"content": testContent,
 	})
 	if err != nil {
 		t.Fatalf("Failed to write file: %v", err)
@@ -110,12 +127,17 @@ func TestBuiltinTools_EditFile_Success(t *testing.T) {
 		t.Fatal("edit_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test single replacement
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   testPath,
-		"old_string":             "Hello",
-		"new_string":             "Hi",
+		"path":       testPath,
+		"old_string": "Hello",
+		"new_string": "Hi",
 	})
 	if err != nil {
 		t.Fatalf("Failed to edit file: %v", err)
@@ -154,13 +176,18 @@ func TestBuiltinTools_EditFile_ReplaceAll(t *testing.T) {
 		t.Fatal("edit_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test replace all
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   testPath,
-		"old_string":             "Hello",
-		"new_string":             "Hi",
-		"replace_all":            true,
+		"path":        testPath,
+		"old_string":  "Hello",
+		"new_string":  "Hi",
+		"replace_all": true,
 	})
 	if err != nil {
 		t.Fatalf("Failed to edit file: %v", err)
@@ -199,12 +226,17 @@ func TestBuiltinTools_EditFile_NotFound(t *testing.T) {
 		t.Fatal("edit_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test string not found
 	_, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   testPath,
-		"old_string":             "Goodbye",
-		"new_string":             "Hi",
+		"path":       testPath,
+		"old_string": "Goodbye",
+		"new_string": "Hi",
 	})
 	if err == nil {
 		t.Error("Expected error for string not found, got nil")
@@ -218,6 +250,12 @@ func TestBuiltinTools_EditFile_NotFound(t *testing.T) {
 func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
 	ctx := context.Background()
 	be := NewMemFileStore()
+
+	// Setup AgentContext for tool execution
+	agentCtx := AgentContext{
+		Store: be,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
 	registry := BuiltinTools(false)
 
 	// Create a test file with multiple occurrences
@@ -234,10 +272,9 @@ func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
 
 	// Test multiple occurrences without replace_all flag
 	_, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   testPath,
-		"old_string":             "Hello",
-		"new_string":             "Hi",
+		"path":       testPath,
+		"old_string": "Hello",
+		"new_string": "Hi",
 	})
 	if err == nil {
 		t.Error("Expected error for multiple occurrences without replace_all, got nil")
@@ -265,12 +302,17 @@ func TestBuiltinTools_EditFile_SameStrings(t *testing.T) {
 		t.Fatal("edit_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test same old_string and new_string
 	_, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   testPath,
-		"old_string":             "Hello",
-		"new_string":             "Hello",
+		"path":       testPath,
+		"old_string": "Hello",
+		"new_string": "Hello",
 	})
 	if err == nil {
 		t.Error("Expected error for same old_string and new_string, got nil")
@@ -291,12 +333,17 @@ func TestBuiltinTools_EditFile_FileNotFound(t *testing.T) {
 		t.Fatal("edit_file tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test editing nonexistent file
 	_, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   "nonexistent.txt",
-		"old_string":             "Hello",
-		"new_string":             "Hi",
+		"path":       "nonexistent.txt",
+		"old_string": "Hello",
+		"new_string": "Hi",
 	})
 	if err == nil {
 		t.Error("Expected error for nonexistent file, got nil")
@@ -370,9 +417,14 @@ func TestBuiltinTools_ListDirectory(t *testing.T) {
 		t.Fatal("list_directory tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"path":                   ".",
+		"path": ".",
 	})
 	if err != nil {
 		t.Fatalf("Failed to list directory: %v", err)
@@ -398,9 +450,14 @@ func TestBuiltinTools_Glob_Simple(t *testing.T) {
 		t.Fatal("glob tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"pattern":                "*.go",
+		"pattern": "*.go",
 	})
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
@@ -429,10 +486,15 @@ func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 		t.Fatal("glob tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test **/*.go
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"pattern":                "**/*.go",
+		"pattern": "**/*.go",
 	})
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
@@ -462,10 +524,15 @@ func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 		t.Fatal("glob tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test src/**/*.ts
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"pattern":                "src/**/*.ts",
+		"pattern": "src/**/*.ts",
 	})
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
@@ -501,10 +568,15 @@ func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 		t.Fatal("glob tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test file?.go (should match file1.go and file2.go)
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"pattern":                "file?.go",
+		"pattern": "file?.go",
 	})
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
@@ -532,10 +604,15 @@ func TestBuiltinTools_Glob_DoubleStarAtEnd(t *testing.T) {
 		t.Fatal("glob tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: be,
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Test test/** (should match all files under test/)
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopFileStore: be,
-		"pattern":                "test/**",
+		"pattern": "test/**",
 	})
 	if err != nil {
 		t.Fatalf("Failed to glob: %v", err)
@@ -558,8 +635,13 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 		t.Fatal("add_todo tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: todoManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopTodoManager: todoManager,
 		"todos": []interface{}{
 			map[string]interface{}{
 				"task":        "Test task",
@@ -596,8 +678,13 @@ func TestBuiltinTools_AddTodoMultiple(t *testing.T) {
 		t.Fatal("add_todo tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: todoManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopTodoManager: todoManager,
 		"todos": []interface{}{
 			map[string]interface{}{
 				"task":        "Task 1",
@@ -652,10 +739,15 @@ func TestBuiltinTools_UpdateTodo(t *testing.T) {
 		t.Fatal("update_todo tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: todoManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopTodoManager: todoManager,
-		"id":                       id,
-		"status":                   "completed",
+		"id":     id,
+		"status": "completed",
 	})
 	if err != nil {
 		t.Fatalf("Failed to update todo: %v", err)
@@ -690,9 +782,13 @@ func TestBuiltinTools_ListTodos(t *testing.T) {
 		t.Fatal("list_todos tool not found")
 	}
 
-	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopTodoManager: todoManager,
-	})
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: todoManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	result, err := tool.Execute(ctx, map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Failed to list todos: %v", err)
 	}
@@ -715,9 +811,14 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 		t.Fatal("delete_todo tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: todoManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopTodoManager: todoManager,
-		"ids":                      []interface{}{id},
+		"ids": []interface{}{id},
 	})
 	if err != nil {
 		t.Fatalf("Failed to delete todo: %v", err)
@@ -753,10 +854,15 @@ func TestBuiltinTools_DeleteTodoMultiple(t *testing.T) {
 		t.Fatal("delete_todo tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: todoManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	// Delete two todos
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopTodoManager: todoManager,
-		"ids":                      []interface{}{id1, id3},
+		"ids": []interface{}{id1, id3},
 	})
 	if err != nil {
 		t.Fatalf("Failed to delete todos: %v", err)
@@ -801,9 +907,14 @@ func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 		t.Fatal("delete_todo tool not found")
 	}
 
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: todoManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
 	_, err := tool.Execute(ctx, map[string]interface{}{
-		ArgKeyAgentLoopTodoManager: todoManager,
-		"ids":                      []interface{}{"nonexistent-id"},
+		"ids": []interface{}{"nonexistent-id"},
 	})
 	if err == nil {
 		t.Error("Expected error for nonexistent todo, got nil")
@@ -885,5 +996,134 @@ func TestBuiltinTools_FinishTool_EmptyResponse(t *testing.T) {
 	expected := "Task completed"
 	if result != expected {
 		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestTypedToolFunc(t *testing.T) {
+	// Define a typed argument struct
+	type HelloArgs struct {
+		Name  string `json:"name"`
+		Count int    `json:"count"`
+	}
+
+	// Create a typed tool
+	tool := NewTypedToolFunc(
+		"hello",
+		"Say hello",
+		map[string]*schema.ParameterInfo{
+			"name":  StringParam("The name to greet", true),
+			"count": IntParam("Number of times to greet", false),
+		},
+		func(ctx context.Context, args HelloArgs) (string, error) {
+			// args is already typed, no need for casting
+			result := ""
+			for i := 0; i < args.Count; i++ {
+				result += "Hello, " + args.Name + "!\n"
+			}
+			return result, nil
+		},
+	)
+
+	// Test via ExecuteJson (SelfInvokeTool interface)
+	ctx := context.Background()
+	jsonInput := `{"name":"Alice","count":3}`
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, jsonInput)
+	if err != nil {
+		t.Fatalf("Failed to execute typed tool: %v", err)
+	}
+
+	expected := "Hello, Alice!\nHello, Alice!\nHello, Alice!\n"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestTypedCtxAwareToolFunc(t *testing.T) {
+	// Define a typed argument struct
+	type WriteFileArgs struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+
+	// Create a typed context-aware tool
+	tool := NewTypedCtxAwareToolFunc(
+		"typed_write_file",
+		"Write content to a file",
+		map[string]*schema.ParameterInfo{
+			"path":    StringParam("The absolute path to the file to write", true),
+			"content": StringParam("The content to write to the file", true),
+		},
+		func(ctx context.Context, agentCtx AgentContext, args WriteFileArgs) (string, error) {
+			// args is already typed, no need for casting
+			err := agentCtx.Store.WriteFile(ctx, args.Path, []byte(args.Content))
+			if err != nil {
+				return "", err
+			}
+			return "Successfully wrote to " + args.Path, nil
+		},
+	)
+
+	// Test via ExecuteJson with context containing AgentContext
+	ctx := context.Background()
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	jsonInput := `{"path":"test.txt","content":"Hello, typed tool!"}`
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, jsonInput)
+	if err != nil {
+		t.Fatalf("Failed to execute typed context-aware tool: %v", err)
+	}
+
+	expected := "Successfully wrote to test.txt"
+	if result != expected {
+		t.Errorf("Expected %q, got %q", expected, result)
+	}
+}
+
+func TestTypedTodoAwareToolFunc(t *testing.T) {
+	// Define a typed argument struct
+	type AddTodoArgs struct {
+		Task        string `json:"task"`
+		Description string `json:"description"`
+	}
+
+	// Create a typed context-aware tool for todo operations
+	tool := NewTypedCtxAwareToolFunc(
+		"typed_add_todo",
+		"Add a todo item",
+		map[string]*schema.ParameterInfo{
+			"task":        StringParam("The task description", true),
+			"description": StringParam("Additional details about the task", false),
+		},
+		func(ctx context.Context, agentCtx AgentContext, args AddTodoArgs) (string, error) {
+			// args is already typed, no need for casting
+			id, err := agentCtx.Todos.AddTodo(args.Task, args.Description)
+			if err != nil {
+				return "", err
+			}
+			return "Added todo: " + id, nil
+		},
+	)
+
+	// Test via ExecuteJson with context containing AgentContext
+	ctx := context.Background()
+	agentCtx := AgentContext{
+		Store: NewMemFileStore(),
+		Todos: NewTodoManager(),
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	jsonInput := `{"task":"Test task","description":"Test description"}`
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, jsonInput)
+	if err != nil {
+		t.Fatalf("Failed to execute typed context-aware tool: %v", err)
+	}
+
+	expectedPrefix := "Added todo: todo-"
+	if !strings.HasPrefix(result, expectedPrefix) {
+		t.Errorf("Expected result to start with %q, got %q", expectedPrefix, result)
 	}
 }

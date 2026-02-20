@@ -27,8 +27,14 @@ type AgentConfig struct {
 	// See [BuildPreloadedSkills], [BuildPreloadedSkillsWithFilter]
 	PreloadedSkills map[string]string
 
-	// Tools is a list of tools available to the agent.
-	// If nil, built-in tools will be used.
+	// Tools is a list of custom tools to add to the built-in tools.
+	// Built-in tools are always registered; this field adds additional tools.
+	//
+	// Create custom tools using helper functions:
+	//   - [NewToolFunc] - for simple tools with map-based arguments
+	//   - [NewCtxAwareToolFunc] - for tools needing AgentContext (Store, Todos)
+	//   - [NewTypedToolFunc] - for tools with typed struct arguments
+	//   - [NewTypedCtxAwareToolFunc] - for tools with typed arguments and AgentContext
 	Tools []Tool
 
 	// TaskPrompt is the main task prompt for the agent.
