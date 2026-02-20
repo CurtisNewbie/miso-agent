@@ -162,6 +162,3 @@ func normalizeMemPath(path string) string {
 	}
 	return path
 }
-
-// BackendFactory is a function that creates a FileStore.
-type BackendFactory func(ctx context.Context) (FileStore, error)

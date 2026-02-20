@@ -168,27 +168,8 @@ func (sm SkillsMap) List() []*Skill {
 	return result
 }
 
-// FormatForPrompt formats all skills for injection into the system prompt.
-func (sm SkillsMap) FormatForPrompt() string {
-	if len(sm) == 0 {
-		return ""
-	}
-
-	sb := strutil.NewBuilder()
-	sb.Println("# Available Skills")
-	sb.Println("You have access to the following skills. Use them when appropriate:")
-	sb.WriteRune('\n')
-
-	for _, skill := range sm.List() {
-		sb.WriteString(skill.FormatForPrompt())
-		sb.WriteRune('\n')
-	}
-
-	return sb.String()
-}
-
-// FormatMetadataOnly formats all skills with only metadata for progressive disclosure.
-func (sm SkillsMap) FormatMetadataOnly() string {
+// FormatMetadata formats all skills with only metadata for progressive disclosure.
+func (sm SkillsMap) FormatMetadata() string {
 	if len(sm) == 0 {
 		return ""
 	}

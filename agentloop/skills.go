@@ -3,7 +3,6 @@ package agentloop
 import (
 	"context"
 
-	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
 )
 
@@ -30,29 +29,14 @@ func (s *Skills) Load(ctx context.Context, sources []string) error {
 	return nil
 }
 
-// InjectSkills injects the loaded skills into the system prompt.
-// This is typically called during the graph construction phase.
-func (s *Skills) InjectSkills(basePrompt string) string {
-	if s.skills == nil || len(s.skills) == 0 {
-		return basePrompt
-	}
-
-	skillsPrompt := s.skills.FormatForPrompt()
-	if skillsPrompt == "" {
-		return basePrompt
-	}
-
-	return basePrompt + "\n\n" + skillsPrompt
-}
-
-// InjectMetadataOnly injects only skill metadata for progressive disclosure.
+// InjectMetadata injects only skill metadata for progressive disclosure.
 // The LLM is instructed to read full skill content on-demand using tools.
-func (s *Skills) InjectMetadataOnly(basePrompt string) string {
+func (s *Skills) InjectMetadata(basePrompt string) string {
 	if s.skills == nil || len(s.skills) == 0 {
 		return basePrompt
 	}
 
-	skillsPrompt := s.skills.FormatMetadataOnly()
+	skillsPrompt := s.skills.FormatMetadata()
 	if skillsPrompt == "" {
 		return basePrompt
 	}
@@ -63,14 +47,4 @@ func (s *Skills) InjectMetadataOnly(basePrompt string) string {
 // GetSkills returns the loaded skills map.
 func (s *Skills) GetSkills() SkillsMap {
 	return s.skills
-}
-
-// PrepareSystemMessage prepares a system message with skills injected.
-func PrepareSystemMessage(skills *Skills, basePrompt string) *schema.Message {
-	if skills == nil {
-		return schema.SystemMessage(basePrompt)
-	}
-
-	skillsPrompt := skills.InjectSkills(basePrompt)
-	return schema.SystemMessage(skillsPrompt)
 }

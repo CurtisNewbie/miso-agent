@@ -402,7 +402,7 @@ func TestSkillsMap_FormatMetadataOnly(t *testing.T) {
 			},
 		}
 
-		result := skills.FormatMetadataOnly()
+		result := skills.FormatMetadata()
 
 		if !strings.Contains(result, "web-research") {
 			t.Error("result should contain web-research")
@@ -414,7 +414,7 @@ func TestSkillsMap_FormatMetadataOnly(t *testing.T) {
 
 	t.Run("format empty skills map", func(t *testing.T) {
 		skills := SkillsMap{}
-		result := skills.FormatMetadataOnly()
+		result := skills.FormatMetadata()
 
 		if result != "" {
 			t.Errorf("result should be empty, got %q", result)
