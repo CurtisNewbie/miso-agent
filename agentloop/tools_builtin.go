@@ -58,6 +58,11 @@ type DeleteTodoArgs struct {
 	IDs []string `json:"ids"`
 }
 
+type AddArtifactArgs struct {
+	Path     string            `json:"path"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
 type FinishToolArgs struct {
 	Response string `json:"response,omitempty"`
 }
@@ -280,6 +285,34 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 			}
 
 			return fmt.Sprintf("Deleted %d todos: %s", len(args.IDs), strings.Join(args.IDs, ", ")), nil
+		},
+	))
+
+	registry.Register(NewTypedCtxAwareToolFunc(
+		"add_artifact",
+		"Register a file as an artifact collected during execution. The file size will be automatically read from the FileStore.",
+		map[string]*schema.ParameterInfo{
+			"path":     StringParam("The absolute path to the file to register as an artifact", true),
+			"metadata": ObjectParam("Optional metadata about the artifact (e.g., title, url, description)", map[string]*schema.ParameterInfo{}, false),
+		},
+		func(ctx context.Context, agentCtx AgentContext, args AddArtifactArgs) (string, error) {
+			// Read file from FileStore to get size
+			content, err := agentCtx.Store.ReadFile(ctx, args.Path)
+			if err != nil {
+				return "", errs.Wrapf(err, "failed to read artifact file")
+			}
+
+			artifact := Artifact{
+				Path:        args.Path,
+				SizeInBytes: int64(len(content)),
+				Meta:        args.Metadata,
+			}
+
+			if err := agentCtx.Artifacts.AddArtifact(artifact); err != nil {
+				return "", errs.Wrapf(err, "failed to add artifact")
+			}
+
+			return fmt.Sprintf("Successfully registered artifact: %s (%d bytes)", args.Path, len(content)), nil
 		},
 	))
 

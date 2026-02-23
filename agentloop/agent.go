@@ -31,7 +31,7 @@ type Agent struct {
 	config    AgentConfig
 	tools     *ToolRegistry
 	tokenizer *Tokenizer
-	graph     compose.Runnable[taskInput, finalOutput]
+	graph     compose.Runnable[taskInput, taskOutput]
 }
 
 // NewAgent creates a new ReAct agent.
@@ -83,12 +83,19 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 }
 
 type AgentContext struct {
-	Store FileStore
-	Todos *TodoManager
+	Store     FileStore
+	Todos     *TodoManager
+	Artifacts *ArtifactManager
 }
 
-// Execute runs the agent with the given user input.
-func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
+// AgentRequest represents a request to execute an agent
+type AgentRequest struct {
+	UserInput        string
+	ArtifactCallback func(store FileStore, artifacts []Artifact) error // Optional callback for artifacts
+}
+
+// Execute runs the agent with the given request.
+func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	// Initialize backend (fresh on each execution)
 	var backend FileStore
 	if a.config.BackendFactory != nil {
@@ -103,7 +110,7 @@ func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 		ctx := context.Background()
 		for path, content := range a.config.PreloadedSkills {
 			if err := backend.WriteFile(ctx, path, []byte(content)); err != nil {
-				return "", errs.Wrapf(err, "failed to write preloaded skill %s", path)
+				return TaskOutput{}, errs.Wrapf(err, "failed to write preloaded skill %s", path)
 			}
 		}
 	}
@@ -113,13 +120,13 @@ func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 	if len(a.config.Skills) > 0 {
 		ctx := context.Background()
 		if err := skills.Load(ctx, a.config.Skills); err != nil {
-			return "", errs.Wrapf(err, "failed to load skills")
+			return TaskOutput{}, errs.Wrapf(err, "failed to load skills")
 		}
 	}
 
 	// Prepare input with backend and skills
 	taskInput := taskInput{
-		task:   userInput,
+		task:   req.UserInput,
 		skills: skills,
 		store:  backend,
 	}
@@ -127,19 +134,30 @@ func (a *Agent) Execute(rail flow.Rail, userInput string) (string, error) {
 	// Initialize todo manager (fresh on each execution)
 	todoManager := NewTodoManager()
 
+	// Initialize artifact manager (fresh on each execution)
+	artifactManager := NewArtifactManager()
+
 	// Propagate stateful components via context
 	rail = rail.WithCtxVal(agentCtxKey, AgentContext{
-		Store: backend,
-		Todos: todoManager,
+		Store:     backend,
+		Todos:     todoManager,
+		Artifacts: artifactManager,
 	})
 
 	// Execute graph
 	result, err := graph.InvokeGraph(rail, a.config.GenericOps, a.graph, "AgentLoop", taskInput)
 	if err != nil {
-		return "", errs.Wrapf(err, "failed to execute graph")
+		return TaskOutput{}, errs.Wrapf(err, "failed to execute graph")
 	}
 
-	return result.response, nil
+	// Call ArtifactCallback if provided
+	if req.ArtifactCallback != nil && len(result.Artifacts) > 0 {
+		if err := req.ArtifactCallback(backend, result.Artifacts); err != nil {
+			return result, errs.Wrapf(err, "artifact callback failed")
+		}
+	}
+
+	return result, nil
 }
 
 // evictToolResult stores a large tool result to the backend and returns a reference message.

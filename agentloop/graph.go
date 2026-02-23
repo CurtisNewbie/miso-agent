@@ -14,9 +14,21 @@ type agentLoopState struct {
 	messages  []*schema.Message
 }
 
-type finalOutput struct {
-	response string
+// Artifact represents a discovered or created artifact during agent execution
+type Artifact struct {
+	Path        string            // Backend file path
+	SizeInBytes int64             // File size in bytes
+	Meta        map[string]string // Additional metadata (title, url, etc.)
 }
+
+// TaskOutput represents the output from an agent execution
+type TaskOutput struct {
+	Response  string     // Main response (research report)
+	Artifacts []Artifact // Artifacts collected during execution
+}
+
+// taskOutput is the internal output type used by the graph
+type taskOutput = TaskOutput
 
 // finishToolArgs represents the arguments for the finish_tool.
 type finishToolArgs struct {
@@ -32,8 +44,8 @@ type taskInput struct {
 
 // buildGraph builds the Eino graph for the ReAct agent.
 // The graph is compiled once, but backend/skills are passed via taskInput for each execution.
-func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) {
-	g := compose.NewGraph[taskInput, finalOutput](
+func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
+	g := compose.NewGraph[taskInput, taskOutput](
 		compose.WithGenLocalState(func(ctx context.Context) *agentLoopState {
 			return &agentLoopState{
 				messages: make([]*schema.Message, 0, agent.config.MaxRunSteps+1),
@@ -127,7 +139,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 	_ = g.AddToolsNode("tools", toolNode)
 
 	// Final output node
-	_ = g.AddLambdaNode("final_output", compose.InvokableLambda(func(ctx context.Context, input any) (finalOutput, error) {
+	_ = g.AddLambdaNode("final_output", compose.InvokableLambda(func(ctx context.Context, input any) (taskOutput, error) {
 		var lastMessage *schema.Message
 		err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
 			if len(state.messages) > 0 {
@@ -137,7 +149,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 		})
 
 		if err != nil {
-			return finalOutput{}, err
+			return taskOutput{}, err
 		}
 
 		response := ""
@@ -163,7 +175,18 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, finalOutput], error) 
 			}
 		}
 
-		return finalOutput{response: response}, nil
+		// Collect artifacts from AgentContext
+		var artifacts []Artifact
+		if agentCtxVal := ctx.Value(agentCtxKey); agentCtxVal != nil {
+			if agentCtx, ok := agentCtxVal.(AgentContext); ok && agentCtx.Artifacts != nil {
+				artifacts = agentCtx.Artifacts.ListArtifacts()
+			}
+		}
+
+		return TaskOutput{
+			Response:  response,
+			Artifacts: artifacts,
+		}, nil
 	}), compose.WithNodeName("Final Output"))
 
 	// Branch: continue loop or finish

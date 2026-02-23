@@ -1152,3 +1152,288 @@ func TestTypedTodoAwareToolFunc(t *testing.T) {
 		t.Errorf("Expected result to start with %q, got %q", expectedPrefix, result)
 	}
 }
+
+func TestBuiltinTools_AddArtifact(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	registry := BuiltinTools(false)
+
+	// Create a test file
+	testPath := "/test/artifact.txt"
+	testContent := "This is a test artifact file"
+	if err := be.WriteFile(ctx, testPath, []byte(testContent)); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Test adding an artifact
+	tool, ok := registry.Get("add_artifact")
+	if !ok {
+		t.Fatal("add_artifact tool not found")
+	}
+
+	artifactManager := NewArtifactManager()
+	agentCtx := AgentContext{
+		Store:     be,
+		Todos:     NewTodoManager(),
+		Artifacts: artifactManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	args, _ := json.Marshal(map[string]interface{}{
+		"path":     testPath,
+		"metadata": map[string]string{"title": "Test Artifact", "source": "test"},
+	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
+	if err != nil {
+		t.Fatalf("Failed to add artifact: %v", err)
+	}
+
+	// Verify the result message
+	expectedPrefix := "Successfully registered artifact: " + testPath
+	if !strings.HasPrefix(result, expectedPrefix) {
+		t.Errorf("Expected result to start with %q, got %q", expectedPrefix, result)
+	}
+
+	// Verify the artifact was added to the manager
+	artifacts := artifactManager.ListArtifacts()
+	if len(artifacts) != 1 {
+		t.Fatalf("Expected 1 artifact, got %d", len(artifacts))
+	}
+
+	// Verify artifact details
+	if artifacts[0].Path != testPath {
+		t.Errorf("Expected path %q, got %q", testPath, artifacts[0].Path)
+	}
+
+	if artifacts[0].SizeInBytes != int64(len(testContent)) {
+		t.Errorf("Expected size %d, got %d", len(testContent), artifacts[0].SizeInBytes)
+	}
+
+	if artifacts[0].Meta["title"] != "Test Artifact" {
+		t.Errorf("Expected title 'Test Artifact', got %q", artifacts[0].Meta["title"])
+	}
+}
+
+func TestBuiltinTools_AddArtifact_NoMetadata(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	registry := BuiltinTools(false)
+
+	// Create a test file
+	testPath := "/test/artifact2.txt"
+	testContent := "Another test artifact"
+	if err := be.WriteFile(ctx, testPath, []byte(testContent)); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Test adding an artifact without metadata
+	tool, ok := registry.Get("add_artifact")
+	if !ok {
+		t.Fatal("add_artifact tool not found")
+	}
+
+	artifactManager := NewArtifactManager()
+	agentCtx := AgentContext{
+		Store:     be,
+		Todos:     NewTodoManager(),
+		Artifacts: artifactManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	args, _ := json.Marshal(map[string]interface{}{
+		"path": testPath,
+	})
+	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
+	if err != nil {
+		t.Fatalf("Failed to add artifact: %v", err)
+	}
+
+	// Verify the result message
+	expectedPrefix := "Successfully registered artifact: " + testPath
+	if !strings.HasPrefix(result, expectedPrefix) {
+		t.Errorf("Expected result to start with %q, got %q", expectedPrefix, result)
+	}
+
+	// Verify the artifact was added
+	artifacts := artifactManager.ListArtifacts()
+	if len(artifacts) != 1 {
+		t.Fatalf("Expected 1 artifact, got %d", len(artifacts))
+	}
+}
+
+func TestBuiltinTools_AddArtifact_FileNotFound(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	registry := BuiltinTools(false)
+
+	// Test adding an artifact for a non-existent file
+	tool, ok := registry.Get("add_artifact")
+	if !ok {
+		t.Fatal("add_artifact tool not found")
+	}
+
+	artifactManager := NewArtifactManager()
+	agentCtx := AgentContext{
+		Store:     be,
+		Todos:     NewTodoManager(),
+		Artifacts: artifactManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	args, _ := json.Marshal(map[string]interface{}{
+		"path":     "/nonexistent/file.txt",
+		"metadata": map[string]string{"title": "Non-existent"},
+	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
+	if err == nil {
+		t.Error("Expected error for non-existent file, got nil")
+	}
+
+	// Verify no artifact was added
+	artifacts := artifactManager.ListArtifacts()
+	if len(artifacts) != 0 {
+		t.Errorf("Expected 0 artifacts, got %d", len(artifacts))
+	}
+}
+
+func TestBuiltinTools_AddArtifact_EmptyPath(t *testing.T) {
+	ctx := context.Background()
+	be := NewMemFileStore()
+	registry := BuiltinTools(false)
+
+	// Test adding an artifact with empty path
+	tool, ok := registry.Get("add_artifact")
+	if !ok {
+		t.Fatal("add_artifact tool not found")
+	}
+
+	artifactManager := NewArtifactManager()
+	agentCtx := AgentContext{
+		Store:     be,
+		Todos:     NewTodoManager(),
+		Artifacts: artifactManager,
+	}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	args, _ := json.Marshal(map[string]interface{}{
+		"path": "",
+	})
+	_, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
+	if err == nil {
+		t.Error("Expected error for empty path, got nil")
+	}
+
+	// Verify no artifact was added
+	artifacts := artifactManager.ListArtifacts()
+	if len(artifacts) != 0 {
+		t.Errorf("Expected 0 artifacts, got %d", len(artifacts))
+	}
+}
+
+func TestAgentContext_Artifacts(t *testing.T) {
+	// Create test file
+	testPath := "/test/file.txt"
+	testContent := "Test content"
+
+	// Create AgentContext with ArtifactManager
+	artifactManager := NewArtifactManager()
+	agentCtx := AgentContext{
+		Artifacts: artifactManager,
+	}
+
+	// Add an artifact via ArtifactManager
+	artifact := Artifact{
+		Path:        testPath,
+		SizeInBytes: int64(len(testContent)),
+		Meta:        map[string]string{"title": "Test"},
+	}
+	err := agentCtx.Artifacts.AddArtifact(artifact)
+	if err != nil {
+		t.Fatalf("Failed to add artifact: %v", err)
+	}
+
+	// Verify artifact is accessible
+	artifacts := agentCtx.Artifacts.ListArtifacts()
+	if len(artifacts) != 1 {
+		t.Errorf("Expected 1 artifact, got %d", len(artifacts))
+	}
+
+	if artifacts[0].Path != testPath {
+		t.Errorf("Expected path %q, got %q", testPath, artifacts[0].Path)
+	}
+}
+
+func TestTaskOutput(t *testing.T) {
+	// Create a TaskOutput with artifacts
+	artifacts := []Artifact{
+		{Path: "/test/file1.txt", SizeInBytes: 100, Meta: map[string]string{"title": "File 1"}},
+		{Path: "/test/file2.txt", SizeInBytes: 200, Meta: map[string]string{"title": "File 2"}},
+	}
+
+	output := TaskOutput{
+		Response:  "Task completed successfully",
+		Artifacts: artifacts,
+	}
+
+	// Verify Response
+	if output.Response != "Task completed successfully" {
+		t.Errorf("Expected response 'Task completed successfully', got %q", output.Response)
+	}
+
+	// Verify Artifacts
+	if len(output.Artifacts) != 2 {
+		t.Errorf("Expected 2 artifacts, got %d", len(output.Artifacts))
+	}
+
+	if output.Artifacts[0].Path != "/test/file1.txt" {
+		t.Errorf("Expected path '/test/file1.txt', got %q", output.Artifacts[0].Path)
+	}
+
+	if output.Artifacts[1].SizeInBytes != 200 {
+		t.Errorf("Expected size 200, got %d", output.Artifacts[1].SizeInBytes)
+	}
+}
+
+func TestAgentRequest(t *testing.T) {
+	// Create an AgentRequest with callback
+	callbackCalled := false
+	var callbackStore FileStore
+	var callbackArtifacts []Artifact
+
+	req := AgentRequest{
+		UserInput: "Test input",
+		ArtifactCallback: func(store FileStore, artifacts []Artifact) error {
+			callbackCalled = true
+			callbackStore = store
+			callbackArtifacts = artifacts
+			return nil
+		},
+	}
+
+	// Verify UserInput
+	if req.UserInput != "Test input" {
+		t.Errorf("Expected UserInput 'Test input', got %q", req.UserInput)
+	}
+
+	// Verify ArtifactCallback is set
+	if req.ArtifactCallback == nil {
+		t.Error("Expected ArtifactCallback to be set, got nil")
+	}
+
+	// Test calling the callback
+	if err := req.ArtifactCallback(NewMemFileStore(), []Artifact{{Path: "/test.txt", SizeInBytes: 100}}); err != nil {
+		t.Fatalf("Failed to call ArtifactCallback: %v", err)
+	}
+
+	if !callbackCalled {
+		t.Error("Expected callback to be called")
+	}
+
+	if callbackStore == nil {
+		t.Error("Expected callbackStore to be set, got nil")
+	}
+
+	if len(callbackArtifacts) != 1 {
+		t.Errorf("Expected 1 artifact in callback, got %d", len(callbackArtifacts))
+	}
+}
