@@ -32,7 +32,7 @@ func (s *Skills) Load(ctx context.Context, sources []string) error {
 // InjectMetadata injects only skill metadata for progressive disclosure.
 // The LLM is instructed to read full skill content on-demand using tools.
 func (s *Skills) InjectMetadata(basePrompt string) string {
-	if s.skills == nil || len(s.skills) == 0 {
+	if len(s.skills) < 1 {
 		return basePrompt
 	}
 
