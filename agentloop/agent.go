@@ -58,7 +58,10 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	toolRegistry := NewToolRegistry()
 
 	// Add built-in tools (will receive backend and todoManager via context)
-	builtinTools := BuiltinTools(config.EnableFinishTool)
+	builtinTools := BuiltinTools(
+		WithEnableFileTool(config.EnableFileTool),
+		WithEnableFinishTool(config.EnableFinishTool),
+	)
 	toolRegistry.Merge(builtinTools)
 
 	// Add custom tools

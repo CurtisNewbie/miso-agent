@@ -69,147 +69,210 @@ type FinishToolArgs struct {
 
 const finishToolName = "finish_tool"
 
-// BuiltinTools returns the built-in tools.
-func BuiltinTools(enableFinishTool bool) *ToolRegistry {
+// BuiltinToolsOption configures which built-in tools are registered.
+type BuiltinToolsOption struct {
+	// EnableFileTool enables the file-related tools: read_file, write_file, edit_file,
+	// list_directory, glob, and add_artifact. Default: false.
+	EnableFileTool bool
+
+	// EnableFinishTool enables the finish_tool that the agent can call to signal task completion.
+	// Default: false.
+	EnableFinishTool bool
+}
+
+// WithEnableFileTool enables or disables the built-in file tools (read_file, write_file,
+// edit_file, list_directory, glob, add_artifact).
+func WithEnableFileTool(v bool) func(o *BuiltinToolsOption) {
+	return func(o *BuiltinToolsOption) {
+		o.EnableFileTool = v
+	}
+}
+
+// WithEnableFinishTool enables or disables the built-in finish_tool.
+func WithEnableFinishTool(v bool) func(o *BuiltinToolsOption) {
+	return func(o *BuiltinToolsOption) {
+		o.EnableFinishTool = v
+	}
+}
+
+// BuiltinTools returns the built-in tools configured by the provided options.
+// By default (no options), no tools are registered; use WithEnableFileTool and
+// WithEnableFinishTool to opt in.
+func BuiltinTools(ops ...func(o *BuiltinToolsOption)) *ToolRegistry {
+	o := &BuiltinToolsOption{}
+	for _, op := range ops {
+		op(o)
+	}
+
 	registry := NewToolRegistry()
 
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"read_file",
-		"Read file content. Supports chunked reading with offset/limit for large files. Use offset and limit to read specific sections.",
-		map[string]*schema.ParameterInfo{
-			"path":   StringParam("The absolute path to the file to read", true),
-			"offset": NumberParam("Optional: Line number to start reading from (0-based). Default: 0", false),
-			"limit":  NumberParam("Optional: Maximum number of lines to read. Default: read entire file", false),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args ReadFileArgs) (string, error) {
-			content, err := agentCtx.Store.ReadFile(ctx, args.Path)
-			if err != nil {
-				return "", errs.Wrapf(err, "failed to read file")
-			}
-
-			// Apply pagination if requested
-			if args.Offset > 0 || args.Limit > 0 {
-				lines := strings.Split(string(content), "\n")
-				start := args.Offset
-				if start < 0 {
-					start = 0
+	if o.EnableFileTool {
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"read_file",
+			"Read file content. Supports chunked reading with offset/limit for large files. Use offset and limit to read specific sections.",
+			map[string]*schema.ParameterInfo{
+				"path":   StringParam("The absolute path to the file to read", true),
+				"offset": NumberParam("Optional: Line number to start reading from (0-based). Default: 0", false),
+				"limit":  NumberParam("Optional: Maximum number of lines to read. Default: read entire file", false),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args ReadFileArgs) (string, error) {
+				content, err := agentCtx.Store.ReadFile(ctx, args.Path)
+				if err != nil {
+					return "", errs.Wrapf(err, "failed to read file")
 				}
-				if start >= len(lines) {
-					return "", nil
+
+				// Apply pagination if requested
+				if args.Offset > 0 || args.Limit > 0 {
+					lines := strings.Split(string(content), "\n")
+					start := args.Offset
+					if start < 0 {
+						start = 0
+					}
+					if start >= len(lines) {
+						return "", nil
+					}
+					end := start + args.Limit
+					if args.Limit <= 0 || end > len(lines) {
+						end = len(lines)
+					}
+					content = []byte(strings.Join(lines[start:end], "\n"))
 				}
-				end := start + args.Limit
-				if args.Limit <= 0 || end > len(lines) {
-					end = len(lines)
+
+				return string(content), nil
+			},
+		))
+
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"write_file",
+			"Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
+			map[string]*schema.ParameterInfo{
+				"path":    StringParam("The absolute path to the file to write", true),
+				"content": StringParam("The content to write to the file", true),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args WriteFileArgs) (string, error) {
+				if err := agentCtx.Store.WriteFile(ctx, args.Path, strutil.UnsafeStr2Byt(args.Content)); err != nil {
+					return "", errs.Wrapf(err, "failed to write file")
 				}
-				content = []byte(strings.Join(lines[start:end], "\n"))
-			}
 
-			return string(content), nil
-		},
-	))
+				return fmt.Sprintf("Successfully wrote to %s", args.Path), nil
+			},
+		))
 
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"write_file",
-		"Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
-		map[string]*schema.ParameterInfo{
-			"path":    StringParam("The absolute path to the file to write", true),
-			"content": StringParam("The content to write to the file", true),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args WriteFileArgs) (string, error) {
-			if err := agentCtx.Store.WriteFile(ctx, args.Path, strutil.UnsafeStr2Byt(args.Content)); err != nil {
-				return "", errs.Wrapf(err, "failed to write file")
-			}
-
-			return fmt.Sprintf("Successfully wrote to %s", args.Path), nil
-		},
-	))
-
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"edit_file",
-		"Performs exact string replacements in files. You must read the file before editing. Preserve exact indentation from the read output. Prefer editing existing files over creating new ones.",
-		map[string]*schema.ParameterInfo{
-			"path":        StringParam("The absolute path to the file to edit", true),
-			"old_string":  StringParam("The exact text to find and replace. Must be unique in the file unless replace_all is True", true),
-			"new_string":  StringParam("The text to replace old_string with. Must be different from old_string", true),
-			"replace_all": BoolParam("If True, replace all occurrences of old_string. If False (default), old_string must be unique", false),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args EditFileArgs) (string, error) {
-			// Check if old_string and new_string are different
-			if args.OldString == args.NewString {
-				return "", errs.NewErrf("old_string and new_string must be different")
-			}
-
-			// Read the file
-			content, err := agentCtx.Store.ReadFile(ctx, args.Path)
-			if err != nil {
-				return "", errs.Wrapf(err, "failed to read file for editing")
-			}
-
-			contentStr := string(content)
-
-			// Count occurrences of old_string
-			occurrences := strings.Count(contentStr, args.OldString)
-
-			if occurrences == 0 {
-				return "", errs.NewErrf("String not found in file: '%s'", args.OldString)
-			}
-
-			if occurrences > 1 && !args.ReplaceAll {
-				return "", errs.NewErrf("String '%s' appears %d times in file. Use replace_all=true to replace all instances, or provide a more specific string with surrounding context", args.OldString, occurrences)
-			}
-
-			// Perform replacement
-			newContent := strings.ReplaceAll(contentStr, args.OldString, args.NewString)
-
-			// Write the modified content back
-			if err := agentCtx.Store.WriteFile(ctx, args.Path, []byte(newContent)); err != nil {
-				return "", errs.Wrapf(err, "failed to write edited file")
-			}
-
-			return fmt.Sprintf("Successfully replaced %d instance(s) of the string in '%s'", occurrences, args.Path), nil
-		},
-	))
-
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"list_directory",
-		"List the names of files and subdirectories in a directory.",
-		map[string]*schema.ParameterInfo{
-			"path": StringParam("The absolute path to the directory to list", true),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args ListDirectoryArgs) (string, error) {
-			files, err := agentCtx.Store.ListDirectory(ctx, args.Path)
-			if err != nil {
-				return "", errs.Wrapf(err, "failed to list directory")
-			}
-
-			sb := strutil.NewBuilder()
-			for _, file := range files {
-				if file.IsDir {
-					sb.Printf("[DIR]  %s\n", file.Path)
-				} else {
-					sb.Printf("[FILE] %s (%d bytes)\n", file.Path, file.Size)
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"edit_file",
+			"Performs exact string replacements in files. You must read the file before editing. Preserve exact indentation from the read output. Prefer editing existing files over creating new ones.",
+			map[string]*schema.ParameterInfo{
+				"path":        StringParam("The absolute path to the file to edit", true),
+				"old_string":  StringParam("The exact text to find and replace. Must be unique in the file unless replace_all is True", true),
+				"new_string":  StringParam("The text to replace old_string with. Must be different from old_string", true),
+				"replace_all": BoolParam("If True, replace all occurrences of old_string. If False (default), old_string must be unique", false),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args EditFileArgs) (string, error) {
+				// Check if old_string and new_string are different
+				if args.OldString == args.NewString {
+					return "", errs.NewErrf("old_string and new_string must be different")
 				}
-			}
 
-			return sb.String(), nil
-		},
-	))
+				// Read the file
+				content, err := agentCtx.Store.ReadFile(ctx, args.Path)
+				if err != nil {
+					return "", errs.Wrapf(err, "failed to read file for editing")
+				}
 
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"glob",
-		"Find files matching a pattern (e.g., '*.go', 'src/**/*.ts', '**/*.md'). Supports * (any characters in path component), ** (zero or more directories), and ? (single character).",
-		map[string]*schema.ParameterInfo{
-			"pattern": StringParam("The glob pattern to match", true),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args GlobArgs) (string, error) {
-			matches, err := globRecursive(ctx, agentCtx.Store, args.Pattern, ".")
-			if err != nil {
-				return "", errs.Wrapf(err, "failed to glob")
-			}
+				contentStr := string(content)
 
-			return strings.Join(matches, "\n"), nil
-		},
-	))
+				// Count occurrences of old_string
+				occurrences := strings.Count(contentStr, args.OldString)
+
+				if occurrences == 0 {
+					return "", errs.NewErrf("String not found in file: '%s'", args.OldString)
+				}
+
+				if occurrences > 1 && !args.ReplaceAll {
+					return "", errs.NewErrf("String '%s' appears %d times in file. Use replace_all=true to replace all instances, or provide a more specific string with surrounding context", args.OldString, occurrences)
+				}
+
+				// Perform replacement
+				newContent := strings.ReplaceAll(contentStr, args.OldString, args.NewString)
+
+				// Write the modified content back
+				if err := agentCtx.Store.WriteFile(ctx, args.Path, []byte(newContent)); err != nil {
+					return "", errs.Wrapf(err, "failed to write edited file")
+				}
+
+				return fmt.Sprintf("Successfully replaced %d instance(s) of the string in '%s'", occurrences, args.Path), nil
+			},
+		))
+
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"list_directory",
+			"List the names of files and subdirectories in a directory.",
+			map[string]*schema.ParameterInfo{
+				"path": StringParam("The absolute path to the directory to list", true),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args ListDirectoryArgs) (string, error) {
+				files, err := agentCtx.Store.ListDirectory(ctx, args.Path)
+				if err != nil {
+					return "", errs.Wrapf(err, "failed to list directory")
+				}
+
+				sb := strutil.NewBuilder()
+				for _, file := range files {
+					if file.IsDir {
+						sb.Printf("[DIR]  %s\n", file.Path)
+					} else {
+						sb.Printf("[FILE] %s (%d bytes)\n", file.Path, file.Size)
+					}
+				}
+
+				return sb.String(), nil
+			},
+		))
+
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"glob",
+			"Find files matching a pattern (e.g., '*.go', 'src/**/*.ts', '**/*.md'). Supports * (any characters in path component), ** (zero or more directories), and ? (single character).",
+			map[string]*schema.ParameterInfo{
+				"pattern": StringParam("The glob pattern to match", true),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args GlobArgs) (string, error) {
+				matches, err := globRecursive(ctx, agentCtx.Store, args.Pattern, ".")
+				if err != nil {
+					return "", errs.Wrapf(err, "failed to glob")
+				}
+
+				return strings.Join(matches, "\n"), nil
+			},
+		))
+
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"add_artifact",
+			"Register a file as an artifact collected during execution. The file size will be automatically read from the FileStore.",
+			map[string]*schema.ParameterInfo{
+				"path":     StringParam("The absolute path to the file to register as an artifact", true),
+				"metadata": ObjectParam("Optional metadata about the artifact (e.g., title, url, description)", map[string]*schema.ParameterInfo{}, false),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args AddArtifactArgs) (string, error) {
+				// Read file from FileStore to get size
+				content, err := agentCtx.Store.ReadFile(ctx, args.Path)
+				if err != nil {
+					return "", errs.Wrapf(err, "failed to read artifact file")
+				}
+
+				artifact := Artifact{
+					Path:        args.Path,
+					SizeInBytes: int64(len(content)),
+					Meta:        args.Metadata,
+				}
+
+				if err := agentCtx.Artifacts.AddArtifact(artifact); err != nil {
+					return "", errs.Wrapf(err, "failed to add artifact")
+				}
+
+				return fmt.Sprintf("Successfully registered artifact: %s (%d bytes)", args.Path, len(content)), nil
+			},
+		))
+	} // end if o.EnableFileTool
 
 	// Add todo tools
 	registry.Register(NewTypedCtxAwareToolFunc(
@@ -288,36 +351,8 @@ func BuiltinTools(enableFinishTool bool) *ToolRegistry {
 		},
 	))
 
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"add_artifact",
-		"Register a file as an artifact collected during execution. The file size will be automatically read from the FileStore.",
-		map[string]*schema.ParameterInfo{
-			"path":     StringParam("The absolute path to the file to register as an artifact", true),
-			"metadata": ObjectParam("Optional metadata about the artifact (e.g., title, url, description)", map[string]*schema.ParameterInfo{}, false),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args AddArtifactArgs) (string, error) {
-			// Read file from FileStore to get size
-			content, err := agentCtx.Store.ReadFile(ctx, args.Path)
-			if err != nil {
-				return "", errs.Wrapf(err, "failed to read artifact file")
-			}
-
-			artifact := Artifact{
-				Path:        args.Path,
-				SizeInBytes: int64(len(content)),
-				Meta:        args.Metadata,
-			}
-
-			if err := agentCtx.Artifacts.AddArtifact(artifact); err != nil {
-				return "", errs.Wrapf(err, "failed to add artifact")
-			}
-
-			return fmt.Sprintf("Successfully registered artifact: %s (%d bytes)", args.Path, len(content)), nil
-		},
-	))
-
 	// Add finish_tool if enabled
-	if enableFinishTool {
+	if o.EnableFinishTool {
 		registry.Register(NewTypedToolFunc(
 			finishToolName,
 			"Call this tool when you have completed the task and have a final answer. This signals the end of the ReAct loop and your final response will be provided to the user.",
