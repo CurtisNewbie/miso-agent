@@ -93,8 +93,9 @@ type AgentContext struct {
 
 // AgentRequest represents a request to execute an agent
 type AgentRequest struct {
-	UserInput        string
-	ArtifactCallback func(store FileStore, artifacts []Artifact) error // Optional callback for artifacts
+	UserInput           string
+	PreloadBackendFiles func(store FileStore) error                       // Optional callback to preload files into the backend before execution
+	ArtifactCallback    func(store FileStore, artifacts []Artifact) error // Optional callback for artifacts
 }
 
 // Execute runs the agent with the given request.
@@ -118,6 +119,13 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 				rail.Errorf("failed to end session: %v", err)
 			}
 		}()
+	}
+
+	// Preload backend files if callback provided (runs after session start, before skills are loaded)
+	if req.PreloadBackendFiles != nil {
+		if err := req.PreloadBackendFiles(backend); err != nil {
+			return TaskOutput{}, errs.Wrapf(err, "failed to preload backend files")
+		}
 	}
 
 	// Write preloaded skills into the backend

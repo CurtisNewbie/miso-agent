@@ -3,6 +3,7 @@ package agentloop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -1437,6 +1438,59 @@ func TestAgentRequest(t *testing.T) {
 	if len(callbackArtifacts) != 1 {
 		t.Errorf("Expected 1 artifact in callback, got %d", len(callbackArtifacts))
 	}
+}
+
+func TestAgentRequest_PreloadBackendFiles(t *testing.T) {
+	t.Run("callback is invoked with the backend store", func(t *testing.T) {
+		var receivedStore FileStore
+		called := false
+
+		req := AgentRequest{
+			UserInput: "test",
+			PreloadBackendFiles: func(store FileStore) error {
+				called = true
+				receivedStore = store
+				return nil
+			},
+		}
+
+		store := NewTmpFileStore()
+		if err := req.PreloadBackendFiles(store); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !called {
+			t.Error("expected PreloadBackendFiles to be called")
+		}
+		if receivedStore != store {
+			t.Error("expected the store passed to callback to match the provided store")
+		}
+	})
+
+	t.Run("nil callback does not panic", func(t *testing.T) {
+		req := AgentRequest{
+			UserInput:           "test",
+			PreloadBackendFiles: nil,
+		}
+		// Should not panic
+		if req.PreloadBackendFiles != nil {
+			t.Error("expected PreloadBackendFiles to be nil")
+		}
+	})
+
+	t.Run("callback error is propagated", func(t *testing.T) {
+		expectedErr := errors.New("preload failed")
+		req := AgentRequest{
+			UserInput: "test",
+			PreloadBackendFiles: func(store FileStore) error {
+				return expectedErr
+			},
+		}
+
+		err := req.PreloadBackendFiles(NewTmpFileStore())
+		if err == nil {
+			t.Error("expected error to be returned")
+		}
+	})
 }
 
 func TestBuiltinTools_FileToolDisabled(t *testing.T) {
