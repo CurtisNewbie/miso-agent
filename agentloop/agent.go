@@ -105,7 +105,19 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		backend = a.config.BackendFactory()
 	}
 	if backend == nil {
-		backend = NewMemFileStore()
+		backend = NewTmpFileStore()
+	}
+
+	// Session lifecycle: notify the backend that the session is starting.
+	if sa, ok := backend.(SessionAware); ok {
+		if err := sa.OnSessionStart(rail); err != nil {
+			return TaskOutput{}, errs.Wrapf(err, "failed to start session")
+		}
+		defer func() {
+			if err := sa.OnSessionEnd(rail); err != nil {
+				rail.Errorf("failed to end session: %v", err)
+			}
+		}()
 	}
 
 	// Write preloaded skills into the backend

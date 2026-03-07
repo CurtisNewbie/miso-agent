@@ -21,7 +21,7 @@ type AgentConfig struct {
 	Skills []string
 
 	// PreloadedSkills is a map of file paths to content that will be written to the backend
-	// before loading skills. This is useful for predefining skills when using MemFileStore.
+	// before loading skills. This is useful for predefining skills when using TmpFileStore.
 	// Example: {"/skills/web-research/SKILL.md": "# Web Research\n\n..."}
 	//
 	// See [BuildPreloadedSkills], [BuildPreloadedSkillsWithFilter]
@@ -45,7 +45,7 @@ type AgentConfig struct {
 	SystemPrompt string
 
 	// BackendFactory is a factory function that creates a fresh FileStore for each execution.
-	// If nil, a new MemFileStore will be created for each execution.
+	// If nil, a new TmpFileStore will be created for each execution.
 	// This allows stateful backends to be created fresh per execution.
 	BackendFactory func() FileStore
 

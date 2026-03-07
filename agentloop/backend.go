@@ -2,12 +2,14 @@ package agentloop
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/curtisnewbie/miso/errs"
+	"github.com/curtisnewbie/miso/flow"
 )
 
 // FileStore defines the interface for file operations.
@@ -29,99 +31,174 @@ type FileStore interface {
 	DeleteFile(ctx context.Context, path string) error
 }
 
+// SessionAware is implemented by FileStore backends that need lifecycle management
+// tied to an agent session.
+type SessionAware interface {
+	// OnSessionStart is called when an agent session begins, before any file operations.
+	// Implementations should perform any initialisation here (e.g. creating a tmp directory).
+	OnSessionStart(rail flow.Rail) error
+
+	// OnSessionEnd is called when an agent session ends.
+	// Implementations should release resources here (e.g. removing the tmp directory).
+	OnSessionEnd(rail flow.Rail) error
+}
+
 // FileInfo represents file metadata.
 type FileInfo struct {
-	Path       string `json:"path"`
-	IsDir      bool   `json:"is_dir"`
-	Size       int64  `json:"size"`
-	ModifiedAt string `json:"modified_at"`
+	Path       string    `json:"path"`
+	IsDir      bool      `json:"is_dir"`
+	Size       int64     `json:"size"`
+	ModifiedAt time.Time `json:"modified_at"`
 }
 
-// MemFileStore is an in-memory backend implementation.
-// Suitable for ephemeral sessions and testing.
-type MemFileStore struct {
-	mu    sync.RWMutex
-	files map[string]*FileEntry
-}
-
-// FileEntry represents a file in the memory file backend.
-type FileEntry struct {
-	Content     []byte
-	ModifiedAt  string
+// fileRef holds a reference to a tmp file on disk for a single logical file entry.
+type fileRef struct {
+	TmpPath     string // absolute path to the local tmp file; empty for directory entries
+	ModifiedAt  time.Time
 	IsDirectory bool
+	Size        int64
 }
 
-// NewMemFileStore creates a new in-memory file backend.
-func NewMemFileStore() *MemFileStore {
-	return &MemFileStore{
-		files: make(map[string]*FileEntry),
+// TmpFileStore is a tmp-file-backed FileStore implementation.
+// Each session gets its own tmp directory; all files written during the session are
+// stored as individual tmp files inside that directory.
+// Call OnSessionStart before any file operations and OnSessionEnd when done.
+type TmpFileStore struct {
+	mu    sync.RWMutex
+	files map[string]fileRef // logical path -> reference to tmp file on disk
+	dir   string             // session tmp directory, created in OnSessionStart
+}
+
+// NewTmpFileStore creates a new TmpFileStore.
+// Call OnSessionStart before writing any files.
+func NewTmpFileStore() *TmpFileStore {
+	return &TmpFileStore{
+		files: make(map[string]fileRef),
 	}
 }
 
-// ReadFile reads a file from the memory file backend.
-func (b *MemFileStore) ReadFile(ctx context.Context, path string) ([]byte, error) {
+// OnSessionStart creates the session tmp directory.
+// Must be called before any file operations.
+func (b *TmpFileStore) OnSessionStart(rail flow.Rail) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	dir, err := os.MkdirTemp("", "miso-agent-*")
+	if err != nil {
+		return errs.Wrapf(err, "failed to create session tmp directory")
+	}
+	b.dir = dir
+	rail.Infof("TmpFileStore session started, tmp dir: %s", dir)
+	return nil
+}
+
+// OnSessionEnd removes the session tmp directory and all files inside it.
+func (b *TmpFileStore) OnSessionEnd(rail flow.Rail) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.dir == "" {
+		return nil
+	}
+	if err := os.RemoveAll(b.dir); err != nil {
+		return errs.Wrapf(err, "failed to remove session tmp directory: %s", b.dir)
+	}
+	rail.Infof("TmpFileStore session ended, removed tmp dir: %s", b.dir)
+	b.dir = ""
+	b.files = make(map[string]fileRef)
+	return nil
+}
+
+// ReadFile reads a file from the tmp-file-backed store.
+func (b *TmpFileStore) ReadFile(ctx context.Context, path string) ([]byte, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	normalizedPath := normalizeMemPath(path)
-	entry, exists := b.files[normalizedPath]
+	ref, exists := b.files[normalizedPath]
 	if !exists {
 		return nil, errs.NewErrf("file not found: %s", path)
 	}
-	if entry.IsDirectory {
+	if ref.IsDirectory {
 		return nil, errs.NewErrf("cannot read directory: %s", path)
 	}
-	return entry.Content, nil
+	content, err := os.ReadFile(ref.TmpPath)
+	if err != nil {
+		return nil, errs.Wrapf(err, "failed to read tmp file for %s", path)
+	}
+	return content, nil
 }
 
-// WriteFile writes content to a file in the memory file backend.
-func (b *MemFileStore) WriteFile(ctx context.Context, path string, content []byte) error {
+// WriteFile writes content to a new tmp file inside the session directory.
+func (b *TmpFileStore) WriteFile(ctx context.Context, path string, content []byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	normalizedPath := normalizeMemPath(path)
-	dir := filepath.Dir(normalizedPath)
 
-	// Ensure parent directory exists
+	// Ensure parent directory entry exists in the map.
+	dir := filepath.Dir(normalizedPath)
 	if dir != "." && dir != "/" {
 		if _, exists := b.files[dir]; !exists {
-			b.files[dir] = &FileEntry{
+			b.files[dir] = fileRef{
 				IsDirectory: true,
-				ModifiedAt:  time.Now().Format(time.RFC3339),
+				ModifiedAt:  time.Now(),
 			}
 		}
 	}
 
-	b.files[normalizedPath] = &FileEntry{
-		Content:     content,
-		ModifiedAt:  time.Now().Format(time.RFC3339),
-		IsDirectory: false,
+	// If a tmp file already exists for this path, overwrite it in place.
+	if existing, exists := b.files[normalizedPath]; exists && !existing.IsDirectory && existing.TmpPath != "" {
+		if err := os.WriteFile(existing.TmpPath, content, 0o600); err != nil {
+			return errs.Wrapf(err, "failed to overwrite tmp file for %s", path)
+		}
+		b.files[normalizedPath] = fileRef{
+			TmpPath:    existing.TmpPath,
+			ModifiedAt: time.Now(),
+			Size:       int64(len(content)),
+		}
+		return nil
 	}
 
+	// Create a new tmp file inside the session directory.
+	f, err := os.CreateTemp(b.dir, "file-*")
+	if err != nil {
+		return errs.Wrapf(err, "failed to create tmp file for %s", path)
+	}
+	tmpPath := f.Name()
+	if _, err := f.Write(content); err != nil {
+		f.Close()
+		return errs.Wrapf(err, "failed to write tmp file for %s", path)
+	}
+	f.Close()
+
+	b.files[normalizedPath] = fileRef{
+		TmpPath:    tmpPath,
+		ModifiedAt: time.Now(),
+		Size:       int64(len(content)),
+	}
 	return nil
 }
 
-// ListDirectory lists files and directories in a path.
-func (b *MemFileStore) ListDirectory(ctx context.Context, path string) ([]FileInfo, error) {
+// ListDirectory lists direct children of the given path.
+func (b *TmpFileStore) ListDirectory(ctx context.Context, path string) ([]FileInfo, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
 	normalizedPath := normalizeMemPath(path)
 	var result []FileInfo
 
-	for p, entry := range b.files {
+	for p, ref := range b.files {
 		if p == normalizedPath {
 			continue
 		}
-
-		// Check if this path is a direct child of the requested directory
 		dir := filepath.Dir(p)
 		if dir == normalizedPath {
 			result = append(result, FileInfo{
 				Path:       filepath.Base(p),
-				IsDir:      entry.IsDirectory,
-				Size:       int64(len(entry.Content)),
-				ModifiedAt: entry.ModifiedAt,
+				IsDir:      ref.IsDirectory,
+				Size:       ref.Size,
+				ModifiedAt: ref.ModifiedAt,
 			})
 		}
 	}
@@ -129,8 +206,8 @@ func (b *MemFileStore) ListDirectory(ctx context.Context, path string) ([]FileIn
 	return result, nil
 }
 
-// FileExists checks if a file exists.
-func (b *MemFileStore) FileExists(ctx context.Context, path string) (bool, error) {
+// FileExists checks whether a file or directory exists.
+func (b *TmpFileStore) FileExists(ctx context.Context, path string) (bool, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
@@ -139,14 +216,22 @@ func (b *MemFileStore) FileExists(ctx context.Context, path string) (bool, error
 	return exists, nil
 }
 
-// DeleteFile deletes a file.
-func (b *MemFileStore) DeleteFile(ctx context.Context, path string) error {
+// DeleteFile removes a file entry and its underlying tmp file.
+func (b *TmpFileStore) DeleteFile(ctx context.Context, path string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	normalizedPath := normalizeMemPath(path)
-	if _, exists := b.files[normalizedPath]; !exists {
+	ref, exists := b.files[normalizedPath]
+	if !exists {
 		return errs.NewErrf("file not found: %s", path)
+	}
+
+	// Remove the underlying tmp file (directories have no tmp file).
+	if !ref.IsDirectory && ref.TmpPath != "" {
+		if err := os.Remove(ref.TmpPath); err != nil && !os.IsNotExist(err) {
+			return errs.Wrapf(err, "failed to remove tmp file for %s", path)
+		}
 	}
 
 	delete(b.files, normalizedPath)

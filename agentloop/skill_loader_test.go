@@ -66,7 +66,7 @@ func TestNormalizePath(t *testing.T) {
 
 func TestSkillLoader_LoadSkillFile(t *testing.T) {
 	ctx := context.Background()
-	backend := NewMemFileStore()
+	backend := newTestMemFileStore()
 	loader := NewSkillLoader(backend)
 
 	// Write a valid skill file
@@ -165,7 +165,7 @@ description: A skill with invalid name
 
 func TestSkillLoader_LoadFromSource(t *testing.T) {
 	ctx := context.Background()
-	backend := NewMemFileStore()
+	backend := newTestMemFileStore()
 	loader := NewSkillLoader(backend)
 
 	// Create skill files in the source directory
@@ -207,7 +207,7 @@ description: Data analysis skill
 	})
 
 	t.Run("load from non-existent source", func(t *testing.T) {
-		// MemFileStore returns empty slice for non-existent directories (no error)
+		// TmpFileStore returns empty slice for non-existent directories (no error)
 		skills, err := loader.LoadFromSource(ctx, "non-existent")
 		if err != nil {
 			t.Fatalf("LoadFromSource failed: %v", err)
@@ -233,7 +233,7 @@ description: Data analysis skill
 
 func TestSkillLoader_LoadFromSources(t *testing.T) {
 	ctx := context.Background()
-	backend := NewMemFileStore()
+	backend := newTestMemFileStore()
 	loader := NewSkillLoader(backend)
 
 	// Create skills in source1
@@ -303,7 +303,7 @@ description: Coding skill
 
 	t.Run("load with one non-existent source", func(t *testing.T) {
 		sources := []string{"source1", "non-existent"}
-		// MemFileStore returns empty slice for non-existent directories (no error)
+		// TmpFileStore returns empty slice for non-existent directories (no error)
 		skills, err := loader.LoadFromSources(ctx, sources)
 		if err != nil {
 			t.Fatalf("LoadFromSources failed: %v", err)

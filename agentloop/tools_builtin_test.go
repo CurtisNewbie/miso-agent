@@ -11,7 +11,7 @@ import (
 
 func TestBuiltinTools_ReadFile(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create a test file
@@ -48,7 +48,7 @@ func TestBuiltinTools_ReadFile(t *testing.T) {
 
 func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	tool, ok := registry.Get("read_file")
@@ -73,7 +73,7 @@ func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 
 func TestBuiltinTools_WriteFile(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	testPath := "write_test.txt"
@@ -116,7 +116,7 @@ func TestBuiltinTools_WriteFile(t *testing.T) {
 
 func TestBuiltinTools_EditFile_Success(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create a test file
@@ -166,7 +166,7 @@ func TestBuiltinTools_EditFile_Success(t *testing.T) {
 
 func TestBuiltinTools_EditFile_ReplaceAll(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create a test file
@@ -217,7 +217,7 @@ func TestBuiltinTools_EditFile_ReplaceAll(t *testing.T) {
 
 func TestBuiltinTools_EditFile_NotFound(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create a test file
@@ -256,7 +256,7 @@ func TestBuiltinTools_EditFile_NotFound(t *testing.T) {
 
 func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 
 	// Setup AgentContext for tool execution
 	agentCtx := AgentContext{
@@ -295,7 +295,7 @@ func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
 
 func TestBuiltinTools_EditFile_SameStrings(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create a test file
@@ -334,7 +334,7 @@ func TestBuiltinTools_EditFile_SameStrings(t *testing.T) {
 
 func TestBuiltinTools_EditFile_FileNotFound(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	tool, ok := registry.Get("edit_file")
@@ -416,7 +416,7 @@ func TestNewThinkTool_EmptyReflection(t *testing.T) {
 
 func TestBuiltinTools_ListDirectory(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create test files and directories
@@ -450,7 +450,7 @@ func TestBuiltinTools_ListDirectory(t *testing.T) {
 
 func TestBuiltinTools_Glob_Simple(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create test files
@@ -485,7 +485,7 @@ func TestBuiltinTools_Glob_Simple(t *testing.T) {
 
 func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create test files in nested directories
@@ -524,7 +524,7 @@ func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 
 func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create test files
@@ -570,7 +570,7 @@ func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 
 func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create test files
@@ -607,7 +607,7 @@ func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 
 func TestBuiltinTools_Glob_DoubleStarAtEnd(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create test files
@@ -654,7 +654,7 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 	}
 
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: todoManager,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -698,7 +698,7 @@ func TestBuiltinTools_AddTodoMultiple(t *testing.T) {
 	}
 
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: todoManager,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -760,7 +760,7 @@ func TestBuiltinTools_UpdateTodo(t *testing.T) {
 	}
 
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: todoManager,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -804,7 +804,7 @@ func TestBuiltinTools_ListTodos(t *testing.T) {
 	}
 
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: todoManager,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -833,7 +833,7 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 	}
 
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: todoManager,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -877,7 +877,7 @@ func TestBuiltinTools_DeleteTodoMultiple(t *testing.T) {
 	}
 
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: todoManager,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -931,7 +931,7 @@ func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 	}
 
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: todoManager,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -1092,7 +1092,7 @@ func TestTypedCtxAwareToolFunc(t *testing.T) {
 	// Test via ExecuteJson with context containing AgentContext
 	ctx := context.Background()
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: NewTodoManager(),
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -1137,7 +1137,7 @@ func TestTypedTodoAwareToolFunc(t *testing.T) {
 	// Test via ExecuteJson with context containing AgentContext
 	ctx := context.Background()
 	agentCtx := AgentContext{
-		Store: NewMemFileStore(),
+		Store: newTestMemFileStore(),
 		Todos: NewTodoManager(),
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
@@ -1156,7 +1156,7 @@ func TestTypedTodoAwareToolFunc(t *testing.T) {
 
 func TestBuiltinTools_AddArtifact(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create a test file
@@ -1217,7 +1217,7 @@ func TestBuiltinTools_AddArtifact(t *testing.T) {
 
 func TestBuiltinTools_AddArtifact_NoMetadata(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Create a test file
@@ -1264,7 +1264,7 @@ func TestBuiltinTools_AddArtifact_NoMetadata(t *testing.T) {
 
 func TestBuiltinTools_AddArtifact_FileNotFound(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Test adding an artifact for a non-existent file
@@ -1299,7 +1299,7 @@ func TestBuiltinTools_AddArtifact_FileNotFound(t *testing.T) {
 
 func TestBuiltinTools_AddArtifact_EmptyPath(t *testing.T) {
 	ctx := context.Background()
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	registry := BuiltinTools(WithEnableFileTool(true))
 
 	// Test adding an artifact with empty path
@@ -1422,7 +1422,7 @@ func TestAgentRequest(t *testing.T) {
 	}
 
 	// Test calling the callback
-	if err := req.ArtifactCallback(NewMemFileStore(), []Artifact{{Path: "/test.txt", SizeInBytes: 100}}); err != nil {
+	if err := req.ArtifactCallback(NewTmpFileStore(), []Artifact{{Path: "/test.txt", SizeInBytes: 100}}); err != nil {
 		t.Fatalf("Failed to call ArtifactCallback: %v", err)
 	}
 

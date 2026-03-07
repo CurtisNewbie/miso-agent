@@ -254,7 +254,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 				t.Fatalf("Failed to create tokenizer: %v", err)
 			}
 
-			be := NewMemFileStore()
+			be := newTestMemFileStore()
 			config := tt.config
 			config.BackendFactory = func() FileStore { return be }
 
@@ -283,7 +283,7 @@ func TestAgent_evictLargeToolResults(t *testing.T) {
 }
 
 func TestAgent_evictToolResult(t *testing.T) {
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	tokenizer, err := NewTokenizer("gpt-3.5-turbo")
 	if err != nil {
 		t.Fatalf("Failed to create tokenizer: %v", err)
@@ -330,7 +330,7 @@ func TestAgent_evictToolResult(t *testing.T) {
 }
 
 func TestAgent_evictToolResult_WithPreview(t *testing.T) {
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	tokenizer, err := NewTokenizer("gpt-3.5-turbo")
 	if err != nil {
 		t.Fatalf("Failed to create tokenizer: %v", err)
@@ -364,7 +364,7 @@ func TestAgent_evictToolResult_WithPreview(t *testing.T) {
 }
 
 func TestAgent_evictToolResult_NoPreview(t *testing.T) {
-	be := NewMemFileStore()
+	be := newTestMemFileStore()
 	tokenizer, err := NewTokenizer("gpt-3.5-turbo")
 	if err != nil {
 		t.Fatalf("Failed to create tokenizer: %v", err)
