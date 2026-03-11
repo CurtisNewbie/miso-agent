@@ -41,14 +41,14 @@ func shouldContinueLoop(lastMsg *schema.Message, enableFinishTool bool) bool {
 
 // resolveBranchTarget maps (shouldContinue, input message) to a graph node name.
 // When shouldContinue is true:
-//   - no tool calls → "chat_model" (prompt model to call finish_tool)
+//   - no tool calls → "loop_back_model" (wraps message for chat_model, prompting the model to call finish_tool)
 //   - has tool calls → "tools"
 //
 // When shouldContinue is false → "final_output".
 func resolveBranchTarget(shouldContinue bool, input *schema.Message) string {
 	if shouldContinue {
 		if len(input.ToolCalls) == 0 {
-			return "chat_model"
+			return "loop_back_model"
 		}
 		return "tools"
 	}
@@ -230,6 +230,13 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}, nil
 	}), compose.WithNodeName("Final Output"))
 
+	// Loop-back-model adapter node: wraps a single *schema.Message into []*schema.Message.
+	// Used when branch routes back to chat_model without going through the tools node,
+	// because chat_model's StatePreHandler expects []*schema.Message as input.
+	_ = g.AddLambdaNode("loop_back_model", compose.InvokableLambda(func(ctx context.Context, input *schema.Message) ([]*schema.Message, error) {
+		return []*schema.Message{input}, nil
+	}), compose.WithNodeName("Loop Back Model"))
+
 	// Branch: continue loop or finish
 	_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
 		shouldContinue := false
@@ -245,9 +252,9 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}
 		return resolveBranchTarget(shouldContinue, input), nil
 	}, map[string]bool{
-		"chat_model":   true,
-		"tools":        true,
-		"final_output": true,
+		"loop_back_model": true,
+		"tools":           true,
+		"final_output":    true,
 	}))
 
 	// Add edges - ReAct loop pattern (matching Eino)
@@ -257,6 +264,9 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 	// Loop back: tools → chat_model
 	_ = g.AddEdge("tools", "chat_model")
+
+	// Loop back (no-tool-call path): loop_back_model → chat_model
+	_ = g.AddEdge("loop_back_model", "chat_model")
 
 	// Finish: final_output → END
 	_ = g.AddEdge("final_output", compose.END)

@@ -152,8 +152,8 @@ func TestResolveBranchTarget(t *testing.T) {
 				Role:    schema.Assistant,
 				Content: "I think I am done, but forgot to call finish_tool.",
 			},
-			want:        "chat_model",
-			description: "When shouldContinue but no tool calls, route back to chat_model to avoid ToolsNode panic",
+			want:        "loop_back_model",
+			description: "When shouldContinue but no tool calls, route to loop_back_model adapter (not tools) to avoid ToolsNode panic",
 		},
 	}
 
