@@ -14,6 +14,47 @@ type agentLoopState struct {
 	messages  []*schema.Message
 }
 
+// shouldContinueLoop determines whether the agent loop should continue based on the last
+// assistant message and whether finish_tool is enabled.
+//
+//   - If the assistant has tool calls and EnableFinishTool is true: continue unless finish_tool was called.
+//   - If the assistant has tool calls and EnableFinishTool is false: always continue.
+//   - If the assistant has no tool calls and EnableFinishTool is true: continue (route back to chat_model).
+//   - If the assistant has no tool calls and EnableFinishTool is false: stop.
+func shouldContinueLoop(lastMsg *schema.Message, enableFinishTool bool) bool {
+	if lastMsg.Role != schema.Assistant {
+		return false
+	}
+	if len(lastMsg.ToolCalls) > 0 {
+		if enableFinishTool {
+			for _, toolCall := range lastMsg.ToolCalls {
+				if toolCall.Function.Name == finishToolName {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	// No tool calls: only continue if finish_tool mode is active (route back to chat_model).
+	return enableFinishTool
+}
+
+// resolveBranchTarget maps (shouldContinue, input message) to a graph node name.
+// When shouldContinue is true:
+//   - no tool calls → "chat_model" (prompt model to call finish_tool)
+//   - has tool calls → "tools"
+//
+// When shouldContinue is false → "final_output".
+func resolveBranchTarget(shouldContinue bool, input *schema.Message) string {
+	if shouldContinue {
+		if len(input.ToolCalls) == 0 {
+			return "chat_model"
+		}
+		return "tools"
+	}
+	return "final_output"
+}
+
 // Artifact represents a discovered or created artifact during agent execution
 type Artifact struct {
 	Path        string            // Backend file path
@@ -193,55 +234,18 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
 		shouldContinue := false
 		err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
-			// Check if the last message has tool calls
 			if len(state.messages) > 0 {
 				lastMsg := state.messages[len(state.messages)-1]
-				if lastMsg.Role == schema.Assistant && len(lastMsg.ToolCalls) > 0 {
-					// Check if finish_tool was called
-					if agent.config.EnableFinishTool {
-						for _, toolCall := range lastMsg.ToolCalls {
-							if toolCall.Function.Name == finishToolName {
-								// Finish tool was called, exit the loop
-								shouldContinue = false
-								return nil
-							}
-						}
-					}
-					// Other tool calls, continue loop
-					shouldContinue = true
-				}
+				shouldContinue = shouldContinueLoop(lastMsg, agent.config.EnableFinishTool)
 			}
 			return nil
 		})
 		if err != nil {
 			return "", err
 		}
-
-		// If finish_tool is enabled and no tool calls were made, continue the loop
-		// This allows the agent to call finish_tool on the next iteration
-		if !shouldContinue && agent.config.EnableFinishTool {
-			// Check if we should continue to allow the agent to call finish_tool
-			// We continue if the last message doesn't have tool calls and we haven't finished yet
-			err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
-				if len(state.messages) > 0 {
-					lastMsg := state.messages[len(state.messages)-1]
-					if lastMsg.Role == schema.Assistant && len(lastMsg.ToolCalls) == 0 {
-						// Assistant made a regular response, continue loop so it can call finish_tool
-						shouldContinue = true
-					}
-				}
-				return nil
-			})
-			if err != nil {
-				return "", err
-			}
-		}
-
-		if shouldContinue {
-			return "tools", nil
-		}
-		return "final_output", nil
+		return resolveBranchTarget(shouldContinue, input), nil
 	}, map[string]bool{
+		"chat_model":   true,
 		"tools":        true,
 		"final_output": true,
 	}))
