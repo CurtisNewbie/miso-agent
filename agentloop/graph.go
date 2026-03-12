@@ -230,11 +230,13 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}, nil
 	}), compose.WithNodeName("Final Output"))
 
-	// Loop-back-model adapter node: wraps a single *schema.Message into []*schema.Message.
+	// Loop-back-model adapter node: wraps a single *schema.Message into []*schema.Message,
+	// and appends an explicit user instruction to call finish_tool.
 	// Used when branch routes back to chat_model without going through the tools node,
 	// because chat_model's StatePreHandler expects []*schema.Message as input.
 	_ = g.AddLambdaNode("loop_back_model", compose.InvokableLambda(func(ctx context.Context, input *schema.Message) ([]*schema.Message, error) {
-		return []*schema.Message{input}, nil
+		finishPrompt := schema.UserMessage("You must now call the finish_tool with your final response to complete the task.")
+		return []*schema.Message{input, finishPrompt}, nil
 	}), compose.WithNodeName("Loop Back Model"))
 
 	// Branch: continue loop or finish
