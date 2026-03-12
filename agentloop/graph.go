@@ -9,6 +9,9 @@ import (
 	"github.com/curtisnewbie/miso/util/llm"
 )
 
+// metaKeyEphemeral marks a message as ephemeral: it is passed to the model but not persisted to state.
+const metaKeyEphemeral = "ephemeral"
+
 type agentLoopState struct {
 	taskInput taskInput
 	messages  []*schema.Message
@@ -137,9 +140,17 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		return nil, err
 	}
 
-	// StatePreHandler: appends new messages to state and returns all accumulated messages
+	// StatePreHandler: appends new messages to state and returns all accumulated messages.
+	// Messages with Extra[metaKeyEphemeral]="1" are passed to the model but NOT persisted to state.
 	modelPreHandle := func(ctx context.Context, input []*schema.Message, state *agentLoopState) ([]*schema.Message, error) {
-		state.messages = append(state.messages, input...)
+		var ephemeral []*schema.Message
+		for _, msg := range input {
+			if msg.Extra != nil && msg.Extra[metaKeyEphemeral] == "1" {
+				ephemeral = append(ephemeral, msg)
+			} else {
+				state.messages = append(state.messages, msg)
+			}
+		}
 
 		// Evict large tool results if configured
 		if agent.config.EvictToolResultsThreshold > 0 && agent.tokenizer != nil {
@@ -151,7 +162,9 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			state.messages = agent.tokenizer.PruneMessagesToTokenLimit(state.messages, agent.config.MaxTokens)
 		}
 
-		return state.messages, nil
+		// Return persisted messages plus any ephemeral messages (e.g. finish_tool prompt).
+		// Ephemeral messages are visible to the model this turn but not saved to state.
+		return append(state.messages, ephemeral...), nil
 	}
 
 	_ = g.AddChatModelNode("chat_model", chatModel,
@@ -230,13 +243,16 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}, nil
 	}), compose.WithNodeName("Final Output"))
 
-	// Loop-back-model adapter node: wraps a single *schema.Message into []*schema.Message,
-	// and appends an explicit user instruction to call finish_tool.
-	// Used when branch routes back to chat_model without going through the tools node,
-	// because chat_model's StatePreHandler expects []*schema.Message as input.
+	// Loop-back-model adapter node: injects an ephemeral user instruction to call finish_tool.
+	// The input message is already persisted in state; only the ephemeral prompt is passed here
+	// so the model is explicitly told to call finish_tool without polluting the message history.
 	_ = g.AddLambdaNode("loop_back_model", compose.InvokableLambda(func(ctx context.Context, input *schema.Message) ([]*schema.Message, error) {
-		finishPrompt := schema.UserMessage("You must now call the finish_tool with your final response to complete the task.")
-		return []*schema.Message{input, finishPrompt}, nil
+		finishPrompt := &schema.Message{
+			Role:    schema.User,
+			Content: "You must now call the finish_tool with your final response to complete the task.",
+			Extra:   map[string]any{metaKeyEphemeral: "1"},
+		}
+		return []*schema.Message{finishPrompt}, nil
 	}), compose.WithNodeName("Loop Back Model"))
 
 	// Branch: continue loop or finish
