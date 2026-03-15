@@ -243,13 +243,15 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}, nil
 	}), compose.WithNodeName("Final Output"))
 
-	// Loop-back-model adapter node: injects an ephemeral user instruction to call finish_tool.
+	// Loop-back-model adapter node: injects an ephemeral reminder to continue working.
 	// The input message is already persisted in state; only the ephemeral prompt is passed here
-	// so the model is explicitly told to call finish_tool without polluting the message history.
+	// so the model is nudged without polluting the message history.
+	// The prompt intentionally avoids forcing the agent to stop — the agent should decide
+	// on its own when the task is truly complete and call finish_tool accordingly.
 	_ = g.AddLambdaNode("loop_back_model", compose.InvokableLambda(func(ctx context.Context, input *schema.Message) ([]*schema.Message, error) {
 		finishPrompt := &schema.Message{
 			Role:    schema.User,
-			Content: "You must now call the finish_tool with your final response to complete the task.",
+			Content: "Please continue working on the task. When you have fully completed it, call finish_tool with your final response.",
 			Extra:   map[string]any{metaKeyEphemeral: "1"},
 		}
 		return []*schema.Message{finishPrompt}, nil
