@@ -81,13 +81,6 @@ type AgentConfig struct {
 	// list_directory, glob, and add_artifact. When false, these tools are not registered.
 	// Default: false
 	EnableFileTool bool
-
-	// EnableFinishTool enables a built-in finish_tool that the agent can call to signal task completion.
-	// When enabled, the ReAct loop continues even when the last message is not a tool call message,
-	// giving the agent the opportunity to call finish_tool. The agent is instructed to call finish_tool
-	// when it has completed the task and has a final answer.
-	// Default: false (loop exits when no tool calls are made)
-	EnableFinishTool bool
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.

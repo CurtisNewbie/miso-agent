@@ -969,63 +969,6 @@ func TestBuiltinTools_AllToolsRegistered(t *testing.T) {
 	}
 }
 
-func TestBuiltinTools_FinishTool_Enabled(t *testing.T) {
-	ctx := context.Background()
-
-	// Test with finish tool enabled
-	registry := BuiltinTools(WithEnableFileTool(true), WithEnableFinishTool(true))
-
-	tool, ok := registry.Get("finish_tool")
-	if !ok {
-		t.Fatal("finish_tool not found when enabled")
-	}
-
-	args, _ := json.Marshal(map[string]interface{}{
-		"response": "Task completed successfully",
-	})
-	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
-	if err != nil {
-		t.Fatalf("Failed to execute finish tool: %v", err)
-	}
-
-	expected := "Task completed successfully"
-	if result != expected {
-		t.Errorf("Expected %q, got %q", expected, result)
-	}
-}
-
-func TestBuiltinTools_FinishTool_Disabled(t *testing.T) {
-
-	// Test with finish tool disabled
-	registry := BuiltinTools(WithEnableFileTool(true))
-
-	_, ok := registry.Get("finish_tool")
-	if ok {
-		t.Error("finish_tool should not be registered when disabled")
-	}
-}
-
-func TestBuiltinTools_FinishTool_EmptyResponse(t *testing.T) {
-	ctx := context.Background()
-
-	registry := BuiltinTools(WithEnableFileTool(true), WithEnableFinishTool(true))
-
-	tool, ok := registry.Get("finish_tool")
-	if !ok {
-		t.Fatal("finish_tool not found when enabled")
-	}
-
-	result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, "{}")
-	if err != nil {
-		t.Fatalf("Failed to execute finish tool with empty response: %v", err)
-	}
-
-	expected := "Task completed"
-	if result != expected {
-		t.Errorf("Expected %q, got %q", expected, result)
-	}
-}
-
 func TestTypedToolFunc(t *testing.T) {
 	// Define a typed argument struct
 	type HelloArgs struct {

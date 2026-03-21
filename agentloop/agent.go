@@ -26,7 +26,6 @@ var (
 //   - Skills system with progressive disclosure
 //   - Token-aware message pruning
 //   - Tool result eviction for large outputs
-//   - Support for finish_tool to signal task completion
 type Agent struct {
 	config    AgentConfig
 	tools     *ToolRegistry
@@ -60,7 +59,6 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	// Add built-in tools (will receive backend and todoManager via context)
 	builtinTools := BuiltinTools(
 		WithEnableFileTool(config.EnableFileTool),
-		WithEnableFinishTool(config.EnableFinishTool),
 	)
 	toolRegistry.Merge(builtinTools)
 

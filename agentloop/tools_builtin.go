@@ -63,21 +63,11 @@ type AddArtifactArgs struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-type FinishToolArgs struct {
-	Response string `json:"response,omitempty"`
-}
-
-const finishToolName = "finish_tool"
-
 // BuiltinToolsOption configures which built-in tools are registered.
 type BuiltinToolsOption struct {
 	// EnableFileTool enables the file-related tools: read_file, write_file, edit_file,
 	// list_directory, glob, and add_artifact. Default: false.
 	EnableFileTool bool
-
-	// EnableFinishTool enables the finish_tool that the agent can call to signal task completion.
-	// Default: false.
-	EnableFinishTool bool
 }
 
 // WithEnableFileTool enables or disables the built-in file tools (read_file, write_file,
@@ -88,16 +78,8 @@ func WithEnableFileTool(v bool) func(o *BuiltinToolsOption) {
 	}
 }
 
-// WithEnableFinishTool enables or disables the built-in finish_tool.
-func WithEnableFinishTool(v bool) func(o *BuiltinToolsOption) {
-	return func(o *BuiltinToolsOption) {
-		o.EnableFinishTool = v
-	}
-}
-
 // BuiltinTools returns the built-in tools configured by the provided options.
-// By default (no options), no tools are registered; use WithEnableFileTool and
-// WithEnableFinishTool to opt in.
+// By default (no options), no tools are registered; use WithEnableFileTool to opt in.
 func BuiltinTools(ops ...func(o *BuiltinToolsOption)) *ToolRegistry {
 	o := &BuiltinToolsOption{}
 	for _, op := range ops {
@@ -350,22 +332,6 @@ func BuiltinTools(ops ...func(o *BuiltinToolsOption)) *ToolRegistry {
 			return fmt.Sprintf("Deleted %d todos: %s", len(args.IDs), strings.Join(args.IDs, ", ")), nil
 		},
 	))
-
-	// Add finish_tool if enabled
-	if o.EnableFinishTool {
-		registry.Register(NewTypedToolFunc(
-			finishToolName,
-			"Call this tool when you have completed the task and have a final answer. This signals the end of the ReAct loop and your final response will be provided to the user.",
-			map[string]*schema.ParameterInfo{
-				"response": StringParam("Your final answer to the task. This will be returned to the user as the final response.", false),
-			},
-			func(ctx context.Context, args FinishToolArgs) (string, error) {
-				if args.Response == "" {
-					return "Task completed", nil
-				}
-				return args.Response, nil
-			}))
-	}
 
 	return registry
 }

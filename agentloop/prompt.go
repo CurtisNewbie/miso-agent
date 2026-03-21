@@ -52,13 +52,12 @@ Keep working until the task is fully complete. Don't stop partway and explain wh
 
 // PromptBuilder builds the system prompt for the agent.
 type PromptBuilder struct {
-	basePrompt        string
-	customPrompt      string
-	taskPrompt        string
-	skills            *Skills
-	language          string
-	currentTime       string
-	finishToolEnabled bool
+	basePrompt   string
+	customPrompt string
+	taskPrompt   string
+	skills       *Skills
+	language     string
+	currentTime  string
 }
 
 // NewPromptBuilder creates a new prompt builder.
@@ -96,12 +95,6 @@ func (pb *PromptBuilder) WithLanguage(language string) *PromptBuilder {
 // WithCurrentTime sets the current time.
 func (pb *PromptBuilder) WithCurrentTime(time string) *PromptBuilder {
 	pb.currentTime = time
-	return pb
-}
-
-// WithFinishToolEnabled sets whether the finish tool is enabled.
-func (pb *PromptBuilder) WithFinishToolEnabled(enabled bool) *PromptBuilder {
-	pb.finishToolEnabled = enabled
 	return pb
 }
 
@@ -153,14 +146,6 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 			sb.WriteString("- You need specialized knowledge or structured workflows\n")
 			sb.WriteString("- A skill provides proven patterns for complex tasks\n\n")
 		}
-	}
-
-	// Add finish tool instructions if enabled
-	if pb.finishToolEnabled {
-		sb.WriteString("\n\n## Task Completion\n\n")
-		sb.WriteString("When you have completed the task and have a final answer, you MUST call the `finish_tool` tool with your response:\n\n")
-		sb.WriteString("Example: `finish_tool(response=\"Your final answer here\")`\n\n")
-		sb.WriteString("The ReAct loop will continue until you call `finish_tool`. Only call `finish_tool` when you have completed the task and have a final answer.\n")
 	}
 
 	return schema.SystemMessage(sb.String()), nil
