@@ -24,18 +24,29 @@ type TavilySearchArgs struct {
 
 	// TimeRange restricts results to a time window. One of "day", "week", "month", "year".
 	TimeRange string `json:"time_range,omitempty"`
+
+	// StartDate returns results published after this date (format: YYYY-MM-DD).
+	StartDate string `json:"start_date,omitempty"`
+
+	// EndDate returns results published before this date (format: YYYY-MM-DD).
+	EndDate string `json:"end_date,omitempty"`
 }
+
+// TavilySearchOption is a functional option that customizes the SearchReq before it is sent to Tavily.
+// It is applied after all TavilySearchArgs fields have been set, so it can override any field.
+type TavilySearchOption func(o *search.SearchReq)
 
 // NewTavilySearchTool creates an agentloop Tool that performs a Tavily web search.
 // apiKey is captured in a closure and never exposed to the LLM.
 // maxResults controls how many results are returned (1-20); pass 0 to use the default of 5.
+// opts are applied to the SearchReq after args, allowing callers to set any additional fields.
 //
 // Example:
 //
 //	agent, _ := agentloop.NewAgent(agentloop.AgentConfig{
 //	    Tools: []agentloop.Tool{tools.NewTavilySearchTool(os.Getenv("TAVILY_API_KEY"), 5)},
 //	})
-func NewTavilySearchTool(apiKey string, maxResults int) agentloop.Tool {
+func NewTavilySearchTool(apiKey string, maxResults int, opts ...TavilySearchOption) agentloop.Tool {
 	if maxResults < 1 {
 		maxResults = 5
 	}
@@ -57,16 +68,30 @@ func NewTavilySearchTool(apiKey string, maxResults int) agentloop.Tool {
 				[]string{"day", "week", "month", "year"},
 				false,
 			),
+			"start_date": agentloop.StringParam(
+				"Return results published after this date (format: YYYY-MM-DD).",
+				false,
+			),
+			"end_date": agentloop.StringParam(
+				"Return results published before this date (format: YYYY-MM-DD).",
+				false,
+			),
 		},
 		func(ctx context.Context, args TavilySearchArgs) (string, error) {
 			rail := flow.NewRail(ctx)
-			resp, err := search.Search(rail, apiKey, search.SearchReq{
+			req := search.SearchReq{
 				Query:         args.Query,
 				MaxResults:    maxResults,
 				Topic:         args.Topic,
 				TimeRange:     args.TimeRange,
+				StartDate:     args.StartDate,
+				EndDate:       args.EndDate,
 				IncludeAnswer: true,
-			})
+			}
+			for _, opt := range opts {
+				opt(&req)
+			}
+			resp, err := search.Search(rail, apiKey, req)
 			if err != nil {
 				return "", err
 			}
