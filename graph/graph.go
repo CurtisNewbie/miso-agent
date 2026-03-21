@@ -35,14 +35,19 @@ func WithTraceCallback(name string, genops *GenericOps) compose.Option {
 	}
 	if genops.LogOnEnd {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
+			rail := flow.NewRail(ctx)
 			inToken, outToken, ok := tokenUsage(output)
 			if ok {
-				if genops.LogOutputs {
-					flow.NewRail(ctx).Infof("Graph exec %v end, name: %v, type: %v, component: %v, output: %v, usage: %v (input), %v (output)", name, ri.Name,
-						ri.Type, ri.Component, output, inToken, outToken)
-				} else {
-					flow.NewRail(ctx).Infof("Graph exec %v end, name: %v, type: %v, component: %v, usage: %v (input), %v (output)", name, ri.Name,
-						ri.Type, ri.Component, inToken, outToken)
+				rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
+			}
+			if genops.LogOutputs {
+				if m, ok := output.(*model.CallbackOutput); ok && m.Message != nil {
+					if m.Message.Content != "" {
+						rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, m.Message.Content)
+					}
+					if m.Message.ReasoningContent != "" {
+						rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, m.Message.ReasoningContent)
+					}
 				}
 			}
 			return ctx
