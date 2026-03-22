@@ -73,6 +73,9 @@ func tokenUsage(in callbacks.CallbackOutput) (_in int, _out int, ok bool) {
 func extractMessage(in callbacks.CallbackOutput) *schema.Message {
 	switch m := in.(type) {
 	case *model.CallbackOutput:
+		if m == nil {
+			return nil
+		}
 		return m.Message
 	case *schema.Message:
 		return m
