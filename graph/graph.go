@@ -6,6 +6,7 @@ import (
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/flow"
 )
 
@@ -41,12 +42,15 @@ func WithTraceCallback(name string, genops *GenericOps) compose.Option {
 				rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
 			}
 			if genops.LogOutputs {
-				if m, ok := output.(*model.CallbackOutput); ok && m.Message != nil {
-					if m.Message.Content != "" {
-						rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, m.Message.Content)
-					}
-					if m.Message.ReasoningContent != "" {
-						rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, m.Message.ReasoningContent)
+				if ri.Component == "ChatModel" {
+					msg := extractMessage(output)
+					if msg != nil {
+						if msg.Content != "" {
+							rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, msg.Content)
+						}
+						if msg.ReasoningContent != "" {
+							rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, msg.ReasoningContent)
+						}
 					}
 				}
 			}
@@ -64,6 +68,16 @@ func tokenUsage(in callbacks.CallbackOutput) (_in int, _out int, ok bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+func extractMessage(in callbacks.CallbackOutput) *schema.Message {
+	switch m := in.(type) {
+	case *model.CallbackOutput:
+		return m.Message
+	case *schema.Message:
+		return m
+	}
+	return nil
 }
 
 // InvokeGraph invokes a compiled graph with trace callbacks enabled.

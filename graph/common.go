@@ -18,6 +18,6 @@ func NewGenericOps() *GenericOps {
 		LogOnStart: true,
 		LogOnEnd:   true,
 		LogInputs:  false,
-		LogOutputs: false,
+		LogOutputs: true,
 	}
 }
