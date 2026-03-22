@@ -45,6 +45,9 @@ func boolOrDefault(p *bool, def bool) bool {
 // NewAgent creates a new ReAct agent.
 func NewAgent(config AgentConfig) (*Agent, error) {
 	// Set defaults
+	if config.Name == "" {
+		config.Name = "AgentLoop"
+	}
 	if config.Language == "" {
 		config.Language = "English"
 	}
@@ -181,7 +184,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	// Execute graph with agent-specific trace callback
 	var invokeOpts []compose.Option
 	if a.genops.LogOnStart || a.genops.LogOnEnd {
-		invokeOpts = append(invokeOpts, withAgentTraceCallback("AgentLoop", a.genops))
+		invokeOpts = append(invokeOpts, withAgentTraceCallback(a.config.Name, a.genops))
 	}
 	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
 	if err != nil {

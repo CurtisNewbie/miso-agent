@@ -10,6 +10,10 @@ import (
 
 // AgentConfig is the configuration for creating an agent.
 type AgentConfig struct {
+	// Name is an optional identifier for the agent used in logs.
+	// If empty, defaults to "AgentLoop".
+	Name string
+
 	// Model is the LLM model to use.
 	Model model.ToolCallingChatModel
 
