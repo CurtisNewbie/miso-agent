@@ -6,15 +6,36 @@ import (
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
-	"github.com/curtisnewbie/miso-agent/graph"
 )
 
 // AgentConfig is the configuration for creating an agent.
 type AgentConfig struct {
-	*graph.GenericOps
-
 	// Model is the LLM model to use.
 	Model model.ToolCallingChatModel
+
+	// MaxRunSteps limits the number of graph steps before the agent terminates.
+	// If 0 or negative, the agent runs without a step limit.
+	MaxRunSteps int
+
+	// Language specifies the language for agent responses.
+	// If empty, defaults to "English".
+	Language string
+
+	// LogOnStart controls whether the agent logs when it starts processing.
+	// If nil, defaults to true.
+	LogOnStart *bool
+
+	// LogOnEnd controls whether the agent logs token stats when it finishes.
+	// If nil, defaults to true.
+	LogOnEnd *bool
+
+	// LogInputs controls whether the agent logs input messages to the model.
+	// If nil, defaults to false.
+	LogInputs *bool
+
+	// LogOutputs controls whether the agent logs model output content.
+	// If nil, defaults to true.
+	LogOutputs *bool
 
 	// Skills is a list of skill paths to load.
 	// Skills are loaded from the backend and injected into the system prompt.

@@ -54,10 +54,16 @@ type taskInput struct {
 // buildGraph builds the Eino graph for the ReAct agent.
 // The graph is compiled once, but backend/skills are passed via taskInput for each execution.
 func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
+	// Compute initial slice capacity: use MaxRunSteps when positive, otherwise a sensible default.
+	initialCap := agent.genops.MaxRunSteps
+	if initialCap <= 0 {
+		initialCap = 32
+	}
+
 	g := compose.NewGraph[taskInput, taskOutput](
 		compose.WithGenLocalState(func(ctx context.Context) *agentLoopState {
 			return &agentLoopState{
-				messages: make([]*schema.Message, 0, agent.config.MaxRunSteps+1),
+				messages: make([]*schema.Message, 0, initialCap+1),
 			}
 		}),
 	)
@@ -68,7 +74,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			WithCustomPrompt(agent.config.SystemPrompt).
 			WithTaskPrompt(agent.config.TaskPrompt).
 			WithSkills(input.skills).
-			WithLanguage(agent.config.Language).
+			WithLanguage(agent.genops.Language).
 			WithCurrentTime(GetCurrentTime(agent.config.Timezone))
 		systemMsg, err := promptBuilder.Build(ctx)
 		if err != nil {
@@ -200,5 +206,5 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	_ = g.AddEdge("tools", "chat_model")
 	_ = g.AddEdge("final_output", compose.END)
 
-	return graph.CompileGraph(agent.config.GenericOps, g, compose.WithGraphName("AgentLoop"))
+	return graph.CompileGraph(agent.genops, g, compose.WithGraphName("AgentLoop"))
 }

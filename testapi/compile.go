@@ -48,9 +48,6 @@ func compileGraph() error {
 		TokenizerModelName:          "gpt-3.5-turbo",
 		EvictToolResultsThreshold:   1000,
 		EvictToolResultsKeepPreview: 100,
-		GenericOps: &graph.GenericOps{
-			VisualizeDir: "../doc",
-		},
 	})
 	return err
 }

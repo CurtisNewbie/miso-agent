@@ -28,23 +28,35 @@ var (
 //   - Tool result eviction for large outputs
 type Agent struct {
 	config    AgentConfig
+	genops    *graph.GenericOps
 	tools     *ToolRegistry
 	tokenizer *Tokenizer
 	graph     compose.Runnable[taskInput, taskOutput]
 }
 
+// boolOrDefault returns *p if p is non-nil, otherwise returns def.
+func boolOrDefault(p *bool, def bool) bool {
+	if p != nil {
+		return *p
+	}
+	return def
+}
+
 // NewAgent creates a new ReAct agent.
 func NewAgent(config AgentConfig) (*Agent, error) {
-	if config.GenericOps == nil {
-		config.GenericOps = graph.NewGenericOps()
-	}
-
 	// Set defaults
-	if config.GenericOps.MaxRunSteps <= 0 {
-		config.GenericOps.MaxRunSteps = 100
-	}
 	if config.Language == "" {
 		config.Language = "English"
+	}
+
+	// Build GenericOps from individual config fields
+	genops := &graph.GenericOps{
+		MaxRunSteps: config.MaxRunSteps,
+		Language:    config.Language,
+		LogOnStart:  boolOrDefault(config.LogOnStart, true),
+		LogOnEnd:    boolOrDefault(config.LogOnEnd, true),
+		LogInputs:   boolOrDefault(config.LogInputs, false),
+		LogOutputs:  boolOrDefault(config.LogOutputs, true),
 	}
 
 	// Initialize tokenizer for accurate token counting
@@ -69,6 +81,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 
 	agent := &Agent{
 		config:    config,
+		genops:    genops,
 		tools:     toolRegistry,
 		tokenizer: tokenizer,
 	}
@@ -166,7 +179,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	})
 
 	// Execute graph
-	result, err := graph.InvokeGraph(rail, a.config.GenericOps, a.graph, "AgentLoop", taskInput)
+	result, err := graph.InvokeGraph(rail, a.genops, a.graph, "AgentLoop", taskInput)
 	if err != nil {
 		return TaskOutput{}, errs.Wrapf(err, "failed to execute graph")
 	}
