@@ -1,7 +1,5 @@
 package tools
 
-// @author yongj.zhuang
-
 import (
 	"context"
 	"fmt"

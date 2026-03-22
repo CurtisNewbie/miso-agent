@@ -178,8 +178,12 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		Artifacts: artifactManager,
 	})
 
-	// Execute graph
-	result, err := graph.InvokeGraph(rail, a.genops, a.graph, "AgentLoop", taskInput)
+	// Execute graph with agent-specific trace callback
+	var invokeOpts []compose.Option
+	if a.genops.LogOnStart || a.genops.LogOnEnd {
+		invokeOpts = append(invokeOpts, withAgentTraceCallback("AgentLoop", a.genops))
+	}
+	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
 	if err != nil {
 		return TaskOutput{}, errs.Wrapf(err, "failed to execute graph")
 	}
