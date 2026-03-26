@@ -62,33 +62,47 @@ type fileRef struct {
 // TmpFileStore is a tmp-file-backed FileStore implementation.
 // Each session gets its own tmp directory; all files written during the session are
 // stored as individual tmp files inside that directory.
-// Call OnSessionStart before any file operations and OnSessionEnd when done.
+// The tmp directory is created lazily on the first WriteFile call, so calling
+// OnSessionStart is optional. Call OnSessionEnd when the session is done to clean up.
 type TmpFileStore struct {
 	mu    sync.RWMutex
 	files map[string]fileRef // logical path -> reference to tmp file on disk
-	dir   string             // session tmp directory, created in OnSessionStart
+	dir   string             // session tmp directory, created lazily on first WriteFile
 }
 
 // NewTmpFileStore creates a new TmpFileStore.
-// Call OnSessionStart before writing any files.
+// The underlying tmp directory is created lazily on the first WriteFile call.
 func NewTmpFileStore() *TmpFileStore {
 	return &TmpFileStore{
 		files: make(map[string]fileRef),
 	}
 }
 
-// OnSessionStart creates the session tmp directory.
-// Must be called before any file operations.
-func (b *TmpFileStore) OnSessionStart(rail flow.Rail) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
+// ensureDir creates the session tmp directory if it has not been created yet.
+// Callers must hold b.mu (write lock) before calling this method.
+func (b *TmpFileStore) ensureDir() error {
+	if b.dir != "" {
+		return nil
+	}
 	dir, err := os.MkdirTemp("", "miso-agent-*")
 	if err != nil {
 		return errs.Wrapf(err, "failed to create session tmp directory")
 	}
 	b.dir = dir
-	rail.Infof("TmpFileStore session started, tmp dir: %s", dir)
+	return nil
+}
+
+// OnSessionStart creates the session tmp directory.
+// This is optional — the directory is also created lazily on the first WriteFile call.
+// Calling OnSessionStart explicitly is idempotent: a second call is a no-op.
+func (b *TmpFileStore) OnSessionStart(rail flow.Rail) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if err := b.ensureDir(); err != nil {
+		return err
+	}
+	rail.Infof("TmpFileStore session started, tmp dir: %s", b.dir)
 	return nil
 }
 
@@ -130,9 +144,15 @@ func (b *TmpFileStore) ReadFile(ctx context.Context, path string) ([]byte, error
 }
 
 // WriteFile writes content to a new tmp file inside the session directory.
+// The session tmp directory is created lazily on the first call if OnSessionStart
+// has not been called explicitly.
 func (b *TmpFileStore) WriteFile(ctx context.Context, path string, content []byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if err := b.ensureDir(); err != nil {
+		return err
+	}
 
 	normalizedPath := normalizeMemPath(path)
 

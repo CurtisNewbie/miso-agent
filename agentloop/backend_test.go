@@ -23,7 +23,7 @@ func TestTmpFileStore_SessionLifecycle(t *testing.T) {
 	be := NewTmpFileStore()
 	rail := flow.NewRail(context.Background())
 
-	// Before OnSessionStart the tmp dir should be empty.
+	// Before OnSessionStart (and before any writes) the tmp dir should be empty.
 	if be.dir != "" {
 		t.Fatalf("expected empty dir before OnSessionStart, got %q", be.dir)
 	}
@@ -176,4 +176,45 @@ func startsWithDir(path, dir string) bool {
 	rel.Close()
 	// Simple prefix check after normalisation.
 	return len(path) > len(dir) && path[:len(dir)] == dir
+}
+
+func TestTmpFileStore_LazyInit_WriteWithoutSessionStart(t *testing.T) {
+	be := NewTmpFileStore()
+	ctx := context.Background()
+
+	// No OnSessionStart — the tmp directory must be created lazily.
+	if be.dir != "" {
+		t.Fatal("expected empty dir before any write")
+	}
+
+	if err := be.WriteFile(ctx, "/lazy.txt", []byte("hello lazy")); err != nil {
+		t.Fatalf("WriteFile without OnSessionStart failed: %v", err)
+	}
+
+	// After the first write the tmp dir must have been created.
+	if be.dir == "" {
+		t.Fatal("expected non-empty dir after lazy WriteFile")
+	}
+	if _, err := os.Stat(be.dir); err != nil {
+		t.Fatalf("session dir %q should exist on disk: %v", be.dir, err)
+	}
+
+	// ReadFile must return the written content.
+	got, err := be.ReadFile(ctx, "/lazy.txt")
+	if err != nil {
+		t.Fatalf("ReadFile failed: %v", err)
+	}
+	if string(got) != "hello lazy" {
+		t.Errorf("expected %q, got %q", "hello lazy", string(got))
+	}
+
+	// Cleanup.
+	rail := flow.NewRail(ctx)
+	dir := be.dir
+	if err := be.OnSessionEnd(rail); err != nil {
+		t.Fatalf("OnSessionEnd failed: %v", err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("session dir %q should have been removed after OnSessionEnd", dir)
+	}
 }
