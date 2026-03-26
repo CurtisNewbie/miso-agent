@@ -63,9 +63,17 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		config.Language = "English"
 	}
 
+	// Convert MaxRunSteps (rounds) to Eino graph steps.
+	// Each round ≈ 4 graph steps; multiply by 5 to include a safety margin.
+	// 0 means let Eino auto-determine (node count + 10).
+	maxGraphSteps := 0
+	if config.MaxRunSteps > 0 {
+		maxGraphSteps = config.MaxRunSteps * 5
+	}
+
 	// Build ops from individual config fields
 	ops := agentOps{
-		maxRunSteps: config.MaxRunSteps,
+		maxRunSteps: maxGraphSteps,
 		language:    config.Language,
 		logOnStart:  boolOrDefault(config.LogOnStart, true),
 		logOnEnd:    boolOrDefault(config.LogOnEnd, true),

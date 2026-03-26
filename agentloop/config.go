@@ -17,8 +17,10 @@ type AgentConfig struct {
 	// Model is the LLM model to use.
 	Model model.ToolCallingChatModel
 
-	// MaxRunSteps limits the number of graph steps before the agent terminates.
-	// If 0 or negative, the agent runs without a step limit.
+	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
+	// Each round corresponds to one tool-calling iteration; the value is multiplied by 5 internally
+	// to derive the actual Eino graph step budget (1 round ≈ 4 graph steps, ×5 includes a safety margin).
+	// If 0 or negative, the step budget is determined automatically by Eino (node count + 10).
 	MaxRunSteps int
 
 	// Language specifies the language for agent responses.
