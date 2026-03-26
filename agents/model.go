@@ -15,6 +15,7 @@ var (
 	OpenAIBaseURL         = "https://api.openai.com/v1"
 	AliBailianIntlBaseURL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 	AliBailianCnBaseURL   = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	OpenRouterBaseURL     = "https://openrouter.ai/api/v1"
 )
 
 const (
