@@ -9,7 +9,6 @@ import (
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
-	"github.com/curtisnewbie/miso/util/ptr"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -96,7 +95,6 @@ func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...Releva
 		MaxRunSteps:  2,
 		Language:     cfg.Language,
 		SystemPrompt: cfg.SystemPrompt,
-		LogInputs:    ptr.ValPtr(true),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create RelevanceCheckAgent")
