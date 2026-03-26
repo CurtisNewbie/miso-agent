@@ -7,10 +7,21 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 )
+
+// agentOps holds the resolved operational configuration for the agent loop.
+// It is built from AgentConfig flat fields in NewAgent and used internally
+// for graph compilation and trace callbacks.
+type agentOps struct {
+	maxRunSteps int
+	language    string
+	logOnStart  bool
+	logOnEnd    bool
+	logInputs   bool
+	logOutputs  bool
+}
 
 type ctxKey int
 
@@ -28,7 +39,7 @@ var (
 //   - Tool result eviction for large outputs
 type Agent struct {
 	config    AgentConfig
-	genops    *graph.GenericOps
+	ops       agentOps
 	tools     *ToolRegistry
 	tokenizer *Tokenizer
 	graph     compose.Runnable[taskInput, taskOutput]
@@ -52,14 +63,14 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		config.Language = "English"
 	}
 
-	// Build GenericOps from individual config fields
-	genops := &graph.GenericOps{
-		MaxRunSteps: config.MaxRunSteps,
-		Language:    config.Language,
-		LogOnStart:  boolOrDefault(config.LogOnStart, true),
-		LogOnEnd:    boolOrDefault(config.LogOnEnd, true),
-		LogInputs:   boolOrDefault(config.LogInputs, false),
-		LogOutputs:  boolOrDefault(config.LogOutputs, true),
+	// Build ops from individual config fields
+	ops := agentOps{
+		maxRunSteps: config.MaxRunSteps,
+		language:    config.Language,
+		logOnStart:  boolOrDefault(config.LogOnStart, true),
+		logOnEnd:    boolOrDefault(config.LogOnEnd, true),
+		logInputs:   boolOrDefault(config.LogInputs, false),
+		logOutputs:  boolOrDefault(config.LogOutputs, true),
 	}
 
 	// Initialize tokenizer for accurate token counting
@@ -84,7 +95,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 
 	agent := &Agent{
 		config:    config,
-		genops:    genops,
+		ops:       ops,
 		tools:     toolRegistry,
 		tokenizer: tokenizer,
 	}
@@ -183,8 +194,8 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 
 	// Execute graph with agent-specific trace callback
 	var invokeOpts []compose.Option
-	if a.genops.LogOnStart || a.genops.LogOnEnd {
-		invokeOpts = append(invokeOpts, withAgentTraceCallback(a.config.Name, a.genops))
+	if a.ops.logOnStart || a.ops.logOnEnd {
+		invokeOpts = append(invokeOpts, withAgentTraceCallback(a.config.Name, a.ops))
 	}
 	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
 	if err != nil {

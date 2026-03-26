@@ -10,7 +10,6 @@ import (
 	einotool "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/flow"
 )
 
@@ -18,15 +17,15 @@ import (
 // It extends the generic graph.WithTraceCallback with tool-specific logging:
 // file paths for read/write/edit/list_directory/add_artifact, glob patterns,
 // and todo item details for add_todo/update_todo/delete_todo.
-func withAgentTraceCallback(name string, genops *graph.GenericOps) compose.Option {
+func withAgentTraceCallback(name string, ops agentOps) compose.Option {
 	b := callbacks.NewHandlerBuilder()
-	if genops.LogOnStart {
+	if ops.logOnStart {
 		b = b.OnStartFn(func(ctx context.Context, ri *callbacks.RunInfo, in callbacks.CallbackInput) context.Context {
 			rail := flow.NewRail(ctx)
 			if ri.Component == "Tool" {
 				logToolStart(rail, name, ri, in)
 			} else {
-				if genops.LogInputs {
+				if ops.logInputs {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
 				} else {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v", name, ri.Name, ri.Type, ri.Component)
@@ -35,14 +34,14 @@ func withAgentTraceCallback(name string, genops *graph.GenericOps) compose.Optio
 			return ctx
 		})
 	}
-	if genops.LogOnEnd {
+	if ops.logOnEnd {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
 			rail := flow.NewRail(ctx)
 			inToken, outToken, ok := agentTokenUsage(output)
 			if ok {
 				rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
 			}
-			if genops.LogOutputs {
+			if ops.logOutputs {
 				if ri.Component == "ChatModel" {
 					msg := agentExtractMessage(output)
 					if msg != nil {
@@ -91,6 +90,10 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 	case "delete_todo":
 		ids := extractJSONStringSliceField(argsJSON, "ids")
 		rail.Infof("[%v] Tool/delete_todo — ids: [%v]", graphName, strings.Join(ids, ", "))
+
+	case "think_tool":
+		reflection := extractJSONStringField(argsJSON, "reflection")
+		rail.Infof("[%v] Tool/think_tool — reflection: %v", graphName, reflection)
 
 	default:
 		rail.Infof("[%v] Tool/%v called", graphName, ri.Name)

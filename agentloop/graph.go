@@ -5,7 +5,6 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/graph"
 )
 
 type agentLoopState struct {
@@ -55,7 +54,7 @@ type taskInput struct {
 // The graph is compiled once, but backend/skills are passed via taskInput for each execution.
 func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	// Compute initial slice capacity: use MaxRunSteps when positive, otherwise a sensible default.
-	initialCap := agent.genops.MaxRunSteps
+	initialCap := agent.ops.maxRunSteps
 	if initialCap <= 0 {
 		initialCap = 32
 	}
@@ -74,7 +73,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			WithCustomPrompt(agent.config.SystemPrompt).
 			WithTaskPrompt(agent.config.TaskPrompt).
 			WithSkills(input.skills).
-			WithLanguage(agent.genops.Language).
+			WithLanguage(agent.ops.language).
 			WithCurrentTime(GetCurrentTime(agent.config.Timezone))
 		systemMsg, err := promptBuilder.Build(ctx)
 		if err != nil {
@@ -206,5 +205,9 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	_ = g.AddEdge("tools", "chat_model")
 	_ = g.AddEdge("final_output", compose.END)
 
-	return graph.CompileGraph(agent.genops, g, compose.WithGraphName("AgentLoop"))
+	compileOpts := []compose.GraphCompileOption{compose.WithGraphName("AgentLoop")}
+	if agent.ops.maxRunSteps > 0 {
+		compileOpts = append(compileOpts, compose.WithMaxRunSteps(agent.ops.maxRunSteps))
+	}
+	return g.Compile(context.Background(), compileOpts...)
 }

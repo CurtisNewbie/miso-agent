@@ -8,7 +8,6 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/errs"
-	"github.com/curtisnewbie/miso/util/slutil"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -524,13 +523,13 @@ func joinGlobPath(base, component string) string {
 //	    Model: chatModel,
 //	    Tools: []agentloop.Tool{agentloop.NewThinkTool()},
 //	})
-func NewThinkTool(toolName ...string) Tool {
+func NewThinkTool() Tool {
 	type ThinkToolArgs struct {
 		Reflection *string `json:"reflection"`
 	}
 
 	return NewTypedToolFunc(
-		slutil.VarArgAny(toolName, func() string { return "think_tool" }),
+		"think_tool",
 		"Tool for strategic reflection on research progress and decision-making. Use this tool after each search to analyze results and plan next steps systematically. This creates a deliberate pause in the research workflow for quality decision-making.",
 		map[string]*schema.ParameterInfo{
 			"reflection": StringParam("Your detailed reflection on research progress, findings, gaps, and next steps. Reflection should address: 1) Analysis of current findings, 2) Gap assessment, 3) Quality evaluation, 4) Strategic decision", true),
