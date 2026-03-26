@@ -19,12 +19,22 @@ type relevanceCheckConfig struct {
 	// SystemPrompt is an optional system prompt prepended before the relevance task prompt.
 	// If empty, no system message is sent.
 	SystemPrompt string
+	// Language specifies the response language for the agent.
+	// If empty, defaults to "English".
+	Language string
 }
 
 // WithRelevanceCheckSystemPrompt sets an optional system prompt for the relevance-check agent.
 func WithRelevanceCheckSystemPrompt(prompt string) RelevanceCheckOption {
 	return func(o *relevanceCheckConfig) {
 		o.SystemPrompt = prompt
+	}
+}
+
+// WithRelevanceCheckLanguage sets the response language for the relevance-check agent.
+func WithRelevanceCheckLanguage(lang string) RelevanceCheckOption {
+	return func(o *relevanceCheckConfig) {
+		o.Language = lang
 	}
 }
 
@@ -83,6 +93,7 @@ func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...Releva
 		Name:         "RelevanceCheckAgent",
 		Model:        chatModel,
 		MaxRunSteps:  2,
+		Language:     cfg.Language,
 		SystemPrompt: cfg.SystemPrompt,
 	})
 	if err != nil {

@@ -19,12 +19,22 @@ type factCheckConfig struct {
 	// SystemPrompt is an optional system prompt prepended before the fact-check task prompt.
 	// If empty, no system message is sent.
 	SystemPrompt string
+	// Language specifies the response language for the agent.
+	// If empty, defaults to "English".
+	Language string
 }
 
 // WithFactCheckSystemPrompt sets an optional system prompt for the fact-check agent.
 func WithFactCheckSystemPrompt(prompt string) FactCheckOption {
 	return func(o *factCheckConfig) {
 		o.SystemPrompt = prompt
+	}
+}
+
+// WithFactCheckLanguage sets the response language for the fact-check agent.
+func WithFactCheckLanguage(lang string) FactCheckOption {
+	return func(o *factCheckConfig) {
+		o.Language = lang
 	}
 }
 
@@ -84,6 +94,7 @@ func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOp
 		Name:         "FactCheckAgent",
 		Model:        chatModel,
 		MaxRunSteps:  2,
+		Language:     cfg.Language,
 		SystemPrompt: cfg.SystemPrompt,
 	})
 	if err != nil {
