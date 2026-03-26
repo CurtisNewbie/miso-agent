@@ -8,6 +8,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/llm"
@@ -15,7 +16,7 @@ import (
 )
 
 type ExecutiveSummaryWriter struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 	graph  compose.Runnable[ExecutiveSummaryWriterInput, *ExecutiveSummaryWriterOutput]
 }
 
@@ -29,7 +30,7 @@ type ExecutiveSummaryWriterOutput struct {
 }
 
 type executiveSummaryWriterOps struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 
 	// Injected variables: ${language}
 	SystemMessagePrompt string
@@ -38,7 +39,7 @@ type executiveSummaryWriterOps struct {
 	UserMessagePrompt string
 }
 
-func NewExecutiveSummaryWriterOps(g *GenericOps) *executiveSummaryWriterOps {
+func NewExecutiveSummaryWriterOps(g *graph.GenericOps) *executiveSummaryWriterOps {
 	return &executiveSummaryWriterOps{
 		genops: g,
 		SystemMessagePrompt: strutil.NamedSprintfkv(`
@@ -106,7 +107,7 @@ func NewExecutiveSummaryWriter(rail flow.Rail, chatModel model.ToolCallingChatMo
 	_ = g.AddEdge("generate_summary", "remove_think")
 	_ = g.AddEdge("remove_think", compose.END)
 
-	runnable, err := CompileGraph(rail, ops.genops, g, compose.WithGraphName("ExecutiveSummaryWriter"))
+	runnable, err := graph.CompileGraph(ops.genops, g, compose.WithGraphName("ExecutiveSummaryWriter"))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
@@ -118,9 +119,5 @@ func (w *ExecutiveSummaryWriter) Execute(rail flow.Rail, input ExecutiveSummaryW
 	start := time.Now()
 	defer rail.TimeOp(start, "ExecutiveSummaryWriter")
 
-	cops := []compose.Option{}
-	if w.genops.LogOnStart {
-		cops = append(cops, WithTraceCallback("ExecutiveSummaryWriter", w.genops.LogInputs))
-	}
-	return w.graph.Invoke(rail, input, cops...)
+	return graph.InvokeGraph(rail, w.genops, w.graph, "ExecutiveSummaryWriter", input)
 }

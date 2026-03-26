@@ -1,7 +1,9 @@
 package testapi
 
 import (
+	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso-agent/agents"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/miso"
 )
 
@@ -11,7 +13,7 @@ func compileGraph() error {
 	if err != nil {
 		return err
 	}
-	gop := agents.NewGenericOps()
+	gop := graph.NewGenericOps()
 	gop.RepeatPrompt = true
 	gop.VisualizeDir = "../doc"
 	_, err = agents.NewMemorySummarizer(rail, model, agents.NewMemorySummarizerOps(gop))
@@ -35,5 +37,17 @@ func compileGraph() error {
 	}
 
 	_, err = agents.NewMaterialExtract(rail, model, agents.NewMaterialExtractOps(gop))
+	if err != nil {
+		return err
+	}
+
+	// Add agentloop agent
+	_, err = agentloop.NewAgent(agentloop.AgentConfig{
+		Model:                       model,
+		MaxTokens:                   32000,
+		TokenizerModelName:          "gpt-3.5-turbo",
+		EvictToolResultsThreshold:   1000,
+		EvictToolResultsKeepPreview: 100,
+	})
 	return err
 }

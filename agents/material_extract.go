@@ -11,6 +11,7 @@ import (
 	"github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/graph"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/async"
@@ -68,7 +69,7 @@ type MaterialExtractOutput struct {
 }
 
 type MaterialExtractOps struct {
-	genops *GenericOps
+	genops *graph.GenericOps
 
 	// Injected variables: ${context}, ${language}, ${now}
 	SystemMessagePrompt string
@@ -79,8 +80,10 @@ type MaterialExtractOps struct {
 	TimeZoneHourOffset float64
 }
 
-func NewMaterialExtractOps(g *GenericOps) *MaterialExtractOps {
+func NewMaterialExtractOps(g *graph.GenericOps) *MaterialExtractOps {
+
 	return &MaterialExtractOps{
+
 		genops: g,
 		SystemMessagePrompt: `
 You are a information extraction assistant. Your task is to carefully review the provided materials and extract specific information as requested.
@@ -353,7 +356,7 @@ func NewMaterialExtract(rail flow.Rail, chatModel model.ToolCallingChatModel, op
 	_ = g.AddEdge("extract_tool_output", "update_state")
 	_ = g.AddEdge("final_output", compose.END)
 
-	runnable, err := CompileGraph(rail, ops.genops, g, compose.WithGraphName("MaterialExtract"), compose.WithNodeTriggerMode(compose.AnyPredecessor))
+	runnable, err := graph.CompileGraph(ops.genops, g, compose.WithGraphName("MaterialExtract"), compose.WithNodeTriggerMode(compose.AnyPredecessor))
 	if err != nil {
 		return nil, errs.Wrap(err)
 	}
@@ -382,11 +385,7 @@ func (b *MaterialExtract) Execute(rail flow.Rail, input MaterialExtractInput) (M
 	}
 	input.Fields = append(reasonFields, input.Fields...)
 
-	cops := []compose.Option{}
-	if b.ops.genops.LogOnStart {
-		cops = append(cops, WithTraceCallback("MaterialExtract", b.ops.genops.LogInputs))
-	}
-	out, err := b.graph.Invoke(rail, input, cops...)
+	out, err := graph.InvokeGraph(rail, b.ops.genops, b.graph, "MaterialExtract", input)
 	if err != nil {
 		return out, err
 	}

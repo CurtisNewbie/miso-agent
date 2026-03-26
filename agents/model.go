@@ -15,6 +15,7 @@ var (
 	OpenAIBaseURL         = "https://api.openai.com/v1"
 	AliBailianIntlBaseURL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 	AliBailianCnBaseURL   = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+	OpenRouterBaseURL     = "https://openrouter.ai/api/v1"
 )
 
 const (
@@ -61,6 +62,12 @@ func WithMaxToken(n int) func(o *openAiModelConfig) {
 func WithRetry(n int) func(o *openAiModelConfig) {
 	return func(o *openAiModelConfig) {
 		o.retry = n
+	}
+}
+
+func WithBaseURL(url string) func(o *openAiModelConfig) {
+	return func(o *openAiModelConfig) {
+		o.baseURL = url
 	}
 }
 

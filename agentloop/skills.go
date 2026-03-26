@@ -1,0 +1,50 @@
+package agentloop
+
+import (
+	"context"
+
+	"github.com/curtisnewbie/miso/errs"
+)
+
+// Skills injects loaded skills into the system prompt.
+type Skills struct {
+	loader *SkillLoader
+	skills SkillsMap
+}
+
+// NewSkills creates a new skills manager.
+func NewSkills(backend FileStore) *Skills {
+	return &Skills{
+		loader: NewSkillLoader(backend),
+	}
+}
+
+// Load loads skills from the configured sources.
+func (s *Skills) Load(ctx context.Context, sources []string) error {
+	skills, err := s.loader.LoadFromSources(ctx, sources)
+	if err != nil {
+		return errs.Wrapf(err, "failed to load skills")
+	}
+	s.skills = skills
+	return nil
+}
+
+// InjectMetadata injects only skill metadata for progressive disclosure.
+// The LLM is instructed to read full skill content on-demand using tools.
+func (s *Skills) InjectMetadata(basePrompt string) string {
+	if len(s.skills) < 1 {
+		return basePrompt
+	}
+
+	skillsPrompt := s.skills.FormatMetadata()
+	if skillsPrompt == "" {
+		return basePrompt
+	}
+
+	return basePrompt + "\n\n" + skillsPrompt
+}
+
+// GetSkills returns the loaded skills map.
+func (s *Skills) GetSkills() SkillsMap {
+	return s.skills
+}
