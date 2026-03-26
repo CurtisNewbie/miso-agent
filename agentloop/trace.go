@@ -24,6 +24,12 @@ func withAgentTraceCallback(name string, ops agentOps) compose.Option {
 			rail := flow.NewRail(ctx)
 			if ri.Component == "Tool" {
 				logToolStart(rail, name, ri, in)
+			} else if ri.Component == "ChatModel" {
+				if ops.logInputs {
+					logChatModelInput(rail, name, ri, in)
+				} else {
+					rail.Infof("[%v] %v/%v start", name, ri.Component, ri.Name)
+				}
 			} else {
 				if ops.logInputs {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
@@ -58,6 +64,36 @@ func withAgentTraceCallback(name string, ops agentOps) compose.Option {
 		})
 	}
 	return compose.WithCallbacks(b.Build())
+}
+
+// logChatModelInput logs each input message sent to the ChatModel.
+// Tool-call-only messages (empty content) are summarized as "<tool_calls: name1, name2>".
+func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in callbacks.CallbackInput) {
+	ci := model.ConvCallbackInput(in)
+	if ci == nil {
+		rail.Infof("[%v] %v/%v start", graphName, ri.Component, ri.Name)
+		return
+	}
+	if len(ci.Messages) == 0 {
+		rail.Infof("[%v] %v/%v start (no messages)", graphName, ri.Component, ri.Name)
+		return
+	}
+	for i, msg := range ci.Messages {
+		content := msg.Content
+		if len(msg.ToolCalls) > 0 {
+			tcNames := make([]string, 0, len(msg.ToolCalls))
+			for _, tc := range msg.ToolCalls {
+				tcNames = append(tcNames, tc.Function.Name)
+			}
+			toolSummary := "<tool_calls: " + strings.Join(tcNames, ", ") + ">"
+			if content == "" {
+				content = toolSummary
+			} else {
+				content = content + " " + toolSummary
+			}
+		}
+		rail.Infof("[%v] %v/%v input[%v] [%v]: %v", graphName, ri.Component, ri.Name, i, msg.Role, content)
+	}
 }
 
 // logToolStart logs tool-specific details for known builtin tools.
