@@ -9,6 +9,7 @@ import (
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/retry"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -22,6 +23,9 @@ type factCheckConfig struct {
 	// Language specifies the response language for the agent.
 	// If empty, defaults to "English".
 	Language string
+	// RetryCount is the number of additional attempts when the response is missing Score or Reason.
+	// Defaults to 2 (up to 3 total attempts).
+	RetryCount int
 }
 
 // WithFactCheckSystemPrompt sets an optional system prompt for the fact-check agent.
@@ -35,6 +39,14 @@ func WithFactCheckSystemPrompt(prompt string) FactCheckOption {
 func WithFactCheckLanguage(lang string) FactCheckOption {
 	return func(o *factCheckConfig) {
 		o.Language = lang
+	}
+}
+
+// WithFactCheckRetry sets the number of additional retry attempts when the model response
+// is missing a Score or Reason field. The default is 2 (up to 3 total attempts).
+func WithFactCheckRetry(n int) FactCheckOption {
+	return func(o *factCheckConfig) {
+		o.RetryCount = n
 	}
 }
 
@@ -85,7 +97,7 @@ type FactCheckAgent struct {
 //	    ReferenceAnswer: "Paris",
 //	})
 func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOption) (*FactCheckAgent, error) {
-	cfg := &factCheckConfig{}
+	cfg := &factCheckConfig{RetryCount: 2}
 	for _, o := range opts {
 		o(cfg)
 	}
@@ -123,7 +135,8 @@ type FactCheckInput struct {
 // Check evaluates the factual accuracy of an LLM response and returns a [FactCheckResult].
 //
 // The prompt template is substituted with the provided inputs using strutil.NamedSprintfv.
-// The model response is parsed for "Score:" and "Reason:" fields.
+// The model response is parsed for "Score:" and "Reason:" fields. If either field is missing
+// the call is retried up to [factCheckConfig.RetryCount] additional times.
 func (a *FactCheckAgent) Check(rail flow.Rail, input FactCheckInput) (FactCheckResult, error) {
 	userPrompt := strutil.NamedSprintfv(factCheckTaskPrompt, factCheckPromptInput{
 		Question:        input.Question,
@@ -132,18 +145,22 @@ func (a *FactCheckAgent) Check(rail flow.Rail, input FactCheckInput) (FactCheckR
 		ReferenceAnswer: input.ReferenceAnswer,
 	})
 
-	out, err := a.agent.Execute(rail, agentloop.AgentRequest{
-		UserInput: userPrompt,
+	return retry.GetOne(a.config.RetryCount, func() (FactCheckResult, error) {
+		out, err := a.agent.Execute(rail, agentloop.AgentRequest{
+			UserInput: userPrompt,
+		})
+		if err != nil {
+			return FactCheckResult{}, errs.Wrapf(err, "FactCheckAgent execution failed")
+		}
+		result, err := parseFactCheckResponse(out.Response)
+		if err != nil {
+			return FactCheckResult{}, errs.Wrapf(err, "failed to parse FactCheckAgent response")
+		}
+		if result.Reason == "" {
+			return FactCheckResult{}, errs.NewErrf("missing Reason field in FactCheckAgent response")
+		}
+		return result, nil
 	})
-	if err != nil {
-		return FactCheckResult{}, errs.Wrapf(err, "FactCheckAgent execution failed")
-	}
-
-	result, err := parseFactCheckResponse(out.Response)
-	if err != nil {
-		return FactCheckResult{}, errs.Wrapf(err, "failed to parse FactCheckAgent response")
-	}
-	return result, nil
 }
 
 // CheckCtx is like [FactCheckAgent.Check] but accepts a plain context.Context.

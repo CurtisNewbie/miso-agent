@@ -9,6 +9,7 @@ import (
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/retry"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -22,6 +23,9 @@ type relevanceCheckConfig struct {
 	// Language specifies the response language for the agent.
 	// If empty, defaults to "English".
 	Language string
+	// RetryCount is the number of additional attempts when the response is missing Score or Reason.
+	// Defaults to 2 (up to 3 total attempts).
+	RetryCount int
 }
 
 // WithRelevanceCheckSystemPrompt sets an optional system prompt for the relevance-check agent.
@@ -35,6 +39,14 @@ func WithRelevanceCheckSystemPrompt(prompt string) RelevanceCheckOption {
 func WithRelevanceCheckLanguage(lang string) RelevanceCheckOption {
 	return func(o *relevanceCheckConfig) {
 		o.Language = lang
+	}
+}
+
+// WithRelevanceCheckRetry sets the number of additional retry attempts when the model response
+// is missing a Score or Reason field. The default is 2 (up to 3 total attempts).
+func WithRelevanceCheckRetry(n int) RelevanceCheckOption {
+	return func(o *relevanceCheckConfig) {
+		o.RetryCount = n
 	}
 }
 
@@ -84,7 +96,7 @@ type RelevanceCheckAgent struct {
 //	    Output:   "The capital of France is Paris.",
 //	})
 func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...RelevanceCheckOption) (*RelevanceCheckAgent, error) {
-	cfg := &relevanceCheckConfig{}
+	cfg := &relevanceCheckConfig{RetryCount: 2}
 	for _, o := range opts {
 		o(cfg)
 	}
@@ -122,7 +134,8 @@ type RelevanceCheckInput struct {
 // Check evaluates the relevance of an LLM response and returns a [RelevanceCheckResult].
 //
 // The prompt template is substituted with the provided inputs using strutil.NamedSprintfv.
-// The model response is parsed for "Score:" and "Reason:" fields.
+// The model response is parsed for "Score:" and "Reason:" fields. If either field is missing
+// the call is retried up to [relevanceCheckConfig.RetryCount] additional times.
 func (a *RelevanceCheckAgent) Check(rail flow.Rail, input RelevanceCheckInput) (RelevanceCheckResult, error) {
 	userPrompt := strutil.NamedSprintfv(relevanceCheckTaskPrompt, relevanceCheckPromptInput{
 		Question:        input.Question,
@@ -131,18 +144,22 @@ func (a *RelevanceCheckAgent) Check(rail flow.Rail, input RelevanceCheckInput) (
 		ReferenceAnswer: input.ReferenceAnswer,
 	})
 
-	out, err := a.agent.Execute(rail, agentloop.AgentRequest{
-		UserInput: userPrompt,
+	return retry.GetOne(a.config.RetryCount, func() (RelevanceCheckResult, error) {
+		out, err := a.agent.Execute(rail, agentloop.AgentRequest{
+			UserInput: userPrompt,
+		})
+		if err != nil {
+			return RelevanceCheckResult{}, errs.Wrapf(err, "RelevanceCheckAgent execution failed")
+		}
+		score, reason, err := parseScoreReason(out.Response)
+		if err != nil {
+			return RelevanceCheckResult{}, errs.Wrapf(err, "failed to parse RelevanceCheckAgent response")
+		}
+		if reason == "" {
+			return RelevanceCheckResult{}, errs.NewErrf("missing Reason field in RelevanceCheckAgent response")
+		}
+		return RelevanceCheckResult{Score: score, Reason: reason}, nil
 	})
-	if err != nil {
-		return RelevanceCheckResult{}, errs.Wrapf(err, "RelevanceCheckAgent execution failed")
-	}
-
-	score, reason, err := parseScoreReason(out.Response)
-	if err != nil {
-		return RelevanceCheckResult{}, errs.Wrapf(err, "failed to parse RelevanceCheckAgent response")
-	}
-	return RelevanceCheckResult{Score: score, Reason: reason}, nil
 }
 
 // CheckCtx is like [RelevanceCheckAgent.Check] but accepts a plain context.Context.
