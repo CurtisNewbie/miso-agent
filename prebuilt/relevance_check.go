@@ -54,8 +54,7 @@ type relevanceCheckPromptInput struct {
 // RelevanceCheckAgent evaluates how relevant an LLM response is to the user question,
 // knowledge context, and optional reference answer.
 //
-// The agent performs a single-shot call using [agentloop.Agent] with [agentloop.NewThinkTool]
-// for structured reflection before producing the final score. No multi-turn conversation occurs.
+// The agent performs a single-shot call using [agentloop.Agent] with no tools.
 //
 // Use [NewRelevanceCheckAgent] to create an instance, then call [RelevanceCheckAgent.Check]
 // to score a response.
@@ -83,11 +82,8 @@ func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...Releva
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "RelevanceCheckAgent",
 		Model:        chatModel,
-		MaxRunSteps:  5,
+		MaxRunSteps:  2,
 		SystemPrompt: cfg.SystemPrompt,
-		Tools: []agentloop.Tool{
-			agentloop.NewThinkTool(),
-		},
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create RelevanceCheckAgent")

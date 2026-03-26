@@ -54,8 +54,7 @@ type factCheckPromptInput struct {
 // FactCheckAgent evaluates the factual accuracy of an LLM response against
 // a knowledge context, a user question, and an optional reference answer.
 //
-// The agent performs a single-shot call using [agentloop.Agent] with [agentloop.NewThinkTool]
-// for structured reflection before producing the final score. No multi-turn conversation occurs.
+// The agent performs a single-shot call using [agentloop.Agent] with no tools.
 //
 // Use [NewFactCheckAgent] to create an instance, then call [FactCheckAgent.Check]
 // to score a response.
@@ -84,11 +83,8 @@ func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOp
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "FactCheckAgent",
 		Model:        chatModel,
-		MaxRunSteps:  5,
+		MaxRunSteps:  2,
 		SystemPrompt: cfg.SystemPrompt,
-		Tools: []agentloop.Tool{
-			agentloop.NewThinkTool(),
-		},
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create FactCheckAgent")
