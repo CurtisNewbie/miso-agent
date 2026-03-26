@@ -64,6 +64,12 @@ func WithRetry(n int) func(o *openAiModelConfig) {
 	}
 }
 
+func WithBaseURL(url string) func(o *openAiModelConfig) {
+	return func(o *openAiModelConfig) {
+		o.baseURL = url
+	}
+}
+
 func NewOpenAIChatModel(model, apiKey string, ops ...func(o *openAiModelConfig)) (model.ToolCallingChatModel, error) {
 	o := &openAiModelConfig{
 		maxToken:    0,
