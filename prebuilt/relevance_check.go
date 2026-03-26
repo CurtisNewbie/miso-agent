@@ -122,8 +122,7 @@ type RelevanceCheckInput struct {
 // Check evaluates the relevance of an LLM response and returns a [RelevanceCheckResult].
 //
 // The prompt template is substituted with the provided inputs using strutil.NamedSprintfv.
-// The agent uses [agentloop.NewThinkTool] for structured reflection, then the model response
-// is parsed for "Score:" and "Reason:" fields.
+// The model response is parsed for "Score:" and "Reason:" fields.
 func (a *RelevanceCheckAgent) Check(rail flow.Rail, input RelevanceCheckInput) (RelevanceCheckResult, error) {
 	userPrompt := strutil.NamedSprintfv(relevanceCheckTaskPrompt, relevanceCheckPromptInput{
 		Question:        input.Question,
@@ -154,13 +153,44 @@ func (a *RelevanceCheckAgent) CheckCtx(ctx context.Context, input RelevanceCheck
 // relevanceCheckTaskPrompt is the evaluation prompt template sent as the user message.
 // Placeholders ${Question}, ${Context}, ${Output}, ${ReferenceAnswer} are substituted
 // at call time via strutil.NamedSprintfv.
-const relevanceCheckTaskPrompt = `You are an expert judge. Your task is to rate how relevant the following LLM response is based on the provided input. Rate on a scale from 1 to 5, where:
+const relevanceCheckTaskPrompt = `You are an expert judge. Rate how well the LLM response addresses the user question given the knowledge context.
 
-1 = Completely irrelevant
-2 = Mostly irrelevant
-3 = Somewhat relevant but with noticeable issues
-4 = Mostly relevant with minor issues
-5 = Fully correct and accurate
+Score scale:
+1 = Completely irrelevant — response does not address the question at all
+2 = Mostly irrelevant — touches the topic but misses the core ask
+3 = Somewhat relevant — partially answers the question with noticeable gaps
+4 = Mostly relevant — answers the question with minor omissions or issues
+5 = Fully relevant — directly and completely answers the question
+
+--- EXAMPLES ---
+
+Example 1:
+<user_question>How do I reset my password?</user_question>
+<knowledge_context>To reset your password, go to the login page and click "Forgot Password". Enter your registered email and follow the link sent to your inbox.</knowledge_context>
+<llm_response>Click "Forgot Password" on the login page, enter your email address, then follow the reset link in your inbox.</llm_response>
+<reference_answer></reference_answer>
+Score: 5
+Reason: The response directly answers the question and accurately follows all steps described in the context without omission or addition.
+
+Example 2:
+<user_question>How do I reset my password?</user_question>
+<knowledge_context>To reset your password, go to the login page and click "Forgot Password".</knowledge_context>
+<llm_response>You can reach our support team by emailing help@example.com for any account issues.</llm_response>
+<reference_answer></reference_answer>
+Score: 1
+Reason: The response redirects to customer support instead of answering the password reset question. It is completely off-topic relative to both the question and the context.
+
+Example 3:
+<user_question>What are the shipping options and their delivery times?</user_question>
+<knowledge_context>We offer standard shipping (5-7 business days) and express shipping (1-2 business days). Orders over $50 qualify for free standard shipping.</knowledge_context>
+<llm_response>We have fast and slow shipping options available.</llm_response>
+<reference_answer></reference_answer>
+Score: 3
+Reason: The response acknowledges that multiple shipping speeds exist but omits the specific delivery timeframes and the free shipping threshold, which were directly asked about.
+
+--- END EXAMPLES ---
+
+Now evaluate:
 
 <user_question>
 ${Question}
@@ -178,6 +208,6 @@ ${Output}
 ${ReferenceAnswer}
 </reference_answer>
 
-Use the think_tool to reflect on the evidence before concluding. Then return the numeric score (1-5) and reason in following format:
-Score:
-Reason: `
+Respond in exactly this format:
+Score: <number from 1 to 5>
+Reason: <concise justification explaining why the response is or is not relevant>`

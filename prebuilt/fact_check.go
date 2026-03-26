@@ -123,8 +123,7 @@ type FactCheckInput struct {
 // Check evaluates the factual accuracy of an LLM response and returns a [FactCheckResult].
 //
 // The prompt template is substituted with the provided inputs using strutil.NamedSprintfv.
-// The agent uses [agentloop.NewThinkTool] for structured reflection, then the model response
-// is parsed for "Score:" and "Reason:" fields.
+// The model response is parsed for "Score:" and "Reason:" fields.
 func (a *FactCheckAgent) Check(rail flow.Rail, input FactCheckInput) (FactCheckResult, error) {
 	userPrompt := strutil.NamedSprintfv(factCheckTaskPrompt, factCheckPromptInput{
 		Question:        input.Question,
@@ -164,14 +163,44 @@ func parseFactCheckResponse(content string) (FactCheckResult, error) {
 // factCheckTaskPrompt is the evaluation prompt template sent as the user message.
 // Placeholders ${Question}, ${Context}, ${Output}, ${ReferenceAnswer} are substituted
 // at call time via strutil.NamedSprintfv.
-const factCheckTaskPrompt = `You are a fact-checking expert. Strictly evaluate the accuracy of the LLM response against the provided knowledge and question.
-If the context is irrelevant or the context does not support the response, the response is considered hallucinated.
+const factCheckTaskPrompt = `You are a fact-checking expert. Evaluate the factual accuracy of the LLM response against the provided knowledge context and question. If the context does not support the response, treat it as hallucinated.
 
-1 = Major factual errors or hallucinations
+Score scale:
+1 = Major factual errors or hallucinations not supported by context
 2 = Significant inaccuracies affecting core meaning
-3 = Partially correct but with key mistakes
+3 = Partially correct but contains key mistakes
 4 = Minor inaccuracies in non-critical details
 5 = Fully factually correct with no errors
+
+--- EXAMPLES ---
+
+Example 1:
+<user_question>What is the refund policy for digital products?</user_question>
+<knowledge_context>All digital products are non-refundable once downloaded. Physical products can be returned within 30 days.</knowledge_context>
+<llm_response>Digital products cannot be refunded after download. Physical items are eligible for return within 30 days.</llm_response>
+<reference_answer></reference_answer>
+Score: 5
+Reason: The response exactly matches the context. Both the no-refund rule for digital products and the 30-day return window for physical products are correctly stated.
+
+Example 2:
+<user_question>How many support tiers does the service offer?</user_question>
+<knowledge_context>The service provides two support plans: Standard (email only, 48h response) and Premium (24/7 phone and email, 4h response).</knowledge_context>
+<llm_response>The service offers three support tiers: Basic, Standard, and Premium, each with different response times.</llm_response>
+<reference_answer></reference_answer>
+Score: 1
+Reason: The context describes exactly two support plans. The response invents a third "Basic" tier that does not exist in the context, which is a hallucination.
+
+Example 3:
+<user_question>When was the product launched?</user_question>
+<knowledge_context>Product X was announced in Q3 2023 and became available to select beta customers in late 2023. General availability launched in February 2024.</knowledge_context>
+<llm_response>Product X was launched in Q3 2023.</llm_response>
+<reference_answer>February 2024</reference_answer>
+Score: 2
+Reason: Q3 2023 was the announcement date, not the launch. The actual general availability was February 2024 per the context. The response conflates the announcement with the launch.
+
+--- END EXAMPLES ---
+
+Now evaluate:
 
 <user_question>
 ${Question}
@@ -189,6 +218,6 @@ ${Output}
 ${ReferenceAnswer}
 </reference_answer>
 
-Use the think_tool to reflect on the evidence before concluding. Then return the numeric score (1-5) and reason in following format:
-Score:
-Reason: `
+Respond in exactly this format:
+Score: <number from 1 to 5>
+Reason: <concise justification referencing specific evidence from the context>`
