@@ -71,7 +71,16 @@ func WithBaseURL(url string) func(o *openAiModelConfig) {
 	}
 }
 
-func NewOpenAIChatModel(model, apiKey string, ops ...func(o *openAiModelConfig)) (model.ToolCallingChatModel, error) {
+// NewOpenAIChatModel creates a new OpenAI-compatible chat model.
+//
+// Example:
+//
+//	model, err := NewOpenAIChatModel("qwen3-max", apiKey,
+//	    WithTemperature(0.3),
+//	    WithMaxToken(32768),
+//	    WithRetry(3),
+//	)
+func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConfig)) (model.ToolCallingChatModel, error) {
 	o := &openAiModelConfig{
 		maxToken:    0,
 		temperature: 0.7,
@@ -83,7 +92,7 @@ func NewOpenAIChatModel(model, apiKey string, ops ...func(o *openAiModelConfig))
 	}
 
 	if o.maxToken < 1 {
-		if n, ok := modelMaxToken[model]; ok {
+		if n, ok := modelMaxToken[modelName]; ok {
 			o.maxToken = n
 		}
 	}
@@ -94,7 +103,7 @@ func NewOpenAIChatModel(model, apiKey string, ops ...func(o *openAiModelConfig))
 	cm, err := openai.NewChatModel(context.TODO(), &openai.ChatModelConfig{
 		BaseURL:             o.baseURL,
 		APIKey:              apiKey,
-		Model:               model,
+		Model:               modelName,
 		Temperature:         ptr.ValPtr(o.temperature),
 		MaxCompletionTokens: ptr.ValPtr(o.maxToken),
 	})
@@ -103,13 +112,14 @@ func NewOpenAIChatModel(model, apiKey string, ops ...func(o *openAiModelConfig))
 	}
 
 	// wrap with retry
+	var result model.ToolCallingChatModel = cm
 	if o.retry > 0 {
-		return &retryChatModel{
+		result = &retryChatModel{
 			retry: o.retry,
-			c:     cm,
-		}, nil
+			c:     result,
+		}
 	}
-	return cm, nil
+	return result, nil
 }
 
 type retryChatModel struct {
@@ -133,6 +143,7 @@ func (r *retryChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingC
 	return r.c.WithTools(tools)
 }
 
+// RetryChatModel wraps c with a default retry count of 3.
 func RetryChatModel(c model.ToolCallingChatModel) model.ToolCallingChatModel {
 	return &retryChatModel{
 		c:     c,

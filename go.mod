@@ -4,7 +4,7 @@ go 1.24.4
 
 require (
 	github.com/cloudwego/eino v0.7.18
-	github.com/cloudwego/eino-ext/components/model/openai v0.1.7
+	github.com/cloudwego/eino-ext/components/model/openai v0.1.10
 	github.com/curtisnewbie/miso v0.4.13
 	github.com/curtisnewbie/miso-dify v0.1.8
 	github.com/curtisnewbie/miso-tavily v0.0.2-0.20260309090836-5ac7462fd1e4
@@ -25,7 +25,7 @@ require (
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.11 // indirect
+	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.14 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dlclark/regexp2 v1.10.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
