@@ -25,6 +25,10 @@ func withAgentTraceCallback(name string, ops agentOps) compose.Option {
 			if ri.Component == "Tool" {
 				logToolStart(rail, name, ri, in)
 			} else if ri.Component == "ChatModel" {
+				if ri.Name == "" {
+					// skip inner component-level callback; node-level fires separately
+					return ctx
+				}
 				if ops.logInputs {
 					logChatModelInput(rail, name, ri, in)
 				} else {
@@ -43,6 +47,10 @@ func withAgentTraceCallback(name string, ops agentOps) compose.Option {
 	if ops.logOnEnd {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
 			rail := flow.NewRail(ctx)
+			if ri.Component == "ChatModel" && ri.Name == "" {
+				// skip inner component-level callback; node-level fires separately
+				return ctx
+			}
 			inToken, outToken, ok := agentTokenUsage(output)
 			if ok {
 				rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
