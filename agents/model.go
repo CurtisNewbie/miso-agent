@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
@@ -119,6 +120,10 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 			c:     result,
 		}
 	}
+
+	// always wrap with content fix modifier to ensure "content" field is
+	// present in every request message (required by some providers)
+	result = &contentFixModel{inner: result}
 	return result, nil
 }
 
@@ -149,4 +154,83 @@ func RetryChatModel(c model.ToolCallingChatModel) model.ToolCallingChatModel {
 		c:     c,
 		retry: 3,
 	}
+}
+
+// ensureMessageContent is a RequestPayloadModifier that guarantees every
+// message object in the serialized request body contains a "content" field.
+//
+// Some providers (e.g. DashScope) reject requests when the "content" field is
+// absent from an assistant message, even though standard Go JSON encoding drops
+// the field via omitempty when the content string is empty (which is normal for
+// assistant messages that only contain tool_calls).  This modifier patches the
+// raw body without re-encoding any unrelated fields, so precision of other
+// numeric/string values is fully preserved.
+func ensureMessageContent(_ context.Context, _ []*schema.Message, body []byte) ([]byte, error) {
+	var reqMap map[string]json.RawMessage
+	if err := json.Unmarshal(body, &reqMap); err != nil {
+		return body, nil
+	}
+	msgsRaw, ok := reqMap["messages"]
+	if !ok {
+		return body, nil
+	}
+	var msgs []json.RawMessage
+	if err := json.Unmarshal(msgsRaw, &msgs); err != nil {
+		return body, nil
+	}
+	modified := false
+	for i, msgRaw := range msgs {
+		var msgMap map[string]json.RawMessage
+		if err := json.Unmarshal(msgRaw, &msgMap); err != nil {
+			continue
+		}
+		if _, hasContent := msgMap["content"]; !hasContent {
+			msgMap["content"] = json.RawMessage(`""`)
+			newMsgBytes, err := json.Marshal(msgMap)
+			if err != nil {
+				continue
+			}
+			msgs[i] = json.RawMessage(newMsgBytes)
+			modified = true
+		}
+	}
+	if !modified {
+		return body, nil
+	}
+	newMsgsBytes, err := json.Marshal(msgs)
+	if err != nil {
+		return body, nil
+	}
+	reqMap["messages"] = json.RawMessage(newMsgsBytes)
+	newBody, err := json.Marshal(reqMap)
+	if err != nil {
+		return body, nil
+	}
+	return newBody, nil
+}
+
+// contentFixModel wraps a ToolCallingChatModel and always injects
+// ensureMessageContent as a RequestPayloadModifier on every Generate and
+// Stream call, ensuring compatibility with providers that require the
+// "content" field to be present in every message.
+type contentFixModel struct {
+	inner model.ToolCallingChatModel
+}
+
+func (c *contentFixModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	opts = append(opts, openai.WithRequestPayloadModifier(ensureMessageContent))
+	return c.inner.Generate(ctx, input, opts...)
+}
+
+func (c *contentFixModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	opts = append(opts, openai.WithRequestPayloadModifier(ensureMessageContent))
+	return c.inner.Stream(ctx, input, opts...)
+}
+
+func (c *contentFixModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	inner, err := c.inner.WithTools(tools)
+	if err != nil {
+		return nil, err
+	}
+	return &contentFixModel{inner: inner}, nil
 }
