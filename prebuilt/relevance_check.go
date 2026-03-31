@@ -53,11 +53,11 @@ func WithRelevanceCheckRetry(n int) RelevanceCheckOption {
 // RelevanceCheckResult holds the numeric relevance score and textual reason returned by the agent.
 type RelevanceCheckResult struct {
 	// Score is the relevance score on a 1-5 scale:
-	//   1 = Completely irrelevant
-	//   2 = Mostly irrelevant
-	//   3 = Somewhat relevant but with noticeable issues
-	//   4 = Mostly relevant with minor issues
-	//   5 = Fully correct and accurate
+	//   1 = Completely off-topic — addresses a different subject than what was asked
+	//   2 = Mostly irrelevant — on the right topic but misses the core ask or ignores available context
+	//   3 = Somewhat relevant — on-topic but with noticeable gaps (e.g. correctly abstains when context has no info)
+	//   4 = Mostly relevant with minor omissions or issues
+	//   5 = Fully relevant — directly and completely answers the question
 	Score int
 
 	// Reason is a brief textual justification for the score.
@@ -173,11 +173,13 @@ func (a *RelevanceCheckAgent) CheckCtx(ctx context.Context, input RelevanceCheck
 const relevanceCheckTaskPrompt = `You are an expert judge. Rate how well the LLM response addresses the user question given the knowledge context.
 
 Score scale:
-1 = Completely irrelevant — response does not address the question at all
-2 = Mostly irrelevant — touches the topic but misses the core ask
-3 = Somewhat relevant — partially answers the question with noticeable gaps
+1 = Completely off-topic — response addresses a different subject than what was asked
+2 = Mostly irrelevant — on the right topic but misses the core ask, or context contains the answer but the response ignores it
+3 = Somewhat relevant — on-topic and acknowledges the question, but with noticeable gaps (e.g. correctly abstains when context lacks relevant information)
 4 = Mostly relevant — answers the question with minor omissions or issues
 5 = Fully relevant — directly and completely answers the question
+
+Important: A response that says "no information available" is NOT automatically off-topic (score 1). It is still on-topic if it acknowledges the question directly. Reserve score 1 only for responses that address a completely different subject. Use score 2 when context has the answer but the response ignores it. Use score 3 when context has no relevant information and the response correctly abstains.
 
 --- EXAMPLES ---
 
@@ -204,6 +206,22 @@ Example 3:
 <reference_answer></reference_answer>
 Score: 3
 Reason: The response acknowledges that multiple shipping speeds exist but omits the specific delivery timeframes and the free shipping threshold, which were directly asked about.
+
+Example 4:
+<user_question>Can customer invitation codes be changed?</user_question>
+<knowledge_context>This section covers payment information modification, permission settings, and member verification code updates.</knowledge_context>
+<llm_response>I'm sorry, there is currently no information available about whether customer invitation codes can be changed. If you have other questions, feel free to ask.</llm_response>
+<reference_answer></reference_answer>
+Score: 3
+Reason: The response is on-topic — it directly acknowledges the question and honestly states no information is available. However, the question remains unanswered, which is a significant gap. This scores 3, not 1, because the response is not off-topic; it appropriately reflects the limits of available knowledge.
+
+Example 5:
+<user_question>What is the deadline to request a refund?</user_question>
+<knowledge_context>Customers may request a refund within 7 days of purchase. After 7 days, no refunds will be issued.</knowledge_context>
+<llm_response>I'm sorry, I don't have any information about the refund deadline. Please contact customer support for details.</llm_response>
+<reference_answer></reference_answer>
+Score: 2
+Reason: The response is on the right topic but ignores the directly relevant context, which explicitly states the 7-day refund deadline. The user's question goes unanswered despite the answer being available.
 
 --- END EXAMPLES ---
 
