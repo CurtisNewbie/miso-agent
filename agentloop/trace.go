@@ -106,7 +106,36 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 	argsJSON := ci.ArgumentsInJSON
 
 	switch ri.Name {
-	case "read_file", "write_file", "edit_file", "list_directory", "add_artifact":
+	case "read_file":
+		path := extractJSONStringField(argsJSON, "path")
+		offset := extractJSONIntField(argsJSON, "offset")
+		limit := extractJSONIntField(argsJSON, "limit")
+		switch {
+		case offset > 0 && limit > 0:
+			rail.Infof("[%v] Tool/read_file — path: %v, offset: %v, limit: %v", graphName, path, offset, limit)
+		case offset > 0:
+			rail.Infof("[%v] Tool/read_file — path: %v, offset: %v", graphName, path, offset)
+		case limit > 0:
+			rail.Infof("[%v] Tool/read_file — path: %v, limit: %v", graphName, path, limit)
+		default:
+			rail.Infof("[%v] Tool/read_file — path: %v", graphName, path)
+		}
+
+	case "write_file":
+		path := extractJSONStringField(argsJSON, "path")
+		contentLen := extractJSONStringLen(argsJSON, "content")
+		rail.Infof("[%v] Tool/write_file — path: %v, content_len: %v", graphName, path, contentLen)
+
+	case "edit_file":
+		path := extractJSONStringField(argsJSON, "path")
+		replaceAll := extractJSONBoolField(argsJSON, "replace_all")
+		if replaceAll {
+			rail.Infof("[%v] Tool/edit_file — path: %v, replace_all: true", graphName, path)
+		} else {
+			rail.Infof("[%v] Tool/edit_file — path: %v", graphName, path)
+		}
+
+	case "list_directory", "add_artifact":
 		path := extractJSONStringField(argsJSON, "path")
 		rail.Infof("[%v] Tool/%v — path: %v", graphName, ri.Name, path)
 
@@ -169,6 +198,48 @@ func extractJSONStringSliceField(jsonStr, field string) []string {
 		return nil
 	}
 	return ss
+}
+
+// extractJSONIntField extracts a top-level int field from a JSON object string.
+// Returns 0 if parsing fails or field is missing.
+func extractJSONIntField(jsonStr, field string) int {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
+		return 0
+	}
+	raw, ok := m[field]
+	if !ok {
+		return 0
+	}
+	var n int
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return 0
+	}
+	return n
+}
+
+// extractJSONBoolField extracts a top-level bool field from a JSON object string.
+// Returns false if parsing fails or field is missing.
+func extractJSONBoolField(jsonStr, field string) bool {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
+		return false
+	}
+	raw, ok := m[field]
+	if !ok {
+		return false
+	}
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		return false
+	}
+	return b
+}
+
+// extractJSONStringLen extracts the byte length of a top-level string field
+// from a JSON object string. Returns 0 if parsing fails or field is missing.
+func extractJSONStringLen(jsonStr, field string) int {
+	return len(extractJSONStringField(jsonStr, field))
 }
 
 // extractTodoTasks parses the add_todo args JSON and returns task names.
