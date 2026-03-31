@@ -105,7 +105,7 @@ func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOp
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "FactCheckAgent",
 		Model:        chatModel,
-		MaxRunSteps:  2,
+		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: cfg.SystemPrompt,
 	})
@@ -180,14 +180,18 @@ func parseFactCheckResponse(content string) (FactCheckResult, error) {
 // factCheckTaskPrompt is the evaluation prompt template sent as the user message.
 // Placeholders ${Question}, ${Context}, ${Output}, ${ReferenceAnswer} are substituted
 // at call time via strutil.NamedSprintfv.
-const factCheckTaskPrompt = `You are a fact-checking expert. Evaluate the factual accuracy of the LLM response against the provided knowledge context and question. If the context does not support the response, treat it as hallucinated.
+const factCheckTaskPrompt = `You are a fact-checking expert. Evaluate the factual accuracy of an LLM response by comparing it against the provided knowledge context and user question.
+
+Evaluation rules:
+- If the context CONTAINS relevant information: check whether the response accurately reflects it. Fabricated or contradicted facts are hallucinations.
+- If the context does NOT contain relevant information: check whether the response correctly abstains (e.g., says "I don't have information about this"). Correct abstention is NOT a hallucination — it is the expected behavior.
 
 Score scale:
-1 = Major factual errors or hallucinations not supported by context
+1 = Major factual errors or hallucinations: invents facts not in the context, OR context contains the answer but the response falsely claims no information is available
 2 = Significant inaccuracies affecting core meaning
 3 = Partially correct but contains key mistakes
 4 = Minor inaccuracies in non-critical details
-5 = Fully factually correct with no errors
+5 = Fully factually correct with no errors, OR correctly abstains when the context contains no relevant information
 
 --- EXAMPLES ---
 
@@ -215,7 +219,28 @@ Example 3:
 Score: 2
 Reason: Q3 2023 was the announcement date, not the launch. The actual general availability was February 2024 per the context. The response conflates the announcement with the launch.
 
+Example 4:
+<user_question>Can customer invitation codes be changed?</user_question>
+<knowledge_context>This section covers payment information modification, permission settings, and member verification code updates.</knowledge_context>
+<llm_response>I'm sorry, there is currently no information available about whether customer invitation codes can be changed. If you have other questions, feel free to ask.</llm_response>
+<reference_answer></reference_answer>
+Score: 5
+Reason: The context contains no information about customer invitation codes. The response correctly abstains by acknowledging the knowledge gap rather than fabricating an answer. Correct abstention when context lacks relevant information is accurate behavior.
+
+Example 5:
+<user_question>What is the deadline to request a refund?</user_question>
+<knowledge_context>Customers may request a refund within 7 days of purchase. After 7 days, no refunds will be issued.</knowledge_context>
+<llm_response>I'm sorry, I don't have any information about the refund deadline. Please contact customer support for details.</llm_response>
+<reference_answer></reference_answer>
+Score: 1
+Reason: The context explicitly states that refunds must be requested within 7 days of purchase. The response falsely claims no information is available, which directly contradicts the context and misleads the user.
+
 --- END EXAMPLES ---
+
+Before scoring, follow these steps:
+1. Determine whether the context contains information relevant to the question.
+2. If YES: Assess whether the response accurately reflects what the context says. Look for fabrications, contradictions, or key omissions.
+3. If NO: Assess whether the response correctly abstains. If it honestly says "no information available", assign Score: 5.
 
 Now evaluate:
 

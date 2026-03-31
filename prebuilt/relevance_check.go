@@ -104,7 +104,7 @@ func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...Releva
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "RelevanceCheckAgent",
 		Model:        chatModel,
-		MaxRunSteps:  2,
+		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: cfg.SystemPrompt,
 	})
