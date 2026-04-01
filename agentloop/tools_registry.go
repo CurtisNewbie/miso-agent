@@ -2,6 +2,7 @@ package agentloop
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -64,12 +65,16 @@ func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 }
 
 func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...tool.Option) (string, error) {
-	// Check if the tool implements SelfInvokeTool (typed tools)
+	// Convert tool errors to a tool result message so the LLM can see what went wrong
+	// and retry with corrected arguments, rather than crashing the graph.
 	if selfInvokeTool, ok := w.tool.(SelfInvokeTool); ok {
-		return selfInvokeTool.ExecuteJson(ctx, input)
+		result, err := selfInvokeTool.ExecuteJson(ctx, input)
+		if err != nil {
+			return fmt.Sprintf("Error: %v", err), nil
+		}
+		return result, nil
 	}
 
-	// Fall back to map-based execution for untyped tools
 	var args map[string]interface{}
 	if input != "" {
 		parsedArgs, err := llm.ParseLLMJsonAs[map[string]interface{}](input)
@@ -81,7 +86,11 @@ func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...to
 		args = map[string]interface{}{}
 	}
 
-	return w.tool.Execute(ctx, args)
+	result, err := w.tool.Execute(ctx, args)
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err), nil
+	}
+	return result, nil
 }
 
 // ToEinoTools converts the registry to Eino tool instances.
