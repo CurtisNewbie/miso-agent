@@ -107,8 +107,8 @@ github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGX
 github.com/cncf/udpa/go v0.0.0-20200629203442-efcf912fb354/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
 github.com/cncf/udpa/go v0.0.0-20201120205902-5459f2c99403/go.mod h1:WmhPx2Nbnhtbo57+VJT5O0JRkEi1Wbu0z5j0R8u5Hbk=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
-github.com/curtisnewbie/miso v0.4.13 h1:yRQjYarXxcwUV2ZvlWGQjHwsyRejPaj7qHGGIAITlNY=
-github.com/curtisnewbie/miso v0.4.13/go.mod h1:rH1uHU6NP+SGkg488ztrZAK/kRtQTOO6gX935Q9NWIA=
+github.com/curtisnewbie/miso v0.4.14-0.20260304161550-084eb92fb9f1 h1:AfSnz1uj03P9+tG8FLo1hZcdr/IbVla22KXot9FaHgU=
+github.com/curtisnewbie/miso v0.4.14-0.20260304161550-084eb92fb9f1/go.mod h1:rH1uHU6NP+SGkg488ztrZAK/kRtQTOO6gX935Q9NWIA=
 github.com/curtisnewbie/miso-dify v0.1.8 h1:STKzni1OYBrkXURCsr/qQU+Q4X1G6TXLc/os5z7z7Kw=
 github.com/curtisnewbie/miso-dify v0.1.8/go.mod h1:zD1YOAFUWXfL9U/A5aXXpzBnTMNdl9Wb9HsXCLhlI5A=
 github.com/curtisnewbie/miso-tavily v0.0.2-0.20260309090836-5ac7462fd1e4 h1:CcvhWAUW3esvsEntnhADNW8dxZxtx0Wil6+cAaCstFs=

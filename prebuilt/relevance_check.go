@@ -1,10 +1,6 @@
 package prebuilt
 
-// @author yongj.zhuang
-
 import (
-	"context"
-
 	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
@@ -160,11 +156,6 @@ func (a *RelevanceCheckAgent) Check(rail flow.Rail, input RelevanceCheckInput) (
 		}
 		return RelevanceCheckResult{Score: score, Reason: reason}, nil
 	})
-}
-
-// CheckCtx is like [RelevanceCheckAgent.Check] but accepts a plain context.Context.
-func (a *RelevanceCheckAgent) CheckCtx(ctx context.Context, input RelevanceCheckInput) (RelevanceCheckResult, error) {
-	return a.Check(flow.NewRail(ctx), input)
 }
 
 // relevanceCheckTaskPrompt is the evaluation prompt template sent as the user message.

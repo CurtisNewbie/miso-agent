@@ -1,10 +1,6 @@
 package prebuilt
 
-// @author yongj.zhuang
-
 import (
-	"context"
-
 	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
@@ -161,11 +157,6 @@ func (a *FactCheckAgent) Check(rail flow.Rail, input FactCheckInput) (FactCheckR
 		}
 		return result, nil
 	})
-}
-
-// CheckCtx is like [FactCheckAgent.Check] but accepts a plain context.Context.
-func (a *FactCheckAgent) CheckCtx(ctx context.Context, input FactCheckInput) (FactCheckResult, error) {
-	return a.Check(flow.NewRail(ctx), input)
 }
 
 // parseFactCheckResponse parses the model response into a [FactCheckResult].
