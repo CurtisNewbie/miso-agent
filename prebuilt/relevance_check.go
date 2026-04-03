@@ -161,16 +161,29 @@ func (a *RelevanceCheckAgent) Check(rail flow.Rail, input RelevanceCheckInput) (
 // relevanceCheckTaskPrompt is the evaluation prompt template sent as the user message.
 // Placeholders ${Question}, ${Context}, ${Output}, ${ReferenceAnswer} are substituted
 // at call time via strutil.NamedSprintfv.
-const relevanceCheckTaskPrompt = `You are an expert judge. Rate how well the LLM response addresses the user question given the knowledge context.
+const relevanceCheckTaskPrompt = `You are an expert judge. Rate how directly and completely the LLM response addresses the user question.
+
+CRITICAL DISTINCTION — relevance vs. factual accuracy:
+- RELEVANCE (this task): Does the response answer the question that was asked?
+- FACTUAL ACCURACY (separate task): Is the response truthful and grounded in the context?
+
+These are independent dimensions. A hallucinated response can score 5 on relevance if it directly answers the question. A perfectly truthful abstention can score 2 on relevance if the context had the answer. Do NOT penalize relevance because a response contradicts or ignores the knowledge context — that is factual accuracy, not relevance.
+
+When a reference answer is provided, use it to assess completeness. It defines the expected scope and key points a full answer should cover. If the response is on-topic but omits aspects that the reference answer covers, reduce the score accordingly.
 
 Score scale:
 1 = Completely off-topic — response addresses a different subject than what was asked
 2 = Mostly irrelevant — on the right topic but misses the core ask, or context contains the answer but the response ignores it
-3 = Somewhat relevant — on-topic and acknowledges the question, but with noticeable gaps (e.g. correctly abstains when context lacks relevant information)
-4 = Mostly relevant — answers the question with minor omissions or issues
-5 = Fully relevant — directly and completely answers the question
+3 = Somewhat relevant — on-topic and acknowledges the question, but with noticeable gaps (e.g. correctly abstains when context lacks relevant information, or covers only part of what the reference answer requires)
+4 = Mostly relevant — addresses the question directly with minor omissions or issues
+5 = Fully relevant — directly and completely answers the question; if a reference answer is provided, all key points are covered
 
-Important: A response that says "no information available" is NOT automatically off-topic (score 1). It is still on-topic if it acknowledges the question directly. Reserve score 1 only for responses that address a completely different subject. Use score 2 when context has the answer but the response ignores it. Use score 3 when context has no relevant information and the response correctly abstains.
+Important:
+- A response that says "no information available" is NOT automatically score 1. Reserve score 1 only for responses that address a completely different subject.
+- A factually WRONG or hallucinated answer can still score 4-5 if it directly addresses the user question. Factual errors are penalized by the fact-checking dimension, not here.
+- Use score 2 when context has the answer but the response ignores it or falsely claims no info is available.
+- Use score 3 when context has no relevant information and the response correctly abstains.
+- When reference_answer is provided: if the response covers only some of the expected key points, downgrade to 3-4 depending on how much is missing.
 
 --- EXAMPLES ---
 
@@ -212,7 +225,23 @@ Example 5:
 <llm_response>I'm sorry, I don't have any information about the refund deadline. Please contact customer support for details.</llm_response>
 <reference_answer></reference_answer>
 Score: 2
-Reason: The response is on the right topic but ignores the directly relevant context, which explicitly states the 7-day refund deadline. The user's question goes unanswered despite the answer being available.
+Reason: The response is on the right topic but falsely claims no information is available, ignoring the directly relevant context that explicitly states the 7-day deadline.
+
+Example 6:
+<user_question>How do I cancel my subscription?</user_question>
+<knowledge_context>Our platform offers monthly and annual subscription plans. Annual plans come with a 20% discount compared to monthly billing.</knowledge_context>
+<llm_response>To cancel your subscription, go to Account Settings, click Subscription, then select Cancel Plan and choose a cancellation reason.</llm_response>
+<reference_answer></reference_answer>
+Score: 5
+Reason: The response directly and completely answers the cancellation question. The specific steps are not found in the context — this is a factual accuracy concern, not a relevance concern. The response is fully relevant to the question regardless of whether the steps are correct.
+
+Example 7:
+<user_question>What should I prepare before my onboarding meeting?</user_question>
+<knowledge_context>The onboarding meeting covers account setup, API integration, compliance documentation, and pricing confirmation.</knowledge_context>
+<llm_response>You should prepare your company registration documents and a list of questions you have about the platform.</llm_response>
+<reference_answer>Prepare the following: company registration documents, signed compliance agreements, your technical team contact for API integration, and confirmation of your selected pricing plan.</reference_answer>
+Score: 3
+Reason: The response is on-topic and mentions one valid preparation item (company registration documents), but the reference answer reveals three additional required items (signed compliance agreements, technical contact for API integration, pricing confirmation) that were not covered. The response partially addresses the question but has significant gaps relative to the expected complete answer.
 
 --- END EXAMPLES ---
 

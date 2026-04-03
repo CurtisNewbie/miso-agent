@@ -176,6 +176,7 @@ const factCheckTaskPrompt = `You are a fact-checking expert. Evaluate the factua
 Evaluation rules:
 - If the context CONTAINS relevant information: check whether the response accurately reflects it. Fabricated or contradicted facts are hallucinations.
 - If the context does NOT contain relevant information: check whether the response correctly abstains (e.g., says "I don't have information about this"). Correct abstention is NOT a hallucination — it is the expected behavior.
+- If a reference answer is provided: treat it as the authoritative ground truth. Compare the LLM response against the reference answer first. If the response contradicts the reference answer, that is a factual error regardless of what the context says. If the response aligns with the reference answer, it is factually correct even if the context is incomplete.
 
 Score scale:
 1 = Major factual errors or hallucinations: invents facts not in the context, OR context contains the answer but the response falsely claims no information is available
@@ -208,7 +209,7 @@ Example 3:
 <llm_response>Product X was launched in Q3 2023.</llm_response>
 <reference_answer>February 2024</reference_answer>
 Score: 2
-Reason: Q3 2023 was the announcement date, not the launch. The actual general availability was February 2024 per the context. The response conflates the announcement with the launch.
+Reason: The reference answer establishes "February 2024" as the correct launch date. The response states "Q3 2023", which was the announcement date per the context — not the launch. The response conflates announcement with general availability, contradicting the ground-truth reference answer.
 
 Example 4:
 <user_question>Can customer invitation codes be changed?</user_question>
@@ -230,7 +231,7 @@ Reason: The context explicitly states that refunds must be requested within 7 da
 
 Before scoring, follow these steps:
 1. Determine whether the context contains information relevant to the question.
-2. If YES: Assess whether the response accurately reflects what the context says. Look for fabrications, contradictions, or key omissions.
+2. If YES: Check if a reference answer is provided — if so, compare the response against it first as the authoritative ground truth. Then verify consistency with the context. Look for fabrications, contradictions, or key omissions.
 3. If NO: Assess whether the response correctly abstains. If it honestly says "no information available", assign Score: 5.
 
 Now evaluate:
