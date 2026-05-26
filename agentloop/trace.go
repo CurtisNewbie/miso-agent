@@ -170,12 +170,12 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 
 	case "transform_csv_lua":
 		inputPath := extractJSONStringField(argsJSON, "input_path")
-		scriptLen := extractJSONStringLen(argsJSON, "script")
+		script := extractJSONStringField(argsJSON, "script")
 		outputPath := extractJSONStringField(argsJSON, "output_path")
 		if outputPath != "" {
-			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, script_len: %v, output_path: %v", graphName, inputPath, scriptLen, outputPath)
+			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, output_path: %v, script: \n%v\n", graphName, inputPath, outputPath, script)
 		} else {
-			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, script_len: %v", graphName, inputPath, scriptLen)
+			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, script: \n%v\n", graphName, inputPath, script)
 		}
 
 	default:
