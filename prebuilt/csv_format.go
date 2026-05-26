@@ -76,6 +76,7 @@ func NewCsvFormatAgent(chatModel model.ToolCallingChatModel, opts ...CsvFormatOp
 		Model:          chatModel,
 		EnableFileTool: true,
 		TaskPrompt:     taskPrompt,
+		Tools:          []agentloop.Tool{agentloop.NewTransformCsvLuaTool()},
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to compile CsvFormatAgent")
@@ -151,13 +152,34 @@ const csvFormatTaskPromptCn = `你是一个专精于 RAG（检索增强生成）
 - 哪些列对检索最重要？哪些列是空白或冗余的？
 - 如何分组才能让每个 chunk 携带足够的上下文？
 
-### 第三步：读取完整数据
+### 第三步：制定 Lua 转换脚本
 
-基于对结构的理解，使用 read_file 读取 /input/data.csv 的完整内容。
+根据对结构的理解，编写一个 Lua 脚本，通过 transform_csv_lua 对 /input/data.csv 进行转换：
+- transform_csv_lua 注入两个全局变量：
+  - 'input'：文件原始内容（字符串）
+  - 'rows'：已解析的 CSV 表格（二维数组），rows[i][j] 为第 i 行第 j 列的字段值（从 1 开始）
+- 处理 CSV 文件时优先使用 'rows'；非 CSV 文件使用 'input'
+- 脚本必须 return 一个字符串作为转换结果
+- 可使用 Lua 标准库：string、table、math
+- 不可访问文件系统（os、io、require 均不可用）
 
-### 第四步：转换并写入
+按列名访问字段的标准写法（已处理标题行中列名为空的情况）：
 
-使用 write_file 将重写结果写入 /output/context.txt，遵循以下规范：
+  local header = rows[1]
+  local col = {}
+  for j = 1, #header do
+    if header[j] ~= nil and header[j] ~= "" then
+      col[header[j]] = j
+    end
+  end
+  -- 之后用 rows[i][col["列名"]] 访问字段（若该列存在）
+  -- 跳过空值：if rows[i][j] ~= nil and rows[i][j] ~= "" then
+
+先用简单数据验证脚本逻辑，再处理完整文件。
+
+### 第四步：执行转换并写入
+
+调用 transform_csv_lua，传入 output_path=/output/context.txt，直接将结果写入目标文件，遵循以下规范：
 
 **段落结构：**
 - 每个语义单元独立成段，段落之间用一个空行分隔
@@ -217,13 +239,34 @@ Before starting the transformation, explicitly answer:
 - Which columns are most important for retrieval? Which are blank or redundant?
 - How should rows be grouped so each chunk carries enough context?
 
-### Step 3: Read the Full Data
+### Step 3: Write a Lua Transformation Script
 
-Based on your understanding of the structure, use read_file to read the complete contents of /input/data.csv.
+Based on your understanding of the structure, write a Lua script to transform /input/data.csv via transform_csv_lua:
+- transform_csv_lua injects two globals:
+  - 'input': the raw file content as a string
+  - 'rows': the file parsed as CSV — a 2D array where rows[i][j] is the j-th field of the i-th row (1-indexed)
+- For CSV files prefer 'rows'; for non-CSV files use 'input'
+- The script must return a string as the transformation result
+- Available Lua standard libraries: string, table, math
+- Filesystem access (os, io, require) is not available
 
-### Step 4: Transform and Write
+Standard column-by-name lookup (handles blank header cells):
 
-Use write_file to write the rewritten content to /output/context.txt, following these rules:
+  local header = rows[1]
+  local col = {}
+  for j = 1, #header do
+    if header[j] ~= nil and header[j] ~= "" then
+      col[header[j]] = j
+    end
+  end
+  -- access fields as: rows[i][col["column_name"]] (only if that column exists)
+  -- skip empty values: if rows[i][j] ~= nil and rows[i][j] ~= "" then
+
+Test the script logic against a small sample before processing the full file.
+
+### Step 4: Execute and Write
+
+Call transform_csv_lua with output_path=/output/context.txt to run the script and write the result directly to the target file, following these rules:
 
 **Paragraph structure:**
 - Each semantic unit is a separate paragraph, with one blank line between paragraphs
