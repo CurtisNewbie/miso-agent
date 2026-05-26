@@ -2,7 +2,10 @@ package agentloop
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 )
@@ -140,7 +143,8 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 	// Tools node - executes tool calls
 	toolNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
-		Tools: toolInfos,
+		Tools:               toolInfos,
+		UnknownToolsHandler: buildUnknownToolHandler(toolInfos),
 	})
 	if err != nil {
 		return nil, err
@@ -210,4 +214,19 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		compileOpts = append(compileOpts, compose.WithMaxRunSteps(agent.ops.maxRunSteps))
 	}
 	return g.Compile(context.Background(), compileOpts...)
+}
+
+// buildUnknownToolHandler returns a handler that tells the model which tool name it hallucinated
+// and lists the names that are actually registered, so it can self-correct on the next turn.
+func buildUnknownToolHandler(tools []tool.BaseTool) func(ctx context.Context, name, input string) (string, error) {
+	names := make([]string, 0, len(tools))
+	for _, t := range tools {
+		if info, err := t.Info(context.Background()); err == nil {
+			names = append(names, info.Name)
+		}
+	}
+	available := strings.Join(names, ", ")
+	return func(ctx context.Context, name, input string) (string, error) {
+		return fmt.Sprintf("tool %q does not exist. Available tools: %s", name, available), nil
+	}
 }
