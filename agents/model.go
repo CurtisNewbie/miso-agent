@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"io"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
@@ -42,10 +43,11 @@ var (
 )
 
 type openAiModelConfig struct {
-	maxToken    int
-	temperature float32
-	baseURL     string
-	retry       int
+	maxToken          int
+	temperature       float32
+	baseURL           string
+	retry             int
+	streamingToolCall bool
 }
 
 func WithTemperature(n float32) func(o *openAiModelConfig) {
@@ -69,6 +71,16 @@ func WithRetry(n int) func(o *openAiModelConfig) {
 func WithBaseURL(url string) func(o *openAiModelConfig) {
 	return func(o *openAiModelConfig) {
 		o.baseURL = url
+	}
+}
+
+// WithStreamingToolCall forces Generate() to use Stream()+collect internally.
+// Use this when the model endpoint rejects non-streaming tool calls (e.g. some
+// Alibaba DashScope endpoints that validate "function.arguments" strictly and
+// return HTTP 400 in non-streaming mode).
+func WithStreamingToolCall() func(o *openAiModelConfig) {
+	return func(o *openAiModelConfig) {
+		o.streamingToolCall = true
 	}
 }
 
@@ -124,6 +136,11 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 	// always wrap with content fix modifier to ensure "content" field is
 	// present in every request message (required by some providers)
 	result = &contentFixModel{inner: result}
+
+	if o.streamingToolCall {
+		result = &streamingToolModel{inner: result}
+	}
+
 	return result, nil
 }
 
@@ -233,4 +250,44 @@ func (c *contentFixModel) WithTools(tools []*schema.ToolInfo) (model.ToolCalling
 		return nil, err
 	}
 	return &contentFixModel{inner: inner}, nil
+}
+
+// streamingToolModel wraps a ToolCallingChatModel and redirects Generate() to
+// Stream()+collect. Use via WithStreamingToolCall() when the endpoint rejects
+// non-streaming tool calls with HTTP 400 on "function.arguments" validation.
+type streamingToolModel struct {
+	inner model.ToolCallingChatModel
+}
+
+func (s *streamingToolModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	sr, err := s.inner.Stream(ctx, input, opts...)
+	if err != nil {
+		return nil, err
+	}
+	defer sr.Close()
+
+	var chunks []*schema.Message
+	for {
+		chunk, err := sr.Recv()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		chunks = append(chunks, chunk)
+	}
+	return schema.ConcatMessages(chunks)
+}
+
+func (s *streamingToolModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	return s.inner.Stream(ctx, input, opts...)
+}
+
+func (s *streamingToolModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	inner, err := s.inner.WithTools(tools)
+	if err != nil {
+		return nil, err
+	}
+	return &streamingToolModel{inner: inner}, nil
 }
