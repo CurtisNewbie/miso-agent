@@ -3,6 +3,7 @@ package prebuilt
 // @author yongj.zhuang
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
@@ -37,17 +38,20 @@ func WithClassificationLanguage(lang string) ClassificationOption {
 	}
 }
 
-// ClassificationInput holds the inputs for a single classification call.
+// ClassificationInput holds the inputs for a batch classification call.
 type ClassificationInput struct {
 	// Categories is the list of candidate category names to match against.
 	Categories []string
 
-	// Subject is the subject description to classify.
-	Subject string
+	// Subjects is the batch of subjects to classify.
+	Subjects []string
 }
 
-// ClassificationOutput is the JSON response returned by the classification agent.
-type ClassificationOutput struct {
+// ClassificationResult holds the classification result for a single subject.
+type ClassificationResult struct {
+	// Subject is the subject that was classified.
+	Subject string `json:"subject"`
+
 	// Reason is the step-by-step reasoning behind the classification result.
 	Reason string `json:"reason"`
 
@@ -55,13 +59,19 @@ type ClassificationOutput struct {
 	Categories []string `json:"categories"`
 }
 
-// classificationPromptInput is the named template substitution struct for [classificationTaskPrompt].
-type classificationPromptInput struct {
-	Categories  string
-	Description string
+// ClassificationOutput is the JSON response returned by the classification agent.
+type ClassificationOutput struct {
+	// Results contains one classification result per subject, in input order.
+	Results []ClassificationResult `json:"results"`
 }
 
-// ClassificationAgent classifies a subject description against a given list of categories.
+// classificationPromptInput is the named template substitution struct for [classificationUserPrompt].
+type classificationPromptInput struct {
+	Categories string
+	Subjects   string
+}
+
+// ClassificationAgent classifies a batch of subjects against a given list of categories.
 // It uses a single-shot [agentloop.Agent] call and parses the JSON response.
 //
 // Use [NewClassificationAgent] to create an instance, then call [ClassificationAgent.Classify].
@@ -75,8 +85,8 @@ type ClassificationAgent struct {
 //
 //	agent, err := prebuilt.NewClassificationAgent(chatModel)
 //	result, err := agent.Classify(rail, prebuilt.ClassificationInput{
-//	    Categories:  []string{"Goods trade-Alcohol", "Service trade-Logistics"},
-//	    Description: "物流",
+//	    Categories: []string{"Goods trade-Alcohol", "Service trade-Logistics"},
+//	    Subjects:   []string{"物流", "进口葡萄酒"},
 //	})
 func NewClassificationAgent(chatModel model.ToolCallingChatModel, opts ...ClassificationOption) (*ClassificationAgent, error) {
 	cfg := &classificationConfig{}
@@ -103,11 +113,16 @@ func NewClassificationAgent(chatModel model.ToolCallingChatModel, opts ...Classi
 	return &ClassificationAgent{agent: agent}, nil
 }
 
-// Classify runs the classification agent and returns the matched categories with reasoning.
+// Classify runs the classification agent over all subjects and returns per-subject results.
 func (a *ClassificationAgent) Classify(rail flow.Rail, input ClassificationInput) (ClassificationOutput, error) {
+	numbered := make([]string, len(input.Subjects))
+	for i, s := range input.Subjects {
+		numbered[i] = fmt.Sprintf("%d. %s", i+1, s)
+	}
+
 	userPrompt := strutil.NamedSprintfv(classificationUserPrompt, classificationPromptInput{
-		Categories:  strings.Join(input.Categories, "\n"),
-		Description: input.Subject,
+		Categories: strings.Join(input.Categories, "\n"),
+		Subjects:   strings.Join(numbered, "\n"),
 	})
 
 	out, err := a.agent.Execute(rail, agentloop.AgentRequest{UserInput: userPrompt})
@@ -124,51 +139,35 @@ func (a *ClassificationAgent) Classify(rail flow.Rail, input ClassificationInput
 
 // classificationSystemPrompt establishes the classifier role, constraints, output schema,
 // and few-shot examples. Kept in the system turn so it is cached across calls.
-const classificationSystemPrompt = `You are a classification engine. Given a subject description and a list of categories, identify every category the subject belongs to.
+const classificationSystemPrompt = `You are a classification engine. Given a list of subjects and a list of categories, classify each subject against the categories.
 
 Rules:
 - Select ONLY from the provided categories. Do not invent or paraphrase category names.
 - A subject may match zero, one, or multiple categories.
 - Output strictly valid JSON — no markdown, no prose, no trailing commas.
+- Produce one result object per subject, in the same order as the input.
 
 Output schema:
-{"reason": "<concise chain-of-thought>", "categories": ["<matched category>", ...]}
+{"results": [{"subject": "<subject text>", "reason": "<concise chain-of-thought>", "categories": ["<matched category>", ...]}, ...]}
 
 Examples:
 
-Subject: 物流
-Categories:
-Goods trade-Agricultural Products
-Goods trade-Alcohol
+Subjects:
+1. 物流
+2. organic apples import
 
-Output:
-{"reason": "物流 (logistics) does not match any goods-trade category listed.", "categories": []}
-
----
-
-Subject: 物流
 Categories:
 Goods trade-Agricultural Products
 Goods trade-Alcohol
 Service trade-Logistics
 
 Output:
-{"reason": "物流 directly maps to Service trade-Logistics.", "categories": ["Service trade-Logistics"]}
-
----
-
-Subject: organic apples import
-Categories:
-Goods trade-Agricultural Products
-Goods trade-Alcohol
-Service trade-Logistics
-
-Output:
-{"reason": "Organic apples are agricultural goods; import is a goods-trade activity.", "categories": ["Goods trade-Agricultural Products"]}`
+{"results": [{"subject": "物流", "reason": "物流 directly maps to Service trade-Logistics.", "categories": ["Service trade-Logistics"]}, {"subject": "organic apples import", "reason": "Organic apples are agricultural goods; import is a goods-trade activity.", "categories": ["Goods trade-Agricultural Products"]}]}`
 
 // classificationUserPrompt is the per-call template carrying the runtime inputs.
-// Placeholders ${Categories} and ${Description} are substituted via strutil.NamedSprintfv.
+// Placeholders ${Categories} and ${Subjects} are substituted via strutil.NamedSprintfv.
 const classificationUserPrompt = `Categories:
 ${Categories}
 
-Subject: ${Description}`
+Subjects:
+${Subjects}`
