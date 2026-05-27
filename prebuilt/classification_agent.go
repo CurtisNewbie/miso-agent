@@ -42,8 +42,8 @@ type ClassificationInput struct {
 	// Categories is the list of candidate category names to match against.
 	Categories []string
 
-	// Description is the subject description to classify.
-	Description string
+	// Subject is the subject description to classify.
+	Subject string
 }
 
 // ClassificationOutput is the JSON response returned by the classification agent.
@@ -107,7 +107,7 @@ func NewClassificationAgent(chatModel model.ToolCallingChatModel, opts ...Classi
 func (a *ClassificationAgent) Classify(rail flow.Rail, input ClassificationInput) (ClassificationOutput, error) {
 	userPrompt := strutil.NamedSprintfv(classificationUserPrompt, classificationPromptInput{
 		Categories:  strings.Join(input.Categories, "\n"),
-		Description: input.Description,
+		Description: input.Subject,
 	})
 
 	out, err := a.agent.Execute(rail, agentloop.AgentRequest{UserInput: userPrompt})
