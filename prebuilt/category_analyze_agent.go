@@ -57,7 +57,7 @@ type CategoryAnalysisResult struct {
 type categoryAnalyzePromptInput struct {
 	TaskExplanation string
 	Categories      string
-	Descriptions    string
+	Subjects        string
 }
 
 // CategoryAnalyzeAgent identifies which categories a description belongs to.
@@ -110,7 +110,7 @@ func (a *CategoryAnalyzeAgent) Analyze(rail flow.Rail, input CategoryAnalyzeInpu
 	userPrompt := strutil.NamedSprintfv(categoryAnalyzeUserPrompt, categoryAnalyzePromptInput{
 		TaskExplanation: input.TaskExplanation,
 		Categories:      strings.Join(input.Categories, "\n"),
-		Descriptions:    descStr,
+		Subjects:        descStr,
 	})
 
 	out, err := a.agent.Execute(rail, agentloop.AgentRequest{UserInput: userPrompt})
@@ -168,13 +168,17 @@ Output:
 {"reason": "Subject 1 maps to logistics service trade. Subject 2 maps to financial service trade.", "categoryMatched": ["Service trade-Logistics", "Service trade-Financial"], "newCategory": []}`
 
 // categoryAnalyzeUserPrompt is the per-call template carrying the runtime inputs.
-// Placeholders ${TaskExplanation}, ${Categories}, and ${Descriptions} are substituted via strutil.NamedSprintfv.
-const categoryAnalyzeUserPrompt = `${TaskExplanation}
+// Placeholders ${TaskExplanation}, ${Categories}, and ${Subjects} are substituted via strutil.NamedSprintfv.
+const categoryAnalyzeUserPrompt = `<task_context>
+${TaskExplanation}
+</task_context>
 
 <categories>
 ${Categories}
 </categories>
 
 <subjects>
-${Descriptions}
-</subjects>`
+${Subjects}
+</subjects>
+
+Respond with JSON only:`
