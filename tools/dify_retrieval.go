@@ -35,9 +35,28 @@ type DifyRetrievalConfig struct {
 	RetrievalModel *dify.RetrieveModelParam
 }
 
+// DifyRetrievalOption is a functional option that customises the tool after
+// DifyRetrievalConfig has been applied. Use [WithDifyToolName] to override
+// the name exposed to the LLM.
+type DifyRetrievalOption func(o *difyRetrievalOpts)
+
+// difyRetrievalOpts holds the mutable settings controlled by DifyRetrievalOption.
+type difyRetrievalOpts struct {
+	name string
+}
+
+// WithDifyToolName overrides the tool name that is registered with the LLM.
+// Useful when an agent uses multiple Dify knowledge bases simultaneously and
+// each tool needs a distinct, descriptive name.
+func WithDifyToolName(name string) DifyRetrievalOption {
+	return func(o *difyRetrievalOpts) { o.name = name }
+}
+
 // NewDifyRetrievalTool creates an agentloop Tool that retrieves relevant document
 // segments from a Dify knowledge base. Host, ApiKey, DatasetId and RetrievalModel
 // are fixed at construction time and never exposed to the LLM.
+// opts are applied after the defaults, allowing callers to customise tool behaviour
+// (e.g. override the tool name with [WithDifyToolName]).
 //
 // Example:
 //
@@ -48,12 +67,16 @@ type DifyRetrievalConfig struct {
 //	            ApiKey:    os.Getenv("DIFY_API_KEY"),
 //	            DatasetId: os.Getenv("DIFY_DATASET_ID"),
 //	            RetrievalModel: &dify.RetrieveModelParam{TopK: 5},
-//	        }),
+//	        }, tools.WithDifyToolName("product_docs_retrieval")),
 //	    },
 //	})
-func NewDifyRetrievalTool(cfg DifyRetrievalConfig) agentloop.Tool {
+func NewDifyRetrievalTool(cfg DifyRetrievalConfig, opts ...DifyRetrievalOption) agentloop.Tool {
+	o := difyRetrievalOpts{name: "dify_retrieval"}
+	for _, opt := range opts {
+		opt(&o)
+	}
 	return agentloop.NewTypedToolFunc(
-		"dify_retrieval",
+		o.name,
 		"Retrieve relevant document segments from the knowledge base using semantic search. Returns the most relevant passages for the given query.",
 		map[string]*schema.ParameterInfo{
 			"query": agentloop.StringParam(
