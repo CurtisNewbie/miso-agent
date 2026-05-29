@@ -1,7 +1,5 @@
 package prebuilt
 
-// @author yongj.zhuang
-
 import (
 	"fmt"
 	"strings"

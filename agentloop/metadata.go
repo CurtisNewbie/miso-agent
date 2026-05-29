@@ -1,7 +1,5 @@
 package agentloop
 
-// @author yongj.zhuang
-
 import (
 	"sync"
 )
