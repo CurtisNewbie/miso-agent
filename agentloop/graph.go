@@ -39,8 +39,9 @@ type Artifact struct {
 
 // TaskOutput represents the output from an agent execution
 type TaskOutput struct {
-	Response  string     // Main response (research report)
-	Artifacts []Artifact // Artifacts collected during execution
+	Response  string         // Main response (research report)
+	Artifacts []Artifact     // Artifacts collected during execution
+	Metadata  map[string]any // Snapshot of MetadataStore at end of execution
 }
 
 // taskOutput is the internal output type used by the graph
@@ -171,15 +172,22 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 		// Collect artifacts from AgentContext
 		var artifacts []Artifact
+		var metadata map[string]any
 		if agentCtxVal := ctx.Value(agentCtxKey); agentCtxVal != nil {
-			if agentCtx, ok := agentCtxVal.(AgentContext); ok && agentCtx.Artifacts != nil {
-				artifacts = agentCtx.Artifacts.ListArtifacts()
+			if agentCtx, ok := agentCtxVal.(AgentContext); ok {
+				if agentCtx.Artifacts != nil {
+					artifacts = agentCtx.Artifacts.ListArtifacts()
+				}
+				if agentCtx.Metadata != nil {
+					metadata = agentCtx.Metadata.All()
+				}
 			}
 		}
 
 		return TaskOutput{
 			Response:  response,
 			Artifacts: artifacts,
+			Metadata:  metadata,
 		}, nil
 	}), compose.WithNodeName("Final Output"))
 

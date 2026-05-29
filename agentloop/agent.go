@@ -122,6 +122,7 @@ type AgentContext struct {
 	Store     FileStore
 	Todos     *TodoManager
 	Artifacts *ArtifactManager
+	Metadata  *MetadataStore
 }
 
 // AgentRequest represents a request to execute an agent
@@ -193,11 +194,15 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	// Initialize artifact manager (fresh on each execution)
 	artifactManager := NewArtifactManager()
 
+	// Initialize metadata store (fresh on each execution)
+	metadataStore := NewMetadataStore()
+
 	// Propagate stateful components via context
 	rail = rail.WithCtxVal(agentCtxKey, AgentContext{
 		Store:     backend,
 		Todos:     todoManager,
 		Artifacts: artifactManager,
+		Metadata:  metadataStore,
 	})
 
 	// Execute graph with agent-specific trace callback
