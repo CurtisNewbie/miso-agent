@@ -57,6 +57,20 @@ func (m *MetadataStore) All() map[string]any {
 	return out
 }
 
+// Append appends items to the []T slice stored at key in a MetadataStore.
+// If the key does not exist, a new slice is created. Panics if the existing value
+// is not of type []T.
+func Append[T any](m *MetadataStore, key string, items ...T) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	existing, ok := m.data[key]
+	if !ok {
+		m.data[key] = append([]T(nil), items...)
+		return
+	}
+	m.data[key] = append(existing.([]T), items...)
+}
+
 // GetMeta retrieves a typed value from a MetadataStore.
 // Returns the typed value and true if the key exists and the value is assignable to T,
 // zero value and false otherwise.
