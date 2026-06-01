@@ -197,9 +197,10 @@ func cloneRetrievalModel(p *dify.RetrieveModelParam) *dify.RetrieveModelParam {
 		return nil
 	}
 	cp := *p
-	cp.MetadataFilteringConditions = dify.MetadataFilteringConditions{
-		LogicalOperator: p.MetadataFilteringConditions.LogicalOperator,
-		Conditions:      append([]dify.MetadataFilteringCondition(nil), p.MetadataFilteringConditions.Conditions...),
+	if p.MetadataFilteringConditions != nil {
+		mfc := *p.MetadataFilteringConditions
+		mfc.Conditions = append([]dify.MetadataFilteringCondition(nil), p.MetadataFilteringConditions.Conditions...)
+		cp.MetadataFilteringConditions = &mfc
 	}
 	return &cp
 }
@@ -208,8 +209,8 @@ func applyDocNameFilter(p *dify.RetrieveModelParam, cond dify.MetadataFilteringC
 	if p == nil {
 		p = &dify.RetrieveModelParam{}
 	}
-	if p.MetadataFilteringConditions.LogicalOperator == "" {
-		p.MetadataFilteringConditions.LogicalOperator = "and"
+	if p.MetadataFilteringConditions == nil {
+		p.MetadataFilteringConditions = &dify.MetadataFilteringConditions{LogicalOperator: "and"}
 	}
 	p.MetadataFilteringConditions.Conditions = append(p.MetadataFilteringConditions.Conditions, cond)
 	return p
@@ -232,6 +233,9 @@ func formatRetrieveResp(resp dify.RetrieveRes) string {
 	for i, rec := range resp.Records {
 		seg := rec.Segment
 		fmt.Fprintf(&sb, "[%d] %s (position: %d, score: %.4f)\n", i+1, seg.Document.Name, seg.Position, rec.Score)
+		if seg.CreatedAt != nil {
+			fmt.Fprintf(&sb, "Created: %s\n", seg.CreatedAt)
+		}
 		if seg.Content != "" {
 			sb.WriteString(strings.TrimSpace(seg.Content))
 			sb.WriteString("\n")

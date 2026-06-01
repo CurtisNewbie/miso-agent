@@ -6,7 +6,7 @@ require (
 	github.com/cloudwego/eino v0.7.18
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.10
 	github.com/curtisnewbie/miso v0.4.15-0.20260527060537-47262c5b6877
-	github.com/curtisnewbie/miso-dify v0.1.8
+	github.com/curtisnewbie/miso-dify v0.1.11-0.20260601022935-aae70e282670
 	github.com/curtisnewbie/miso-tavily v0.0.2-0.20260309090836-5ac7462fd1e4
 	github.com/pkoukk/tiktoken-go v0.1.8
 	github.com/yuin/gopher-lua v1.1.1
