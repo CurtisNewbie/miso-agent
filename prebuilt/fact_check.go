@@ -63,14 +63,17 @@ type FactCheckResult struct {
 // factCheckPromptInput is the named template substitution struct for [factCheckTaskPrompt].
 // Field names must match the ${...} placeholders in the template.
 type factCheckPromptInput struct {
-	Question        string
-	Context         string
-	Output          string
-	ReferenceAnswer string
+	Question string
+	Context  string
+	Output   string
 }
 
-// FactCheckAgent evaluates the factual accuracy of an LLM response against
-// a knowledge context, a user question, and an optional reference answer.
+// FactCheckAgent evaluates whether an LLM response is grounded in the retrieved knowledge
+// context — detecting hallucinations and incorrect abstentions.
+//
+// This is distinct from AccuracyCheckAgent (which compares against a reference answer) and
+// RelevanceCheckAgent (which checks whether the question was answered). FactCheckAgent
+// answers: "Did the LLM stay faithful to what the context actually says?"
 //
 // The agent performs a single-shot call using [agentloop.Agent] with no tools.
 //
@@ -87,10 +90,9 @@ type FactCheckAgent struct {
 //
 //	agent, err := prebuilt.NewFactCheckAgent(chatModel)
 //	result, err := agent.Check(rail, prebuilt.FactCheckInput{
-//	    Question:        "What is the capital of France?",
-//	    Context:         "France is a country in Western Europe. Its capital is Paris.",
-//	    Output:          "The capital of France is Paris.",
-//	    ReferenceAnswer: "Paris",
+//	    Question: "What is the capital of France?",
+//	    Context:  "France is a country in Western Europe. Its capital is Paris.",
+//	    Output:   "The capital of France is Paris.",
 //	})
 func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOption) (*FactCheckAgent, error) {
 	cfg := &factCheckConfig{RetryCount: 2}
@@ -98,12 +100,17 @@ func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOp
 		o(cfg)
 	}
 
+	systemPrompt := factCheckSystemPrompt
+	if cfg.SystemPrompt != "" {
+		systemPrompt = cfg.SystemPrompt + "\n\n" + factCheckSystemPrompt
+	}
+
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "FactCheckAgent",
 		Model:        chatModel,
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
-		SystemPrompt: cfg.SystemPrompt,
+		SystemPrompt: systemPrompt,
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create FactCheckAgent")
@@ -122,10 +129,6 @@ type FactCheckInput struct {
 
 	// Output is the LLM response to be evaluated.
 	Output string
-
-	// ReferenceAnswer is the ground-truth answer used for comparison.
-	// May be left empty if no reference is available; the agent will rely on Context alone.
-	ReferenceAnswer string
 }
 
 // Check evaluates the factual accuracy of an LLM response and returns a [FactCheckResult].
@@ -134,11 +137,10 @@ type FactCheckInput struct {
 // The model response is parsed for "Score:" and "Reason:" fields. If either field is missing
 // the call is retried up to [factCheckConfig.RetryCount] additional times.
 func (a *FactCheckAgent) Check(rail flow.Rail, input FactCheckInput) (FactCheckResult, error) {
-	userPrompt := strutil.NamedSprintfv(factCheckTaskPrompt, factCheckPromptInput{
-		Question:        input.Question,
-		Context:         input.Context,
-		Output:          input.Output,
-		ReferenceAnswer: input.ReferenceAnswer,
+	userPrompt := strutil.NamedSprintfv(factCheckUserPrompt, factCheckPromptInput{
+		Question: input.Question,
+		Context:  input.Context,
+		Output:   input.Output,
 	})
 
 	return retry.GetOne(a.config.RetryCount, func() (FactCheckResult, error) {
@@ -168,22 +170,24 @@ func parseFactCheckResponse(content string) (FactCheckResult, error) {
 	return FactCheckResult{Score: score, Reason: reason}, nil
 }
 
-// factCheckTaskPrompt is the evaluation prompt template sent as the user message.
-// Placeholders ${Question}, ${Context}, ${Output}, ${ReferenceAnswer} are substituted
-// at call time via strutil.NamedSprintfv.
-const factCheckTaskPrompt = `You are a fact-checking expert. Evaluate the factual accuracy of an LLM response by comparing it against the provided knowledge context and user question.
+// factCheckSystemPrompt is the static system prompt: role, rules, score scale, CoT steps, examples.
+const factCheckSystemPrompt = `You are a fact-checking expert. Evaluate whether an LLM response is grounded in the provided knowledge context.
 
 Evaluation rules:
 - If the context CONTAINS relevant information: check whether the response accurately reflects it. Fabricated or contradicted facts are hallucinations.
 - If the context does NOT contain relevant information: check whether the response correctly abstains (e.g., says "I don't have information about this"). Correct abstention is NOT a hallucination — it is the expected behavior.
-- If a reference answer is provided: treat it as the authoritative ground truth. Compare the LLM response against the reference answer first. If the response contradicts the reference answer, that is a factual error regardless of what the context says. If the response aligns with the reference answer, it is factually correct even if the context is incomplete.
 
 Score scale:
 1 = Major factual errors or hallucinations: invents facts not in the context, OR context contains the answer but the response falsely claims no information is available
 2 = Significant inaccuracies affecting core meaning
 3 = Partially correct but contains key mistakes
 4 = Minor inaccuracies in non-critical details
-5 = Fully factually correct with no errors, OR correctly abstains when the context contains no relevant information
+5 = Fully grounded in the context with no errors, OR correctly abstains when the context contains no relevant information
+
+Before scoring, follow these steps:
+1. Determine whether the context contains information relevant to the question.
+2. If YES: verify the response accurately reflects the context. Look for fabrications, contradictions, or key omissions.
+3. If NO: assess whether the response correctly abstains. If it honestly says "no information available", assign Score: 5.
 
 --- EXAMPLES ---
 
@@ -191,7 +195,6 @@ Example 1:
 <user_question>What is the refund policy for digital products?</user_question>
 <knowledge_context>All digital products are non-refundable once downloaded. Physical products can be returned within 30 days.</knowledge_context>
 <llm_response>Digital products cannot be refunded after download. Physical items are eligible for return within 30 days.</llm_response>
-<reference_answer></reference_answer>
 Score: 5
 Reason: The response exactly matches the context. Both the no-refund rule for digital products and the 30-day return window for physical products are correctly stated.
 
@@ -199,44 +202,32 @@ Example 2:
 <user_question>How many support tiers does the service offer?</user_question>
 <knowledge_context>The service provides two support plans: Standard (email only, 48h response) and Premium (24/7 phone and email, 4h response).</knowledge_context>
 <llm_response>The service offers three support tiers: Basic, Standard, and Premium, each with different response times.</llm_response>
-<reference_answer></reference_answer>
 Score: 1
 Reason: The context describes exactly two support plans. The response invents a third "Basic" tier that does not exist in the context, which is a hallucination.
 
 Example 3:
-<user_question>When was the product launched?</user_question>
-<knowledge_context>Product X was announced in Q3 2023 and became available to select beta customers in late 2023. General availability launched in February 2024.</knowledge_context>
-<llm_response>Product X was launched in Q3 2023.</llm_response>
-<reference_answer>February 2024</reference_answer>
-Score: 2
-Reason: The reference answer establishes "February 2024" as the correct launch date. The response states "Q3 2023", which was the announcement date per the context — not the launch. The response conflates announcement with general availability, contradicting the ground-truth reference answer.
-
-Example 4:
 <user_question>Can customer invitation codes be changed?</user_question>
 <knowledge_context>This section covers payment information modification, permission settings, and member verification code updates.</knowledge_context>
 <llm_response>I'm sorry, there is currently no information available about whether customer invitation codes can be changed. If you have other questions, feel free to ask.</llm_response>
-<reference_answer></reference_answer>
 Score: 5
 Reason: The context contains no information about customer invitation codes. The response correctly abstains by acknowledging the knowledge gap rather than fabricating an answer. Correct abstention when context lacks relevant information is accurate behavior.
 
-Example 5:
+Example 4:
 <user_question>What is the deadline to request a refund?</user_question>
 <knowledge_context>Customers may request a refund within 7 days of purchase. After 7 days, no refunds will be issued.</knowledge_context>
 <llm_response>I'm sorry, I don't have any information about the refund deadline. Please contact customer support for details.</llm_response>
-<reference_answer></reference_answer>
 Score: 1
 Reason: The context explicitly states that refunds must be requested within 7 days of purchase. The response falsely claims no information is available, which directly contradicts the context and misleads the user.
 
 --- END EXAMPLES ---
 
-Before scoring, follow these steps:
-1. Determine whether the context contains information relevant to the question.
-2. If YES: Check if a reference answer is provided — if so, compare the response against it first as the authoritative ground truth. Then verify consistency with the context. Look for fabrications, contradictions, or key omissions.
-3. If NO: Assess whether the response correctly abstains. If it honestly says "no information available", assign Score: 5.
+Respond in exactly this format:
+Score: <number from 1 to 5>
+Reason: <concise justification referencing specific evidence from the context>`
 
-Now evaluate:
-
-<user_question>
+// factCheckUserPrompt is the per-call user message template containing only the dynamic inputs.
+// Placeholders ${Question}, ${Context}, ${Output} are substituted at call time.
+const factCheckUserPrompt = `<user_question>
 ${Question}
 </user_question>
 
@@ -246,12 +237,4 @@ ${Context}
 
 <llm_response>
 ${Output}
-</llm_response>
-
-<reference_answer>
-${ReferenceAnswer}
-</reference_answer>
-
-Respond in exactly this format:
-Score: <number from 1 to 5>
-Reason: <concise justification referencing specific evidence from the context>`
+</llm_response>`
