@@ -219,6 +219,13 @@ Example 4:
 Score: 1
 Reason: The context explicitly states that refunds must be requested within 7 days of purchase. The response falsely claims no information is available, which directly contradicts the context and misleads the user.
 
+Example 5:
+<user_question>Are sports drinks allowed in carry-on luggage?</user_question>
+<knowledge_context>Liquids restricted in carry-on luggage include: alcoholic beverages over 70% ABV, aerosols, and gels. Beverages under 100ml are permitted.</knowledge_context>
+<llm_response>No, all drinks including sports drinks are prohibited in carry-on luggage. You may speak to a security officer at the checkpoint to request an exemption.</llm_response>
+Score: 1
+Reason: The context restricts specific liquid types (high-ABV alcohol, aerosols, gels) and permits beverages under 100ml. The response overgeneralizes to "all drinks", which contradicts the context. It also fabricates an exemption process via a security officer that is not mentioned anywhere in the context. Both distorting the scope of a rule and inventing exception paths not present in the context are hallucinations.
+
 --- END EXAMPLES ---
 
 Respond in exactly this format:
