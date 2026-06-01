@@ -66,7 +66,7 @@ func WithDifyToolDescription(desc string) DifyRetrievalOption {
 //
 //	const refsKey = "rag_refs"
 //	out, _ := agent.Execute(rail, req)
-//	refs, _ := agentloop.GetMeta[[]dify.RetrievedRecord](out.Metadata, refsKey)
+//	refs := tools.GetDifyRetrievedRecords(out.Metadata, refsKey)
 func WithDifyMetadataAppendKey(metaKey string) DifyRetrievalOption {
 	return func(o *difyRetrievalOpts) { o.metadataKey = metaKey }
 }
@@ -217,9 +217,12 @@ func applyDocNameFilter(p *dify.RetrieveModelParam, cond dify.MetadataFilteringC
 }
 
 // GetDifyRetrievedRecords retrieves the []dify.RetrievedRecord slice accumulated under key
-// from a MetadataStore. Returns nil if the key is absent or the store is nil.
-func GetDifyRetrievedRecords(m *agentloop.MetadataStore, key string) []dify.RetrievedRecord {
-	records, _ := agentloop.GetMeta[[]dify.RetrievedRecord](m, key)
+// from a TaskOutput.Metadata snapshot. Returns nil if the key is absent or the map is nil.
+func GetDifyRetrievedRecords(m map[string]any, key string) []dify.RetrievedRecord {
+	if m == nil {
+		return nil
+	}
+	records, _ := m[key].([]dify.RetrievedRecord)
 	return records
 }
 
