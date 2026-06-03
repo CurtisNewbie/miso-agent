@@ -13,17 +13,51 @@ import (
 	"github.com/curtisnewbie/miso/flow"
 )
 
+// ToolEventKind identifies the kind of tool event emitted during agent execution.
+type ToolEventKind string
+
+const (
+	// ToolEventKindCall fires when the LLM invokes a tool, before execution begins.
+	ToolEventKindCall ToolEventKind = "call"
+)
+
+// ToolEvent is emitted during agent execution for each tool invocation.
+// If ToolEventCallback is set in AgentConfig, it is called synchronously for each event.
+type ToolEvent struct {
+	Kind ToolEventKind
+	Name string // tool name
+	Args string // raw JSON args string
+}
+
 // withAgentTraceCallback builds a trace callback for the AgentLoop graph.
 // It extends the generic graph.WithTraceCallback with tool-specific logging:
 // file paths for read/write/edit/list_directory/add_artifact, glob patterns,
 // and todo item details for add_todo/update_todo/delete_todo.
 func withAgentTraceCallback(name string, ops agentOps) compose.Option {
+	return compose.WithCallbacks(buildTraceHandler(name, ops))
+}
+
+func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 	b := callbacks.NewHandlerBuilder()
-	if ops.logOnStart {
+	if ops.logOnStart || ops.toolEventCallback != nil {
 		b = b.OnStartFn(func(ctx context.Context, ri *callbacks.RunInfo, in callbacks.CallbackInput) context.Context {
 			rail := flow.NewRail(ctx)
 			if ri.Component == "Tool" {
-				logToolStart(rail, name, ri, in)
+				if ops.logOnStart {
+					logToolStart(rail, name, ri, in)
+				}
+				if ops.toolEventCallback != nil {
+					ci := einotool.ConvCallbackInput(in)
+					args := ""
+					if ci != nil {
+						args = ci.ArgumentsInJSON
+					}
+					ops.toolEventCallback(ToolEvent{
+						Kind: ToolEventKindCall,
+						Name: ri.Name,
+						Args: args,
+					})
+				}
 			} else if ri.Component == "ChatModel" {
 				if ri.Name == "" {
 					// skip inner component-level callback; node-level fires separately
@@ -71,7 +105,7 @@ func withAgentTraceCallback(name string, ops agentOps) compose.Option {
 			return ctx
 		})
 	}
-	return compose.WithCallbacks(b.Build())
+	return b.Build()
 }
 
 // logChatModelInput logs each input message sent to the ChatModel.

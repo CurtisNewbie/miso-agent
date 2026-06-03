@@ -15,12 +15,13 @@ import (
 // It is built from AgentConfig flat fields in NewAgent and used internally
 // for graph compilation and trace callbacks.
 type agentOps struct {
-	maxRunSteps int
-	language    string
-	logOnStart  bool
-	logOnEnd    bool
-	logInputs   bool
-	logOutputs  bool
+	maxRunSteps       int
+	language          string
+	logOnStart        bool
+	logOnEnd          bool
+	logInputs         bool
+	logOutputs        bool
+	toolEventCallback func(event ToolEvent)
 }
 
 type ctxKey int
@@ -63,22 +64,23 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		config.Language = "English"
 	}
 
+	if config.MaxRunSteps <= 0 {
+		config.MaxRunSteps = 5
+	}
+
 	// Convert MaxRunSteps (rounds) to Eino graph steps.
 	// Each round ≈ 4 graph steps; multiply by 5 to include a safety margin.
-	// 0 means let Eino auto-determine (node count + 10).
-	maxGraphSteps := 0
-	if config.MaxRunSteps > 0 {
-		maxGraphSteps = config.MaxRunSteps * 5
-	}
+	maxGraphSteps := config.MaxRunSteps * 5
 
 	// Build ops from individual config fields
 	ops := agentOps{
-		maxRunSteps: maxGraphSteps,
-		language:    config.Language,
-		logOnStart:  boolOrDefault(config.LogOnStart, true),
-		logOnEnd:    boolOrDefault(config.LogOnEnd, true),
-		logInputs:   boolOrDefault(config.LogInputs, false),
-		logOutputs:  boolOrDefault(config.LogOutputs, true),
+		maxRunSteps:       maxGraphSteps,
+		language:          config.Language,
+		logOnStart:        boolOrDefault(config.LogOnStart, true),
+		logOnEnd:          boolOrDefault(config.LogOnEnd, true),
+		logInputs:         boolOrDefault(config.LogInputs, false),
+		logOutputs:        boolOrDefault(config.LogOutputs, true),
+		toolEventCallback: config.ToolEventCallback,
 	}
 
 	// Initialize tokenizer for accurate token counting

@@ -20,7 +20,7 @@ type AgentConfig struct {
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
 	// Each round corresponds to one tool-calling iteration; the value is multiplied by 5 internally
 	// to derive the actual Eino graph step budget (1 round ≈ 4 graph steps, ×5 includes a safety margin).
-	// If 0 or negative, the step budget is determined automatically by Eino (node count + 10).
+	// If 0 or negative, defaults to 5.
 	MaxRunSteps int
 
 	// Language specifies the language for agent responses.
@@ -108,6 +108,12 @@ type AgentConfig struct {
 	// list_directory, glob, and add_artifact. When false, these tools are not registered.
 	// Default: false
 	EnableFileTool bool
+
+	// ToolEventCallback is called synchronously for each tool invocation during execution.
+	// Receives a ToolEvent with the tool name and raw JSON args before the tool runs.
+	// Must not block for long — it runs within the agent graph execution.
+	// If nil, no events are emitted.
+	ToolEventCallback func(event ToolEvent)
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.
