@@ -19,6 +19,8 @@ type ToolEventKind string
 const (
 	// ToolEventKindCall fires when the LLM invokes a tool, before execution begins.
 	ToolEventKindCall ToolEventKind = "call"
+	// ToolEventKindResult fires after a tool finishes execution, with its result.
+	ToolEventKindResult ToolEventKind = "result"
 )
 
 // ToolEvent is emitted during agent execution for each tool invocation.
@@ -26,7 +28,7 @@ const (
 type ToolEvent struct {
 	Kind ToolEventKind
 	Name string // tool name
-	Args string // raw JSON args string
+	Args string // raw JSON args string (populated for ToolEventKindCall)
 }
 
 // withAgentTraceCallback builds a trace callback for the AgentLoop graph.
@@ -74,6 +76,17 @@ func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 				} else {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v", name, ri.Name, ri.Type, ri.Component)
 				}
+			}
+			return ctx
+		})
+	}
+	if ops.toolEventCallback != nil {
+		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
+			if ri.Component == "Tool" {
+				ops.toolEventCallback(ToolEvent{
+					Kind: ToolEventKindResult,
+					Name: ri.Name,
+				})
 			}
 			return ctx
 		})
