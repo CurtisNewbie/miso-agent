@@ -80,37 +80,34 @@ func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 			return ctx
 		})
 	}
-	if ops.toolEventCallback != nil {
+	if ops.toolEventCallback != nil || ops.logOnEnd {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
-			if ri.Component == "Tool" {
+			if ops.toolEventCallback != nil && ri.Component == "Tool" {
 				ops.toolEventCallback(ToolEvent{
 					Kind: ToolEventKindResult,
 					Name: ri.Name,
 				})
 			}
-			return ctx
-		})
-	}
-	if ops.logOnEnd {
-		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
-			rail := flow.NewRail(ctx)
-			if ri.Component == "ChatModel" && ri.Name == "" {
-				// skip inner component-level callback; node-level fires separately
-				return ctx
-			}
-			inToken, outToken, ok := agentTokenUsage(output)
-			if ok {
-				rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
-			}
-			if ops.logOutputs {
-				if ri.Component == "ChatModel" {
-					msg := agentExtractMessage(output)
-					if msg != nil {
-						if msg.Content != "" {
-							rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, msg.Content)
-						}
-						if msg.ReasoningContent != "" {
-							rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, msg.ReasoningContent)
+			if ops.logOnEnd {
+				rail := flow.NewRail(ctx)
+				if ri.Component == "ChatModel" && ri.Name == "" {
+					// skip inner component-level callback; node-level fires separately
+					return ctx
+				}
+				inToken, outToken, ok := agentTokenUsage(output)
+				if ok {
+					rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
+				}
+				if ops.logOutputs {
+					if ri.Component == "ChatModel" {
+						msg := agentExtractMessage(output)
+						if msg != nil {
+							if msg.Content != "" {
+								rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, msg.Content)
+							}
+							if msg.ReasoningContent != "" {
+								rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, msg.ReasoningContent)
+							}
 						}
 					}
 				}

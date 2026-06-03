@@ -83,3 +83,50 @@ func TestBuildTraceHandler_ToolEventCallback(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildTraceHandler_ToolResultEvent(t *testing.T) {
+	toolRunInfo := &callbacks.RunInfo{
+		Name:      "read_file",
+		Component: components.Component("Tool"),
+	}
+
+	t.Run("emits result event on OnEnd for Tool component", func(t *testing.T) {
+		var received []ToolEvent
+		ops := agentOps{
+			toolEventCallback: func(event ToolEvent) {
+				received = append(received, event)
+			},
+		}
+		handler := buildTraceHandler("test-agent", ops)
+		handler.OnEnd(context.Background(), toolRunInfo, nil)
+
+		if len(received) != 1 {
+			t.Fatalf("got %d events, want 1", len(received))
+		}
+		if received[0].Kind != ToolEventKindResult {
+			t.Errorf("Kind = %q, want %q", received[0].Kind, ToolEventKindResult)
+		}
+		if received[0].Name != "read_file" {
+			t.Errorf("Name = %q, want %q", received[0].Name, "read_file")
+		}
+	})
+
+	t.Run("result event fires even when logOnEnd is also enabled", func(t *testing.T) {
+		var received []ToolEvent
+		ops := agentOps{
+			logOnEnd: true,
+			toolEventCallback: func(event ToolEvent) {
+				received = append(received, event)
+			},
+		}
+		handler := buildTraceHandler("test-agent", ops)
+		handler.OnEnd(context.Background(), toolRunInfo, nil)
+
+		if len(received) != 1 {
+			t.Fatalf("got %d events, want 1 (logOnEnd must not overwrite toolEventCallback)", len(received))
+		}
+		if received[0].Kind != ToolEventKindResult {
+			t.Errorf("Kind = %q, want %q", received[0].Kind, ToolEventKindResult)
+		}
+	})
+}
