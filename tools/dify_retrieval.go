@@ -223,7 +223,17 @@ func GetDifyRetrievedRecords(m map[string]any, key string) []dify.RetrievedRecor
 		return nil
 	}
 	records, _ := m[key].([]dify.RetrievedRecord)
-	return records
+	seen := make(map[string]struct{}, len(records))
+	deduped := make([]dify.RetrievedRecord, 0, len(records))
+	for _, r := range records {
+		k := r.Segment.DocumentID + ":" + r.Segment.ID
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		deduped = append(deduped, r)
+	}
+	return deduped
 }
 
 // formatRetrieveResp formats a Dify RetrieveRes into plain text for LLM consumption.
