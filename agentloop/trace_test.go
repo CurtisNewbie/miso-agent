@@ -90,7 +90,7 @@ func TestBuildTraceHandler_ToolResultEvent(t *testing.T) {
 		Component: components.Component("Tool"),
 	}
 
-	t.Run("emits result event on OnEnd for Tool component", func(t *testing.T) {
+	t.Run("emits result event on OnEnd with matching args", func(t *testing.T) {
 		var received []ToolEvent
 		ops := agentOps{
 			toolEventCallback: func(event ToolEvent) {
@@ -98,16 +98,26 @@ func TestBuildTraceHandler_ToolResultEvent(t *testing.T) {
 			},
 		}
 		handler := buildTraceHandler("test-agent", ops)
-		handler.OnEnd(context.Background(), toolRunInfo, nil)
 
-		if len(received) != 1 {
-			t.Fatalf("got %d events, want 1", len(received))
+		// simulate OnStart storing args in ctx
+		ctx := handler.OnStart(context.Background(), toolRunInfo, &einotool.CallbackInput{ArgumentsInJSON: `{"path":"/foo.txt"}`})
+		handler.OnEnd(ctx, toolRunInfo, nil)
+
+		if len(received) != 2 {
+			t.Fatalf("got %d events, want 2 (call + result)", len(received))
 		}
-		if received[0].Kind != ToolEventKindResult {
-			t.Errorf("Kind = %q, want %q", received[0].Kind, ToolEventKindResult)
+		callEv, resultEv := received[0], received[1]
+		if callEv.Kind != ToolEventKindCall {
+			t.Errorf("callEv.Kind = %q, want %q", callEv.Kind, ToolEventKindCall)
 		}
-		if received[0].Name != "read_file" {
-			t.Errorf("Name = %q, want %q", received[0].Name, "read_file")
+		if resultEv.Kind != ToolEventKindResult {
+			t.Errorf("resultEv.Kind = %q, want %q", resultEv.Kind, ToolEventKindResult)
+		}
+		if resultEv.Args != `{"path":"/foo.txt"}` {
+			t.Errorf("resultEv.Args = %q, want match call args", resultEv.Args)
+		}
+		if callEv.Args != resultEv.Args {
+			t.Errorf("call/result Args mismatch: %q != %q", callEv.Args, resultEv.Args)
 		}
 	})
 

@@ -27,7 +27,8 @@ type agentOps struct {
 type ctxKey int
 
 var (
-	agentCtxKey ctxKey
+	agentCtxKey    ctxKey = 0
+	toolArgsCtxKey ctxKey = 1
 )
 
 // Agent is a ReAct (Reasoning + Acting) agent that can process tasks using tools and skills.

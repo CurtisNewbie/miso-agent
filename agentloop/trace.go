@@ -28,7 +28,7 @@ const (
 type ToolEvent struct {
 	Kind ToolEventKind
 	Name string // tool name
-	Args string // raw JSON args string (populated for ToolEventKindCall)
+	Args string // raw JSON args string
 }
 
 // withAgentTraceCallback builds a trace callback for the AgentLoop graph.
@@ -59,6 +59,7 @@ func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 						Name: ri.Name,
 						Args: args,
 					})
+					return context.WithValue(ctx, toolArgsCtxKey, args)
 				}
 			} else if ri.Component == "ChatModel" {
 				if ri.Name == "" {
@@ -83,9 +84,11 @@ func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 	if ops.toolEventCallback != nil || ops.logOnEnd {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
 			if ops.toolEventCallback != nil && ri.Component == "Tool" {
+				args, _ := ctx.Value(toolArgsCtxKey).(string)
 				ops.toolEventCallback(ToolEvent{
 					Kind: ToolEventKindResult,
 					Name: ri.Name,
+					Args: args,
 				})
 			}
 			if ops.logOnEnd {
