@@ -62,8 +62,8 @@ type fileRef struct {
 // TmpFileStore is a tmp-file-backed FileStore implementation.
 // Each session gets its own tmp directory; all files written during the session are
 // stored as individual tmp files inside that directory.
-// The tmp directory is created lazily on the first WriteFile call, so calling
-// OnSessionStart is optional. Call OnSessionEnd when the session is done to clean up.
+// The tmp directory is created lazily on the first WriteFile call.
+// Call OnSessionEnd when the session is done to clean up.
 type TmpFileStore struct {
 	mu    sync.RWMutex
 	files map[string]fileRef // logical path -> reference to tmp file on disk
@@ -71,7 +71,6 @@ type TmpFileStore struct {
 }
 
 // NewTmpFileStore creates a new TmpFileStore.
-// The underlying tmp directory is created lazily on the first WriteFile call.
 func NewTmpFileStore() *TmpFileStore {
 	return &TmpFileStore{
 		files: make(map[string]fileRef),
@@ -92,17 +91,9 @@ func (b *TmpFileStore) ensureDir() error {
 	return nil
 }
 
-// OnSessionStart creates the session tmp directory.
-// This is optional — the directory is also created lazily on the first WriteFile call.
-// Calling OnSessionStart explicitly is idempotent: a second call is a no-op.
+// OnSessionStart is a no-op for TmpFileStore.
+// The tmp directory is created lazily on the first WriteFile call.
 func (b *TmpFileStore) OnSessionStart(rail flow.Rail) error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if err := b.ensureDir(); err != nil {
-		return err
-	}
-	rail.Infof("TmpFileStore session started, tmp dir: %s", b.dir)
 	return nil
 }
 
