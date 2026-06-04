@@ -96,6 +96,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	// Add built-in tools (will receive backend and todoManager via context)
 	builtinTools := BuiltinTools(
 		WithEnableFileTool(config.EnableFileTool),
+		WithEnableTodoTool(config.EnableTodoTool),
 	)
 	toolRegistry.Merge(builtinTools)
 
@@ -103,6 +104,12 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	for _, t := range config.Tools {
 		toolRegistry.Register(t)
 	}
+
+	names := make([]string, 0, len(toolRegistry.List()))
+	for _, t := range toolRegistry.List() {
+		names = append(names, t.Name())
+	}
+	flow.NewRail(context.Background()).Infof("NewAgent %q tools: %v", config.Name, names)
 
 	agent := &Agent{
 		config:    config,

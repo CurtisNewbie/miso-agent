@@ -67,6 +67,10 @@ type BuiltinToolsOption struct {
 	// EnableFileTool enables the file-related tools: read_file, write_file, edit_file,
 	// list_directory, glob, and add_artifact. Default: false.
 	EnableFileTool bool
+
+	// EnableTodoTool enables the todo management tools: add_todo, update_todo, list_todos,
+	// delete_todo. Default: false.
+	EnableTodoTool bool
 }
 
 // WithEnableFileTool enables or disables the built-in file tools (read_file, write_file,
@@ -77,8 +81,17 @@ func WithEnableFileTool(v bool) func(o *BuiltinToolsOption) {
 	}
 }
 
+// WithEnableTodoTool enables or disables the built-in todo tools (add_todo, update_todo,
+// list_todos, delete_todo).
+func WithEnableTodoTool(v bool) func(o *BuiltinToolsOption) {
+	return func(o *BuiltinToolsOption) {
+		o.EnableTodoTool = v
+	}
+}
+
 // BuiltinTools returns the built-in tools configured by the provided options.
-// By default (no options), no tools are registered; use WithEnableFileTool to opt in.
+// By default (no options), no tools are registered; use WithEnableFileTool or
+// WithEnableTodoTool to opt in.
 func BuiltinTools(ops ...func(o *BuiltinToolsOption)) *ToolRegistry {
 	o := &BuiltinToolsOption{}
 	for _, op := range ops {
@@ -255,82 +268,83 @@ func BuiltinTools(ops ...func(o *BuiltinToolsOption)) *ToolRegistry {
 		))
 	} // end if o.EnableFileTool
 
-	// Add todo tools
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"add_todo",
-		"Add multiple todo items to the list.",
-		map[string]*schema.ParameterInfo{
-			"todos": ArrayParam("Array of todo items to add",
-				ObjectParam("", map[string]*schema.ParameterInfo{
-					"task":        StringParam("The task description", true),
-					"description": StringParam("Additional details about the task", false),
-				}, false), true),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args AddTodoArgs) (string, error) {
-			if len(args.Todos) == 0 {
-				return "", errs.NewErrf("todos list cannot be empty")
-			}
+	if o.EnableTodoTool {
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"add_todo",
+			"Add multiple todo items to the list.",
+			map[string]*schema.ParameterInfo{
+				"todos": ArrayParam("Array of todo items to add",
+					ObjectParam("", map[string]*schema.ParameterInfo{
+						"task":        StringParam("The task description", true),
+						"description": StringParam("Additional details about the task", false),
+					}, false), true),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args AddTodoArgs) (string, error) {
+				if len(args.Todos) == 0 {
+					return "", errs.NewErrf("todos list cannot be empty")
+				}
 
-			todos := make([]TodoItem, 0, len(args.Todos))
-			for _, td := range args.Todos {
-				todos = append(todos, TodoItem{
-					Task:        td.Task,
-					Description: td.Description,
-				})
-			}
+				todos := make([]TodoItem, 0, len(args.Todos))
+				for _, td := range args.Todos {
+					todos = append(todos, TodoItem{
+						Task:        td.Task,
+						Description: td.Description,
+					})
+				}
 
-			ids, err := agentCtx.Todos.AddTodos(todos)
-			if err != nil {
-				return "", err
-			}
+				ids, err := agentCtx.Todos.AddTodos(todos)
+				if err != nil {
+					return "", err
+				}
 
-			return fmt.Sprintf("Added %d todos: %s", len(ids), strings.Join(ids, ", ")), nil
-		},
-	))
+				return fmt.Sprintf("Added %d todos: %s", len(ids), strings.Join(ids, ", ")), nil
+			},
+		))
 
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"update_todo",
-		"Update the status of a todo item.",
-		map[string]*schema.ParameterInfo{
-			"id":     StringParam("The todo item ID", false),
-			"status": StringParam("New status: pending or completed", false),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args UpdateTodoArgs) (string, error) {
-			if err := agentCtx.Todos.UpdateTodoStatus(args.ID, args.Status); err != nil {
-				return "", err
-			}
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"update_todo",
+			"Update the status of a todo item.",
+			map[string]*schema.ParameterInfo{
+				"id":     StringParam("The todo item ID", false),
+				"status": StringParam("New status: pending or completed", false),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args UpdateTodoArgs) (string, error) {
+				if err := agentCtx.Todos.UpdateTodoStatus(args.ID, args.Status); err != nil {
+					return "", err
+				}
 
-			return fmt.Sprintf("Updated todo %s to %s", args.ID, args.Status), nil
-		},
-	))
+				return fmt.Sprintf("Updated todo %s to %s", args.ID, args.Status), nil
+			},
+		))
 
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"list_todos",
-		"List all todo items.",
-		map[string]*schema.ParameterInfo{},
-		func(ctx context.Context, agentCtx AgentContext, args struct{}) (string, error) {
-			return agentCtx.Todos.Format(), nil
-		},
-	))
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"list_todos",
+			"List all todo items.",
+			map[string]*schema.ParameterInfo{},
+			func(ctx context.Context, agentCtx AgentContext, args struct{}) (string, error) {
+				return agentCtx.Todos.Format(), nil
+			},
+		))
 
-	registry.Register(NewTypedCtxAwareToolFunc(
-		"delete_todo",
-		"Delete multiple todo items.",
-		map[string]*schema.ParameterInfo{
-			"ids": ArrayParam("Array of todo item IDs to delete", StringParam("", false), true),
-		},
-		func(ctx context.Context, agentCtx AgentContext, args DeleteTodoArgs) (string, error) {
-			if len(args.IDs) == 0 {
-				return "", errs.NewErrf("ids is required and must be an array")
-			}
+		registry.Register(NewTypedCtxAwareToolFunc(
+			"delete_todo",
+			"Delete multiple todo items.",
+			map[string]*schema.ParameterInfo{
+				"ids": ArrayParam("Array of todo item IDs to delete", StringParam("", false), true),
+			},
+			func(ctx context.Context, agentCtx AgentContext, args DeleteTodoArgs) (string, error) {
+				if len(args.IDs) == 0 {
+					return "", errs.NewErrf("ids is required and must be an array")
+				}
 
-			if err := agentCtx.Todos.DeleteTodos(args.IDs); err != nil {
-				return "", err
-			}
+				if err := agentCtx.Todos.DeleteTodos(args.IDs); err != nil {
+					return "", err
+				}
 
-			return fmt.Sprintf("Deleted %d todos: %s", len(args.IDs), strings.Join(args.IDs, ", ")), nil
-		},
-	))
+				return fmt.Sprintf("Deleted %d todos: %s", len(args.IDs), strings.Join(args.IDs, ", ")), nil
+			},
+		))
+	}
 
 	return registry
 }

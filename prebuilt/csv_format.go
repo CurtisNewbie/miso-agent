@@ -75,6 +75,7 @@ func NewCsvFormatAgent(chatModel model.ToolCallingChatModel, opts ...CsvFormatOp
 		Language:       cfg.Language,
 		Model:          chatModel,
 		EnableFileTool: true,
+		EnableTodoTool: true,
 		TaskPrompt:     taskPrompt,
 		Tools:          []agentloop.Tool{agentloop.NewTransformCsvLuaTool()},
 	})

@@ -109,6 +109,11 @@ type AgentConfig struct {
 	// Default: false
 	EnableFileTool bool
 
+	// EnableTodoTool enables the built-in todo tools: add_todo, update_todo, list_todos,
+	// delete_todo. When false, these tools are not registered.
+	// Default: false
+	EnableTodoTool bool
+
 	// ToolEventCallback is called synchronously for each tool invocation during execution.
 	// Receives a ToolEvent with the tool name and raw JSON args before the tool runs.
 	// Must not block for long — it runs within the agent graph execution.
