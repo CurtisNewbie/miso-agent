@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -105,9 +106,15 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		toolInfoList[i] = info
 	}
 
-	chatModel, err := agent.config.Model.WithTools(toolInfoList)
-	if err != nil {
-		return nil, err
+	var chatModel model.ToolCallingChatModel
+	if len(toolInfoList) > 0 {
+		var err error
+		chatModel, err = agent.config.Model.WithTools(toolInfoList)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		chatModel = agent.config.Model
 	}
 
 	modelPreHandle := func(ctx context.Context, input []*schema.Message, state *agentLoopState) ([]*schema.Message, error) {
@@ -142,15 +149,16 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		return input, nil
 	}), compose.WithNodeName("Update State"))
 
-	// Tools node - executes tool calls
-	toolNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
-		Tools:               toolInfos,
-		UnknownToolsHandler: buildUnknownToolHandler(toolInfos),
-	})
-	if err != nil {
-		return nil, err
+	if len(toolInfos) > 0 {
+		toolNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
+			Tools:               toolInfos,
+			UnknownToolsHandler: buildUnknownToolHandler(toolInfos),
+		})
+		if err != nil {
+			return nil, err
+		}
+		_ = g.AddToolsNode("tools", toolNode)
 	}
-	_ = g.AddToolsNode("tools", toolNode)
 
 	// Final output node
 	_ = g.AddLambdaNode("final_output", compose.InvokableLambda(func(ctx context.Context, input any) (taskOutput, error) {
@@ -192,23 +200,27 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	}), compose.WithNodeName("Final Output"))
 
 	// Branch: continue loop or finish
-	_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
-		shouldContinue := false
-		err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
-			if len(state.messages) > 0 {
-				lastMsg := state.messages[len(state.messages)-1]
-				shouldContinue = shouldContinueLoop(lastMsg)
+	if len(toolInfos) > 0 {
+		_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
+			shouldContinue := false
+			err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+				if len(state.messages) > 0 {
+					lastMsg := state.messages[len(state.messages)-1]
+					shouldContinue = shouldContinueLoop(lastMsg)
+				}
+				return nil
+			})
+			if err != nil {
+				return "", err
 			}
-			return nil
-		})
-		if err != nil {
-			return "", err
-		}
-		return resolveBranchTarget(shouldContinue), nil
-	}, map[string]bool{
-		"tools":        true,
-		"final_output": true,
-	}))
+			return resolveBranchTarget(shouldContinue), nil
+		}, map[string]bool{
+			"tools":        true,
+			"final_output": true,
+		}))
+	} else {
+		_ = g.AddEdge("update_state", "final_output")
+	}
 
 	// Add edges - ReAct loop pattern
 	_ = g.AddEdge(compose.START, "prepare_messages")
