@@ -158,6 +158,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			return nil, err
 		}
 		_ = g.AddToolsNode("tools", toolNode)
+		_ = g.AddEdge("tools", "chat_model")
 	}
 
 	// Final output node
@@ -226,7 +227,6 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	_ = g.AddEdge(compose.START, "prepare_messages")
 	_ = g.AddEdge("prepare_messages", "chat_model")
 	_ = g.AddEdge("chat_model", "update_state")
-	_ = g.AddEdge("tools", "chat_model")
 	_ = g.AddEdge("final_output", compose.END)
 
 	compileOpts := []compose.GraphCompileOption{compose.WithGraphName("AgentLoop")}
