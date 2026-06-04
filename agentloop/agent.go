@@ -137,6 +137,9 @@ type AgentRequest struct {
 
 // Execute runs the agent with the given request.
 func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
+	rail = rail.NextSpan()
+	rail.Infof("Execute agent %q, UserInput: %q", a.config.Name, req.UserInput)
+
 	// Initialize backend (fresh on each execution)
 	var backend FileStore
 	if a.config.BackendFactory != nil {
