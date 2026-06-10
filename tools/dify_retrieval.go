@@ -185,7 +185,7 @@ func NewDifyRetrievalTool(cfg DifyRetrievalConfig, opts ...DifyRetrievalOption) 
 			if metaKey != "" && agentCtx.Metadata != nil && len(resp.Records) > 0 {
 				agentloop.Append[dify.RetrievedRecord](agentCtx.Metadata, metaKey, resp.Records...)
 			}
-			retrieved := formatRetrieveResp(resp)
+			retrieved := formatRetrieveRespDedup(resp, agentCtx.Metadata)
 			rail.Infof("Retrieved: %v", retrieved)
 			return retrieved, nil
 		},
@@ -236,16 +236,42 @@ func GetDifyRetrievedRecords(m map[string]any, key string) []dify.RetrievedRecor
 	return deduped
 }
 
-// formatRetrieveResp formats a Dify RetrieveRes into plain text for LLM consumption.
-func formatRetrieveResp(resp dify.RetrieveRes) string {
+// difySeenSegmentsKey is the metadata key used to track segment IDs already
+// rendered to the LLM within a single agent execution.
+const difySeenSegmentsKey = "_dify_seen_segments"
+
+// formatRetrieveRespDedup formats a Dify RetrieveRes into plain text for LLM
+// consumption. Segments whose ID has already been rendered in this agent run
+// (tracked via meta) have their content omitted — only the file/segment/position
+// header is emitted — to avoid filling the context with repeated material.
+func formatRetrieveRespDedup(resp dify.RetrieveRes, meta *agentloop.MetadataStore) string {
 	if len(resp.Records) == 0 {
 		return "No relevant documents found."
+	}
+
+	// Load or initialise the seen-set from shared metadata.
+	var seen map[string]struct{}
+	if meta != nil {
+		if v, ok := agentloop.GetMeta[map[string]struct{}](meta, difySeenSegmentsKey); ok {
+			seen = v
+		} else {
+			seen = make(map[string]struct{})
+			meta.Set(difySeenSegmentsKey, seen)
+		}
 	}
 
 	var sb strings.Builder
 	for i, rec := range resp.Records {
 		seg := rec.Segment
+		segKey := seg.DocumentID + ":" + seg.ID
 		fmt.Fprintf(&sb, "[%d] %s (position: %d, score: %.4f)\n", i+1, seg.Document.Name, seg.Position, rec.Score)
+		if seen != nil {
+			if _, duplicate := seen[segKey]; duplicate {
+				sb.WriteString("[already retrieved, content skipped]\n\n")
+				continue
+			}
+			seen[segKey] = struct{}{}
+		}
 		if seg.CreatedAt != nil {
 			fmt.Fprintf(&sb, "Created: %s\n", seg.CreatedAt)
 		}
