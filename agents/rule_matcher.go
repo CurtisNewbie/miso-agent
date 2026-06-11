@@ -322,7 +322,7 @@ func (b *RuleMatcher) ParallelExecute(rail flow.Rail, input RuleMatcherInput, ba
 	}
 	slutil.SplitSubSlices(input.Rules, batchSize, func(sub []Rule) error {
 		aw.SubmitAsync(func() (RuleMatcherOutput, error) {
-			return b.Execute(rail.NextSpan(), RuleMatcherInput{
+			return b.Execute(rail.NewCtx().NextSpanId(), RuleMatcherInput{
 				Context:         input.Context,
 				TaskInstruction: input.TaskInstruction,
 				Rules:           sub,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
@@ -98,7 +99,7 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 		maxToken:    0,
 		temperature: 0.7,
 		baseURL:     AliBailianIntlBaseURL,
-		retry:       0,
+		retry:       3,
 	}
 	for _, op := range ops {
 		op(o)
@@ -150,15 +151,19 @@ type retryChatModel struct {
 }
 
 func (r *retryChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
-	return retry.GetOne(r.retry, func() (*schema.Message, error) {
+	return retry.GetOneDyn(func() (*schema.Message, error) {
 		return r.c.Generate(ctx, input, opts...)
-	})
+	}, r.gapFunc)
 }
 
 func (r *retryChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	return retry.GetOne(r.retry, func() (*schema.StreamReader[*schema.Message], error) {
+	return retry.GetOneDyn(func() (*schema.StreamReader[*schema.Message], error) {
 		return r.c.Stream(ctx, input, opts...)
-	})
+	}, r.gapFunc)
+}
+
+func (r *retryChatModel) gapFunc(i int, _ error) (time.Duration, bool) {
+	return time.Second, i < r.retry
 }
 
 func (r *retryChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {

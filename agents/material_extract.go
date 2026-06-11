@@ -409,7 +409,7 @@ func (b *MaterialExtract) ParallelExecute(rail flow.Rail, input MaterialExtractI
 	}
 	slutil.SplitSubSlices(input.Fields, batchSize, func(sub []ExtractFieldSpec) error {
 		aw.SubmitAsync(func() (MaterialExtractOutput, error) {
-			return b.Execute(rail.NextSpan(), MaterialExtractInput{
+			return b.Execute(rail.NewCtx().NextSpanId(), MaterialExtractInput{
 				Context:   input.Context,
 				Materials: input.Materials,
 				Fields:    sub,
