@@ -56,6 +56,9 @@ func boolOrDefault(p *bool, def bool) bool {
 }
 
 // NewAgent creates a new ReAct agent.
+//
+// Retry on model errors is not handled by the agent — configure it on the model itself.
+// See [agents.NewOpenAIChatModel] and [agents.WithRetry].
 func NewAgent(config AgentConfig) (*Agent, error) {
 	// Set defaults
 	if config.Name == "" {

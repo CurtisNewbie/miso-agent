@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
@@ -99,7 +100,7 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 		maxToken:    0,
 		temperature: 0.7,
 		baseURL:     AliBailianIntlBaseURL,
-		retry:       3,
+		retry:       5,
 	}
 	for _, op := range ops {
 		op(o)
@@ -162,19 +163,27 @@ func (r *retryChatModel) Stream(ctx context.Context, input []*schema.Message, op
 	}, r.gapFunc)
 }
 
-func (r *retryChatModel) gapFunc(i int, _ error) (time.Duration, bool) {
-	return time.Second, i < r.retry
+func (r *retryChatModel) gapFunc(i int, err error) (time.Duration, bool) {
+	if strings.Contains(err.Error(), "429") {
+		return 5 * time.Second, i <= r.retry
+	}
+	// exponential backoff: 1s, 2s, 4s, capped at 5s
+	wait := time.Duration(1<<uint(i-1)) * time.Second
+	if wait > 5*time.Second {
+		wait = 5 * time.Second
+	}
+	return wait, i <= r.retry
 }
 
 func (r *retryChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
 	return r.c.WithTools(tools)
 }
 
-// RetryChatModel wraps c with a default retry count of 3.
+// RetryChatModel wraps c with a default retry count of 5.
 func RetryChatModel(c model.ToolCallingChatModel) model.ToolCallingChatModel {
 	return &retryChatModel{
 		c:     c,
-		retry: 3,
+		retry: 5,
 	}
 }
 

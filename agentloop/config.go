@@ -15,6 +15,11 @@ type AgentConfig struct {
 	Name string
 
 	// Model is the LLM model to use.
+	//
+	// Retry behavior is controlled by the model wrapper, not the agent itself.
+	// Use [agents.NewOpenAIChatModel] with [agents.WithRetry] to configure retry count and
+	// backoff. The default model uses exponential backoff (1s, 2s, 4s, capped at 5s) with
+	// 5 retries; 429 (rate limit) errors skip directly to the 5s cap.
 	Model model.ToolCallingChatModel
 
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
