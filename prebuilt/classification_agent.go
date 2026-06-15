@@ -43,6 +43,9 @@ type ClassificationInput struct {
 
 	// Subjects is the batch of subjects to classify.
 	Subjects []string
+
+	// TaskExplanation is an optional context/hint prepended to the user prompt.
+	TaskExplanation string
 }
 
 // ClassificationResult holds the classification result for a single subject.
@@ -122,6 +125,9 @@ func (a *ClassificationAgent) Classify(rail flow.Rail, input ClassificationInput
 		Categories: strings.Join(input.Categories, "\n"),
 		Subjects:   strings.Join(numbered, "\n"),
 	})
+	if input.TaskExplanation != "" {
+		userPrompt = input.TaskExplanation + "\n\n" + userPrompt
+	}
 
 	out, err := a.agent.Execute(rail, agentloop.AgentRequest{UserInput: userPrompt})
 	if err != nil {
