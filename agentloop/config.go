@@ -124,6 +124,21 @@ type AgentConfig struct {
 	// Must not block for long — it runs within the agent graph execution.
 	// If nil, no events are emitted.
 	ToolEventCallback func(event ToolEvent)
+
+	// ProgressRecap enables incremental progress tracking.
+	// When true, the agent is reminded at the start of each reasoning cycle (after the first)
+	// to briefly summarize what it has completed and what it is working on next.
+	// This improves coherence and context retention during long multi-step tasks.
+	//
+	// Note: the recap message is injected after token pruning, so when MaxTokens is also set
+	// the actual token count sent to the model will marginally exceed the configured limit
+	// by the size of the recap message (~15 tokens) on each cycle from the second onward.
+	//
+	// Note: has no effect when no tools are registered — the agent loop only runs one cycle
+	// in that case and the recap threshold (cycle ≥ 2) is never reached.
+	//
+	// Default: false
+	ProgressRecap bool
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.

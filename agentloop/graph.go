@@ -12,8 +12,9 @@ import (
 )
 
 type agentLoopState struct {
-	taskInput taskInput
-	messages  []*schema.Message
+	taskInput  taskInput
+	messages   []*schema.Message
+	cycleCount int
 }
 
 // shouldContinueLoop reports whether the agent loop should continue after the given assistant message.
@@ -118,6 +119,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	}
 
 	modelPreHandle := func(ctx context.Context, input []*schema.Message, state *agentLoopState) ([]*schema.Message, error) {
+		state.cycleCount++
 		state.messages = append(state.messages, input...)
 
 		// Evict large tool results if configured
@@ -128,6 +130,17 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		// Prune messages if MaxTokens is set and exceeded
 		if agent.config.MaxTokens > 0 && agent.tokenizer != nil {
 			state.messages = agent.tokenizer.PruneMessagesToTokenLimit(state.messages, agent.config.MaxTokens)
+		}
+
+		// Inject a progress recap reminder on every cycle after the first.
+		// The reminder is appended to the returned slice only — not persisted in state.messages —
+		// so it does not pollute the conversation history.
+		if agent.config.ProgressRecap && state.cycleCount >= 2 {
+			reminder := schema.UserMessage("Before responding, briefly summarize: what you have completed so far and what you are working on next.")
+			msgs := make([]*schema.Message, len(state.messages)+1)
+			copy(msgs, state.messages)
+			msgs[len(state.messages)] = reminder
+			return msgs, nil
 		}
 
 		return state.messages, nil
