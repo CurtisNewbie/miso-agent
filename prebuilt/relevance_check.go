@@ -178,6 +178,7 @@ Important:
 - A factually WRONG or hallucinated answer can still score 4-5 if it directly addresses the user question. Factual errors are penalized by the fact-checking dimension, not here.
 - Use score 2 when context has the answer but the response ignores it or falsely claims no info is available.
 - Use score 3 when context has no relevant information and the response correctly abstains.
+- When a question has no deterministic rule-based answer and the correct handling is to route the user to a human agent, a response that guides to human contact IS on-topic and should score 4-5, not 1. Contrast: if the question has a clear rule-based answer, routing to human support instead is off-topic (Score: 1).
 
 --- EXAMPLES ---
 
@@ -222,6 +223,13 @@ Example 6:
 <llm_response>To cancel your subscription, go to Account Settings, click Subscription, then select Cancel Plan and choose a cancellation reason.</llm_response>
 Score: 5
 Reason: The response directly and completely answers the cancellation question. The specific steps are not found in the context — this is a factual accuracy concern, not a relevance concern. The response is fully relevant to the question regardless of whether the steps are correct.
+
+Example 7:
+<user_question>Is my account eligible for the special rate?</user_question>
+<knowledge_context>Special rates are assessed on a case-by-case basis depending on account history, transaction volume, and other factors. No universal eligibility criteria apply.</knowledge_context>
+<llm_response>Eligibility for the special rate depends on your specific account situation. Please reach out to your account manager who can review the details and advise you directly.</llm_response>
+Score: 5
+Reason: The question has no deterministic rule-based answer — eligibility requires human case-by-case judgment. Routing the user to a human agent is the correct and complete response to this type of question, making it fully on-topic.
 
 --- END EXAMPLES ---
 
