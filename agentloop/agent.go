@@ -21,7 +21,6 @@ type agentOps struct {
 	logOnEnd          bool
 	logInputs         bool
 	logOutputs        bool
-	progressRecap     bool
 	toolEventCallback func(event ToolEvent)
 }
 
@@ -85,7 +84,6 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		logOnEnd:          boolOrDefault(config.LogOnEnd, true),
 		logInputs:         boolOrDefault(config.LogInputs, false),
 		logOutputs:        boolOrDefault(config.LogOutputs, true),
-		progressRecap:     boolOrDefault(config.ProgressRecap, false),
 		toolEventCallback: config.ToolEventCallback,
 	}
 

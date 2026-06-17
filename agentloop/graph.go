@@ -132,17 +132,6 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			state.messages = agent.tokenizer.PruneMessagesToTokenLimit(state.messages, agent.config.MaxTokens)
 		}
 
-		// Inject a progress recap reminder on every cycle after the first.
-		// The reminder is appended to the returned slice only — not persisted in state.messages —
-		// so it does not pollute the conversation history.
-		if agent.ops.progressRecap && state.cycleCount >= 2 {
-			reminder := schema.UserMessage("Before responding, briefly summarize: what you have completed so far and what you are working on next.")
-			msgs := make([]*schema.Message, len(state.messages)+1)
-			copy(msgs, state.messages)
-			msgs[len(state.messages)] = reminder
-			return msgs, nil
-		}
-
 		return state.messages, nil
 	}
 

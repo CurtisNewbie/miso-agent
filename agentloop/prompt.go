@@ -41,10 +41,6 @@ Follow the ReAct (Reasoning + Acting) pattern:
 - Mimic existing style, naming conventions, and patterns
 - Use absolute paths for all file operations
 
-## Progress Updates
-
-For longer tasks, provide brief progress updates at reasonable intervals — a concise sentence recapping what you've done and what's next.
-
 ## Completion
 
 Keep working until the task is fully complete. Don't stop partway and explain what you would do — just do it. Only yield back to the user when the task is done or you're genuinely blocked.
