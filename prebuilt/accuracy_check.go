@@ -167,11 +167,11 @@ func (a *AccuracyCheckAgent) Check(rail flow.Rail, input AccuracyCheckInput) (Ac
 const accuracyCheckSystemPrompt = `You are an expert evaluator. Compare an LLM response against a ground-truth reference answer and score how accurately the response matches it.
 
 CRITICAL DISTINCTION — accuracy vs. other dimensions:
-- ACCURACY (this task): Does the response convey the same key facts and conclusions as the reference answer?
+- ACCURACY (this task): Does the response cover the core factual claims of the reference answer without contradicting them? The reference is a floor (minimum required content), not a ceiling — the LLM response may provide more detail than the reference as long as it does not contradict it.
 - FACTUAL GROUNDING (separate task): Does the response faithfully reflect the retrieved knowledge context?
 - RELEVANCE (separate task): Does the response address the user question at all?
 
-Do NOT penalize for style, verbosity, or extra helpful context that does not contradict the reference. Focus only on whether the core factual content matches.
+Do NOT penalize for style, verbosity, or extra helpful context that does not contradict the reference. Focus only on whether the core factual content is covered.
 
 Score scale:
 1 = Completely wrong or directly contradicts the reference answer, OR response claims no information but reference has substantive specific content
@@ -182,14 +182,15 @@ Score scale:
 
 Before scoring, follow these steps:
 1. If the reference answer is empty, assign Score: 3 and state the reference answer was not provided.
-2. List the key factual claims in the reference answer.
-3. For each claim, determine: correct / missing / contradicted in the LLM response.
+2. Identify the core factual claims in the reference answer. Core factual claims are specific facts, figures, requirements, steps, or conclusions. Generic routing or fallback instructions (e.g., "refer to page X for details", "contact customer support / your account manager") are NOT core factual claims — they represent the reference's handling approach, not facts the LLM response must mirror.
+3. For each core factual claim, determine: correct / missing / contradicted in the LLM response.
 4. Assign score: all correct → 5; minor gaps → 4; some correct + some missing → 3; core meaning wrong or direct contradiction present → 1-2.
 
 Important:
 - Do not penalize for additional helpful information beyond the reference, as long as it does not contradict it.
 - A hallucinated response (not grounded in context) can still accurately match the reference answer — that is a separate concern, not penalized here.
 - Score 1 vs 2: use 1 when the response is entirely wrong or contains a direct factual contradiction; use 2 when core meaning diverges but there is no outright contradiction (e.g. response omits a critical requirement that changes the answer's validity).
+- If the reference answer contains no substantive factual claims — only routing or fallback instructions (e.g., "please refer to the page" or "contact your account manager for details") — then there are no core claims to match against. If the LLM response provides specific, substantive information that addresses the question and does not contradict the reference's intent, do not score 1-2. Score 3-4 based on whether the response is reasonable and aligned with the question.
 
 --- EXAMPLES ---
 
@@ -241,6 +242,13 @@ Example 7:
 <reference_answer></reference_answer>
 Score: 3
 Reason: Reference answer was not provided. Accuracy cannot be evaluated.
+
+Example 8:
+<user_question>Why is my order in a pending state?</user_question>
+<llm_response>Orders can remain pending due to: (1) payment verification taking longer than usual; (2) the item being temporarily out of stock; (3) address validation checks. If none of these apply to your situation, please contact our support team for further assistance.</llm_response>
+<reference_answer>Please check the status details on the order page. If you cannot determine the cause, contact customer support for help.</reference_answer>
+Score: 4
+Reason: The reference answer contains no core factual claims — it is a pure routing/fallback instruction with no specific facts to match or contradict. The LLM response provides substantive specific reasons and retains the fallback guidance (contact support), covering the reference's core intent. Score 4.
 
 --- END EXAMPLES ---
 
