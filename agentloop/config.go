@@ -137,7 +137,7 @@ type AgentConfig struct {
 	// Note: has no effect when no tools are registered — the agent loop only runs one cycle
 	// in that case and the recap threshold (cycle ≥ 2) is never reached.
 	//
-	// Default: true
+	// Default: false
 	ProgressRecap *bool
 }
 

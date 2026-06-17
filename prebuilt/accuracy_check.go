@@ -183,8 +183,12 @@ Score scale:
 Before scoring, follow these steps:
 1. If the reference answer is empty, assign Score: 3 and state the reference answer was not provided.
 2. Identify the core factual claims in the reference answer. Core factual claims are specific facts, figures, requirements, steps, or conclusions. Generic routing or fallback instructions (e.g., "refer to page X for details", "contact customer support / your account manager") are NOT core factual claims — they represent the reference's handling approach, not facts the LLM response must mirror.
-3. For each core factual claim, determine: correct / missing / contradicted in the LLM response.
-4. Assign score: all correct → 5; minor gaps → 4; some correct + some missing → 3; core meaning wrong or direct contradiction present → 1-2.
+3. For each core factual claim, determine which category applies in the LLM response:
+   - correct: the claim is accurately conveyed
+   - alternative: the agent takes a different but non-contradictory path to address the same need (e.g. reference says "register first", agent says "call customer service" — both help the user, neither negates the other). Treat as a minor deviation, not a missing point.
+   - missing: the claim is entirely absent with no equivalent coverage
+   - contradicted: the claim is directly negated or replaced with incorrect information
+4. Assign score: all correct/alternative → 4-5; minor gaps → 4; some correct/alternative + some missing → 3; core meaning wrong or direct contradiction present → 1-2.
 
 Important:
 - Do not penalize for additional helpful information beyond the reference, as long as it does not contradict it.
