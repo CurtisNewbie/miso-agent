@@ -56,7 +56,7 @@ type ClassificationResult struct {
 	// Reason is the step-by-step reasoning behind the classification result.
 	Reason string `json:"reason"`
 
-	// Categories contains the matched category names. Empty if none match.
+	// Categories contains the matched category names. Contains ["Unknown"] if none match.
 	Categories []string `json:"categories"`
 }
 
@@ -138,6 +138,14 @@ func (a *ClassificationAgent) Classify(rail flow.Rail, input ClassificationInput
 	if err != nil {
 		return ClassificationOutput{}, errs.Wrapf(err, "failed to parse ClassificationAgent response")
 	}
+	for i, r := range result.Results {
+		for _, c := range r.Categories {
+			if strings.EqualFold(c, "Unknown") {
+				result.Results[i].Categories = []string{"Unknown"}
+				break
+			}
+		}
+	}
 	return result, nil
 }
 
@@ -147,7 +155,8 @@ const classificationSystemPrompt = `You are a classification engine. Given a lis
 
 Rules:
 - Select ONLY from the provided categories. Do not invent or paraphrase category names.
-- A subject may match zero, one, or multiple categories.
+- A subject may match one or multiple categories.
+- If no category fits, set categories to ["Unknown"].
 - Output strictly valid JSON — no markdown, no prose, no trailing commas.
 - Produce one result object per subject, in the same order as the input.
 
@@ -159,6 +168,7 @@ Examples:
 Subjects:
 1. 物流
 2. organic apples import
+3. birthday party planning
 
 Categories:
 Goods trade-Agricultural Products
@@ -166,7 +176,7 @@ Goods trade-Alcohol
 Service trade-Logistics
 
 Output:
-{"results": [{"subject": "物流", "reason": "物流 directly maps to Service trade-Logistics.", "categories": ["Service trade-Logistics"]}, {"subject": "organic apples import", "reason": "Organic apples are agricultural goods; import is a goods-trade activity.", "categories": ["Goods trade-Agricultural Products"]}]}`
+{"results": [{"subject": "物流", "reason": "物流 directly maps to Service trade-Logistics.", "categories": ["Service trade-Logistics"]}, {"subject": "organic apples import", "reason": "Organic apples are agricultural goods; import is a goods-trade activity.", "categories": ["Goods trade-Agricultural Products"]}, {"subject": "birthday party planning", "reason": "Birthday party planning does not correspond to any of the provided trade categories.", "categories": ["Unknown"]}]}`
 
 // classificationUserPrompt is the per-call template carrying the runtime inputs.
 // Placeholders ${Categories} and ${Subjects} are substituted via strutil.NamedSprintfv.
