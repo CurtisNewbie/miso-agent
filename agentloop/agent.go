@@ -2,11 +2,9 @@ package agentloop
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 )
@@ -15,13 +13,16 @@ import (
 // It is built from AgentConfig flat fields in NewAgent and used internally
 // for graph compilation and trace callbacks.
 type agentOps struct {
-	maxRunSteps       int
-	language          string
-	logOnStart        bool
-	logOnEnd          bool
-	logInputs         bool
-	logOutputs        bool
-	toolEventCallback func(event ToolEvent)
+	maxRunSteps                 int
+	language                    string
+	logOnStart                  bool
+	logOnEnd                    bool
+	logInputs                   bool
+	logOutputs                  bool
+	toolEventCallback           func(event ToolEvent)
+	compaction                  bool
+	compactPreserveRecentTokens int
+	compactBuffer               int // derived from compactionThreshold * MaxTokens
 }
 
 type ctxKey int
@@ -38,12 +39,11 @@ var (
 //   - Tool calling with automatic backend injection
 //   - Skills system with progressive disclosure
 //   - Token-aware message pruning
-//   - Tool result eviction for large outputs
 type Agent struct {
 	config    AgentConfig
 	ops       agentOps
 	tools     *ToolRegistry
-	tokenizer *Tokenizer
+	tokenizer Tokenizer
 	graph     compose.Runnable[taskInput, taskOutput]
 }
 
@@ -60,6 +60,8 @@ func boolOrDefault(p *bool, def bool) bool {
 // Retry on model errors is not handled by the agent — configure it on the model itself.
 // See [agents.NewOpenAIChatModel] and [agents.WithRetry].
 func NewAgent(config AgentConfig) (*Agent, error) {
+	rail := flow.NewRail(context.Background())
+
 	// Set defaults
 	if config.Name == "" {
 		config.Name = "AgentLoop"
@@ -78,20 +80,58 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 
 	// Build ops from individual config fields
 	ops := agentOps{
-		maxRunSteps:       maxGraphSteps,
-		language:          config.Language,
-		logOnStart:        boolOrDefault(config.LogOnStart, true),
-		logOnEnd:          boolOrDefault(config.LogOnEnd, true),
-		logInputs:         boolOrDefault(config.LogInputs, false),
-		logOutputs:        boolOrDefault(config.LogOutputs, true),
-		toolEventCallback: config.ToolEventCallback,
+		maxRunSteps:                 maxGraphSteps,
+		language:                    config.Language,
+		logOnStart:                  boolOrDefault(config.LogOnStart, true),
+		logOnEnd:                    boolOrDefault(config.LogOnEnd, true),
+		logInputs:                   boolOrDefault(config.LogInputs, true),
+		logOutputs:                  boolOrDefault(config.LogOutputs, true),
+		toolEventCallback:           config.ToolEventCallback,
+		compaction:                  boolOrDefault(config.Compaction, false),
+		compactPreserveRecentTokens: config.CompactPreserveRecentTokens,
 	}
 
-	// Initialize tokenizer for accurate token counting
-	tokenizer, err := NewTokenizer(config.TokenizerModelName)
-	if err != nil {
-		return nil, errs.Wrapf(err, "failed to initialize tokenizer for model %s", config.TokenizerModelName)
+	// Auto-detect MaxTokens from model name if not explicitly set.
+	if config.MaxTokens < 1 {
+		if namer, ok := config.Model.(agents.ModelNamer); ok {
+			if ctx, found := agents.LookupModelContextWindow(rail, namer.ModelName(), config.EnableModelsFetch); found {
+				config.MaxTokens = ctx
+				rail.Infof("Model %v max token detected: %v", namer.ModelName(), config.MaxTokens)
+			}
+		}
 	}
+
+	// Derive compactBuffer and compactPreserveRecentTokens from MaxTokens.
+	// Both are percentage-based to stay consistent regardless of model context size.
+	if config.MaxTokens > 0 {
+		ops.compactBuffer = int(float64(config.MaxTokens) * 0.2)
+		if ops.compactPreserveRecentTokens <= 0 {
+			// Keep 25% of context as recent verbatim tail.
+			// Matches opencode's preserveRecentBudget: max(2000, min(8000, usable * 0.25)).
+			ops.compactPreserveRecentTokens = max(2000, min(8000, int(float64(config.MaxTokens)*0.25)))
+		}
+	}
+
+	// Warn if compaction is enabled but MaxTokens is not set; the compaction path
+	// is guarded by MaxTokens > 0, so it would be silently skipped.
+	if ops.compaction && config.MaxTokens <= 0 {
+		rail.Warnf(
+			"NewAgent %q: compaction is enabled but MaxTokens is not set; compaction will be silently skipped",
+			config.Name,
+		)
+	}
+
+	// Warn if compactPreserveRecentTokens is so large that selectForCompaction will never
+	// find messages to summarize — compaction will silently do nothing.
+	if config.MaxTokens > 0 && ops.compaction && ops.compactPreserveRecentTokens >= config.MaxTokens-ops.compactBuffer {
+		rail.Warnf(
+			"NewAgent %q: compactPreserveRecentTokens (%d) >= MaxTokens-compactBuffer (%d); compaction will never select messages to summarize — increase MaxTokens or reduce CompactPreserveRecentTokens",
+			config.Name, ops.compactPreserveRecentTokens, config.MaxTokens-ops.compactBuffer,
+		)
+	}
+
+	// Initialize tokenizer for token counting
+	tokenizer := NewTokenizer()
 
 	// Initialize tools
 	toolRegistry := NewToolRegistry()
@@ -112,7 +152,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	for _, t := range toolRegistry.List() {
 		names = append(names, t.Name())
 	}
-	flow.NewRail(context.Background()).Infof("NewAgent %q tools: %v", config.Name, names)
+	rail.Infof("NewAgent %q tools: %v", config.Name, names)
 
 	agent := &Agent{
 		config:    config,
@@ -239,100 +279,4 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	}
 
 	return result, nil
-}
-
-// evictToolResult stores a large tool result to the backend and returns a reference message.
-// The agent can use read_file with offset/limit to retrieve specific sections of the evicted content.
-func (a *Agent) evictToolResult(backend FileStore, msg *schema.Message) *schema.Message {
-	// Generate unique reference ID
-	refID := fmt.Sprintf("tool-result-%s", msg.ToolCallID)
-
-	// Store full content to backend
-	filePath := fmt.Sprintf("/tool-results/%s.txt", refID)
-	if err := backend.WriteFile(context.Background(), filePath, []byte(msg.Content)); err != nil {
-		// If write fails, return original message (better than losing data)
-		return msg
-	}
-
-	// Calculate token count
-	totalTokens := a.tokenizer.CountTokens(msg.Content)
-
-	// Generate preview if configured
-	preview := ""
-	if a.config.EvictToolResultsKeepPreview > 0 {
-		// Read first N tokens as preview
-		lines := strings.Split(msg.Content, "\n")
-		previewTokens := 0
-		var previewLines []string
-
-		for _, line := range lines {
-			lineTokens := a.tokenizer.CountTokens(line)
-			if previewTokens+lineTokens > a.config.EvictToolResultsKeepPreview {
-				break
-			}
-			previewTokens += lineTokens
-			previewLines = append(previewLines, line)
-		}
-
-		preview = strings.Join(previewLines, "\n")
-		if len(previewLines) < len(lines) {
-			preview += "\n... [truncated]"
-		}
-	}
-
-	// Create reference message with instructions for chunked reading
-	referenceContent := fmt.Sprintf(
-		"[Tool result evicted to: %s]\n"+
-			"Tokens: %d\n"+
-			"Preview:\n%s\n\n"+
-			"Use read_file with offset/limit to read specific sections:\n"+
-			"  - read_file(path='%s', offset=0, limit=100)  # Read first 100 lines\n"+
-			"  - read_file(path='%s', offset=100, limit=100) # Read next 100 lines\n",
-		filePath,
-		totalTokens,
-		preview,
-		filePath,
-		filePath,
-	)
-
-	return &schema.Message{
-		Role:       msg.Role,
-		ToolCallID: msg.ToolCallID,
-		Content:    referenceContent,
-	}
-}
-
-// shouldEvictToolResult checks if a tool result should be evicted based on configuration.
-// Returns true if the tool result should be evicted.
-func (a *Agent) shouldEvictToolResult(msg *schema.Message) bool {
-	// Check if eviction is enabled
-	if a.config.EvictToolResultsThreshold <= 0 {
-		return false
-	}
-
-	// Check if this is a tool result message
-	if msg.Role != schema.Tool || len(msg.ToolCallID) == 0 {
-		return false
-	}
-
-	// Check token count
-	resultTokens := a.tokenizer.CountTokens(msg.Content)
-	return resultTokens > a.config.EvictToolResultsThreshold
-}
-
-// evictLargeToolResults processes messages and evicts large tool results.
-func (a *Agent) evictLargeToolResults(backend FileStore, messages []*schema.Message) []*schema.Message {
-	result := make([]*schema.Message, len(messages))
-	copy(result, messages)
-
-	for i, msg := range result {
-		if msg.Role == schema.Tool && len(msg.ToolCallID) > 0 && i != len(result)-1 {
-			// Check if this result should be evicted
-			if a.shouldEvictToolResult(msg) {
-				result[i] = a.evictToolResult(backend, msg)
-			}
-		}
-	}
-
-	return result
 }

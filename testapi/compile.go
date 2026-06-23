@@ -43,11 +43,8 @@ func compileGraph() error {
 
 	// Add agentloop agent
 	_, err = agentloop.NewAgent(agentloop.AgentConfig{
-		Model:                       model,
-		MaxTokens:                   32000,
-		TokenizerModelName:          "gpt-3.5-turbo",
-		EvictToolResultsThreshold:   1000,
-		EvictToolResultsKeepPreview: 100,
+		Model:     model,
+		MaxTokens: 32000,
 	})
 	return err
 }

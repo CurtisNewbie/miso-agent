@@ -41,7 +41,7 @@ type AgentConfig struct {
 	LogOnEnd *bool
 
 	// LogInputs controls whether the agent logs input messages to the model.
-	// If nil, defaults to false.
+	// If nil, defaults to true.
 	LogInputs *bool
 
 	// LogOutputs controls whether the agent logs model output content.
@@ -90,24 +90,10 @@ type AgentConfig struct {
 	// Default: 0 (no limit)
 	MaxTokens int
 
-	// TokenizerModelName is the name of the model used for token counting.
-	// This is used to select the appropriate tiktoken encoding (e.g., cl100k_base for gpt-3.5-turbo, o200k_base for gpt-4o).
-	// If empty, defaults to "gpt-3.5-turbo".
-	// Common values: "gpt-3.5-turbo", "gpt-4", "gpt-4o", "qwen-plus", "deepseek-chat"
-	TokenizerModelName string
-
-	// EvictToolResultsThreshold is the maximum token count for tool results before eviction.
-	// Tool results exceeding this threshold are evicted to the filesystem and replaced with a reference.
-	// If 0 or negative, no eviction is performed.
-	// Default: 0 (no eviction)
-	// Recommended: 1000-2000 tokens for most use cases
-	EvictToolResultsThreshold int
-
-	// EvictToolResultsKeepPreview is the number of tokens to keep as a preview in the reference message.
-	// Allows the agent to see context without loading the full content.
-	// If 0, no preview is kept (only metadata).
-	// Default: 0 (no preview)
-	EvictToolResultsKeepPreview int
+	// EnableModelsFetch enables runtime fetching of model context window sizes
+	// from models.dev when the model is not found in the build-time generated map.
+	// Fetched results are cached in memory for the process lifetime.
+	EnableModelsFetch bool
 
 	// EnableFileTool enables the built-in file tools: read_file, write_file, edit_file,
 	// list_directory, glob, and add_artifact. When false, these tools are not registered.
@@ -124,6 +110,18 @@ type AgentConfig struct {
 	// Must not block for long — it runs within the agent graph execution.
 	// If nil, no events are emitted.
 	ToolEventCallback func(event ToolEvent)
+
+	// Compaction enables LLM-based context compaction when the conversation history
+	// approaches MaxTokens. Older messages are summarized into a structured checkpoint;
+	// recent messages are kept verbatim. Requires MaxTokens to be set.
+	// If nil, defaults to false.
+	Compaction *bool
+
+	// CompactPreserveRecentTokens is the token budget for the verbatim recent tail kept after compaction.
+	// Messages within this budget (newest first) are sent to the model as-is; older messages are summarized.
+	// When MaxTokens is known, defaults to max(2000, min(8000, MaxTokens * 0.25)) — i.e., 25% of the
+	// context window, clamped between 2k and 8k tokens. Set explicitly to override.
+	CompactPreserveRecentTokens int
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.

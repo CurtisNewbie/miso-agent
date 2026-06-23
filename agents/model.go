@@ -86,6 +86,37 @@ func WithStreamingToolCall() func(o *openAiModelConfig) {
 	}
 }
 
+// ModelNamer is implemented by chat models that expose their underlying model name.
+type ModelNamer interface {
+	ModelName() string
+}
+
+// OpenAIChatModel is the public concrete type returned by NewOpenAIChatModel.
+// It wraps the internal layered model (retry → contentFix → optionally streamingTool)
+// and exposes the model name via ModelName().
+type OpenAIChatModel struct {
+	name  string
+	inner model.ToolCallingChatModel
+}
+
+func (m *OpenAIChatModel) ModelName() string { return m.name }
+
+func (m *OpenAIChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	return m.inner.Generate(ctx, input, opts...)
+}
+
+func (m *OpenAIChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	return m.inner.Stream(ctx, input, opts...)
+}
+
+func (m *OpenAIChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
+	inner, err := m.inner.WithTools(tools)
+	if err != nil {
+		return nil, err
+	}
+	return &OpenAIChatModel{name: m.name, inner: inner}, nil
+}
+
 // NewOpenAIChatModel creates a new OpenAI-compatible chat model.
 //
 // Example:
@@ -95,7 +126,7 @@ func WithStreamingToolCall() func(o *openAiModelConfig) {
 //	    WithMaxToken(32768),
 //	    WithRetry(3),
 //	)
-func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConfig)) (model.ToolCallingChatModel, error) {
+func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConfig)) (*OpenAIChatModel, error) {
 	o := &openAiModelConfig{
 		maxToken:    0,
 		temperature: 0.7,
@@ -143,7 +174,7 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 		result = &streamingToolModel{inner: result}
 	}
 
-	return result, nil
+	return &OpenAIChatModel{name: modelName, inner: result}, nil
 }
 
 type retryChatModel struct {

@@ -9,12 +9,15 @@ import (
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+
+	"github.com/curtisnewbie/miso/flow"
 )
 
 type agentLoopState struct {
-	taskInput  taskInput
-	messages   []*schema.Message
-	cycleCount int
+	taskInput         taskInput
+	messages          []*schema.Message
+	cycleCount        int
+	compactionSummary string
 }
 
 // shouldContinueLoop reports whether the agent loop should continue after the given assistant message.
@@ -122,14 +125,39 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		state.cycleCount++
 		state.messages = append(state.messages, input...)
 
-		// Evict large tool results if configured
-		if agent.config.EvictToolResultsThreshold > 0 && agent.tokenizer != nil {
-			state.messages = agent.evictLargeToolResults(state.taskInput.store, state.messages)
-		}
+		// Compact if MaxTokens is set and exceeded threshold
+		if agent.config.MaxTokens > 0 && agent.ops.compaction && agent.tokenizer.CountMessagesTokens(state.messages) > agent.config.MaxTokens-agent.ops.compactBuffer {
+			toSummarize, toKeep := selectForCompaction(state.messages, agent.tokenizer, agent.ops.compactPreserveRecentTokens)
+			if len(toSummarize) > 0 {
+				rail := flow.NewRail(ctx)
+				rail.Infof("Compaction started: summarizing %d messages, keeping %d (target preserve_recent_tokens: %v)", len(toSummarize), len(toKeep), agent.ops.compactPreserveRecentTokens)
+				summary, err := runCompaction(ctx, agent.config.Model, state.compactionSummary, toSummarize)
+				if err == nil && summary != "" {
+					state.compactionSummary = summary
+					checkpoint := schema.UserMessage(fmt.Sprintf(
+						"<conversation-checkpoint>\n<summary>\n%s\n</summary>\n</conversation-checkpoint>",
+						summary,
+					))
 
-		// Prune messages if MaxTokens is set and exceeded
-		if agent.config.MaxTokens > 0 && agent.tokenizer != nil {
-			state.messages = agent.tokenizer.PruneMessagesToTokenLimit(state.messages, agent.config.MaxTokens)
+					// <system message>
+					// <checkpoint>
+					// <recent messages kept>
+					newMessages := make([]*schema.Message, 0, 2+len(toKeep))
+					if len(state.messages) > 0 && state.messages[0].Role == schema.System {
+						newMessages = append(newMessages, state.messages[0])
+					}
+					newMessages = append(newMessages, checkpoint)
+					newMessages = append(newMessages, toKeep...)
+					state.messages = newMessages
+					rail.Infof("Compaction succeeded: summary %d chars, new message set ~%d tokens", len([]rune(summary)), agent.tokenizer.CountMessagesTokens(newMessages))
+				} else {
+					if err != nil {
+						rail.Warnf("Compaction failed: %v", err)
+					} else {
+						rail.Warnf("Compaction returned empty summary")
+					}
+				}
+			}
 		}
 
 		return state.messages, nil
