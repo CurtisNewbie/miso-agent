@@ -8,6 +8,7 @@ import (
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/ptr"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
 
@@ -77,6 +78,7 @@ func NewCsvFormatAgent(chatModel model.ToolCallingChatModel, opts ...CsvFormatOp
 		EnableFileTool: true,
 		EnableTodoTool: true,
 		TaskPrompt:     taskPrompt,
+		Compaction:     ptr.BoolPtr(true),
 		Tools:          []agentloop.Tool{agentloop.NewTransformCsvLuaTool()},
 	})
 	if err != nil {
