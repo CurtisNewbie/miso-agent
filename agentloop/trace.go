@@ -153,7 +153,7 @@ func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, 
 		if msg.Role == schema.Tool {
 			content = trimLogContent(content, 30)
 		}
-		parts = append(parts, fmt.Sprintf("<%v>\n%v</%v>", msg.Role, content, msg.Role))
+		parts = append(parts, fmt.Sprintf("<%v>\n%v\n</%v>", msg.Role, content, msg.Role))
 	}
 	rail.Infof("[%v] %v/%v inputs:\n%v", graphName, ri.Component, ri.Name, strings.Join(parts, "\n"))
 }
