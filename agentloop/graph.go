@@ -127,9 +127,13 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 		// Compact if MaxTokens is set and exceeded threshold
 		if agent.config.MaxTokens > 0 && agent.ops.compaction && agent.tokenizer.CountMessagesTokens(state.messages) > agent.config.MaxTokens-agent.ops.compactBuffer {
+			rail := flow.NewRail(ctx)
 			toSummarize, toKeep := selectForCompaction(state.messages, agent.tokenizer, agent.ops.compactPreserveRecentTokens)
+			if toSummarize == nil && toKeep == nil && len(state.messages) >= 3 {
+				rail.Warnf("Compaction skipped: unexpected message structure (messages[0]=%s, messages[1]=%s)", state.messages[0].Role, state.messages[1].Role)
+				return state.messages, nil
+			}
 			if len(toSummarize) > 0 {
-				rail := flow.NewRail(ctx)
 				rail.Infof("Compaction started: summarizing %d messages, keeping %d (target preserve_recent_tokens: %v)", len(toSummarize), len(toKeep), agent.ops.compactPreserveRecentTokens)
 				summary, err := runCompaction(ctx, agent.config.Model, state.compactionSummary, toSummarize)
 				if err == nil && summary != "" {
@@ -139,13 +143,10 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 						summary,
 					))
 
-					// <system message>
-					// <checkpoint>
-					// <recent messages kept>
-					newMessages := make([]*schema.Message, 0, 2+len(toKeep))
-					if len(state.messages) > 0 && state.messages[0].Role == schema.System {
-						newMessages = append(newMessages, state.messages[0])
-					}
+					// Rebuild as [system, original_user_task, checkpoint, recent...]
+					// messages[0] and messages[1] are always preserved intact.
+					newMessages := make([]*schema.Message, 0, 3+len(toKeep))
+					newMessages = append(newMessages, state.messages[0], state.messages[1])
 					newMessages = append(newMessages, checkpoint)
 					newMessages = append(newMessages, toKeep...)
 					state.messages = newMessages

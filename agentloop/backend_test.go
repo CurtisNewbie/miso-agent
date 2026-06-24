@@ -28,22 +28,22 @@ func TestTmpFileStore_SessionLifecycle(t *testing.T) {
 		t.Fatalf("expected empty dir before OnSessionStart, got %q", be.dir)
 	}
 
-	// OnSessionStart must create the tmp directory.
+	// OnSessionStart is a no-op — dir is created lazily on first WriteFile.
 	if err := be.OnSessionStart(rail); err != nil {
 		t.Fatalf("OnSessionStart failed: %v", err)
 	}
-	dir := be.dir
-	if dir == "" {
-		t.Fatal("expected non-empty dir after OnSessionStart")
-	}
-	if _, err := os.Stat(dir); err != nil {
-		t.Fatalf("tmp dir %q should exist after OnSessionStart: %v", dir, err)
+	if be.dir != "" {
+		t.Fatal("expected empty dir after OnSessionStart (dir is created lazily)")
 	}
 
-	// Write a file so there is something in the tmp dir.
+	// Write a file — this triggers lazy dir creation.
 	ctx := context.Background()
 	if err := be.WriteFile(ctx, "/hello.txt", []byte("hello")); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
+	}
+	dir := be.dir
+	if dir == "" {
+		t.Fatal("expected non-empty dir after WriteFile")
 	}
 
 	// OnSessionEnd must remove the tmp directory and all its contents.

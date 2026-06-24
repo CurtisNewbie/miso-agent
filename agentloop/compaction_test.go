@@ -110,28 +110,36 @@ func TestSerializeForCompaction(t *testing.T) {
 	}
 }
 
-// TestSelectForCompaction_Empty checks empty input returns nil toSummarize and empty toKeep.
+// TestSelectForCompaction_Empty checks that inputs shorter than [system, user, one-more]
+// return nil for both slices — nothing to compact.
+// Also checks that inputs with unexpected roles at [0] or [1] return nil, nil gracefully.
 func TestSelectForCompaction_Empty(t *testing.T) {
 	tok := NewTokenizer()
 
-	toSum, toKeep := selectForCompaction([]*schema.Message{}, tok, 1000)
-	if toSum != nil {
-		t.Errorf("toSummarize should be nil, got %v", toSum)
-	}
-	if toKeep == nil {
-		t.Errorf("toKeep should be non-nil empty slice, got nil")
-	}
-	if len(toKeep) != 0 {
-		t.Errorf("toKeep should be empty, got len=%d", len(toKeep))
+	for _, msgs := range [][]*schema.Message{
+		{},
+		{schema.SystemMessage("sys")},
+		{schema.SystemMessage("sys"), schema.UserMessage("task")},
+		// Invariant violated: messages[0] is not system
+		{schema.UserMessage("task"), schema.UserMessage("task2"), {Role: schema.Assistant, Content: "hi"}},
+		// Invariant violated: messages[1] is not user
+		{schema.SystemMessage("sys"), {Role: schema.Assistant, Content: "hi"}, schema.UserMessage("task")},
+	} {
+		toSum, toKeep := selectForCompaction(msgs, tok, 1000)
+		if toSum != nil || toKeep != nil {
+			t.Errorf("input len=%d: expected (nil, nil), got (%v, %v)", len(msgs), toSum, toKeep)
+		}
 	}
 }
 
-// TestSelectForCompaction_AllFit checks that when keepTokens is large all non-system messages go to toKeep.
+// TestSelectForCompaction_AllFit checks that when keepTokens is large all messages after
+// [system, user] go to toKeep and nothing goes to toSummarize.
 func TestSelectForCompaction_AllFit(t *testing.T) {
 	tok := NewTokenizer()
 
 	messages := []*schema.Message{
-		schema.UserMessage("hello"),
+		schema.SystemMessage("system"),
+		schema.UserMessage("task"),
 		{Role: schema.Assistant, Content: "hi there"},
 		{Role: schema.Tool, Content: "result"},
 	}
@@ -140,36 +148,35 @@ func TestSelectForCompaction_AllFit(t *testing.T) {
 	if len(toSum) != 0 {
 		t.Errorf("expected empty toSummarize, got %d messages", len(toSum))
 	}
-	if len(toKeep) != 3 {
-		t.Errorf("expected 3 messages in toKeep, got %d", len(toKeep))
+	if len(toKeep) != 2 {
+		t.Errorf("expected 2 messages in toKeep (assistant+tool), got %d", len(toKeep))
 	}
 }
 
-// TestSelectForCompaction_SystemExcluded checks that system messages are not in either output slice.
-func TestSelectForCompaction_SystemExcluded(t *testing.T) {
+// TestSelectForCompaction_SystemAndUserExcluded checks that neither system nor the original
+// user task appear in either output slice — they are always preserved by the caller.
+func TestSelectForCompaction_SystemAndUserExcluded(t *testing.T) {
 	tok := NewTokenizer()
 
 	messages := []*schema.Message{
 		schema.SystemMessage("you are a bot"),
-		schema.UserMessage("hello"),
+		schema.UserMessage("original task"),
 		{Role: schema.Assistant, Content: "hi"},
 	}
 
 	toSum, toKeep := selectForCompaction(messages, tok, 100000)
 
-	for _, m := range toSum {
+	for _, m := range append(toSum, toKeep...) {
 		if m.Role == schema.System {
-			t.Errorf("system message must not appear in toSummarize")
+			t.Errorf("system message must not appear in either output slice")
+		}
+		if m.Role == schema.User && m.Content == "original task" {
+			t.Errorf("original user task must not appear in either output slice")
 		}
 	}
-	for _, m := range toKeep {
-		if m.Role == schema.System {
-			t.Errorf("system message must not appear in toKeep")
-		}
-	}
-	// Both user and assistant should be in toKeep (all fit).
-	if len(toKeep) != 2 {
-		t.Errorf("expected 2 non-system messages in toKeep, got %d", len(toKeep))
+	// Only the assistant message is a candidate.
+	if len(toKeep) != 1 {
+		t.Errorf("expected 1 message in toKeep (assistant), got %d", len(toKeep))
 	}
 }
 
@@ -180,14 +187,15 @@ func TestSelectForCompaction_OrphanToolAdvance(t *testing.T) {
 
 	largeContent := strings.Repeat("word ", 300) // ~300 tokens
 	messages := []*schema.Message{
-		schema.UserMessage("first user message"),
+		schema.SystemMessage("system"),
+		schema.UserMessage("original task"),
 		{Role: schema.Assistant, Content: largeContent},
 		{Role: schema.Tool, Content: "tool result"},
-		schema.UserMessage("second user message"),
+		schema.UserMessage("follow-up"),
 	}
 
-	// keepTokens=10: userMsg2 + toolMsg fit, but assistantMsg(large) causes splitIdx=2 (toolMsg).
-	// Guard advances splitIdx to 3 (userMsg2).
+	// keepTokens=10: follow-up + tool fit, but assistant(large) pushes splitIdx to tool.
+	// Guard advances splitIdx past tool so toKeep starts with follow-up.
 	toSum, toKeep := selectForCompaction(messages, tok, 10)
 
 	if len(toKeep) == 0 {
@@ -197,7 +205,6 @@ func TestSelectForCompaction_OrphanToolAdvance(t *testing.T) {
 		t.Errorf("toKeep must not start with a Tool message (orphan tool guard failed)")
 	}
 
-	// Tool message should be in toSummarize.
 	foundTool := false
 	for _, m := range toSum {
 		if m.Role == schema.Tool {
@@ -214,19 +221,21 @@ func TestSelectForCompaction_OrphanToolAdvance(t *testing.T) {
 func TestSelectForCompaction_SplitIdxZeroGuard(t *testing.T) {
 	tok := NewTokenizer()
 
-	// Messages with no system prefix; all fit under huge keepTokens so splitIdx stays 0.
 	messages := []*schema.Message{
-		{Role: schema.Tool, Content: "some tool result"},
-		schema.UserMessage("user msg"),
+		schema.SystemMessage("system"),
+		schema.UserMessage("task"),
+		{Role: schema.Tool, Content: "tool result"},
+		schema.UserMessage("follow-up"),
 	}
 
+	// All fit under huge keepTokens → splitIdx=0, orphan guard must not fire.
 	toSum, toKeep := selectForCompaction(messages, tok, 100000)
 
 	if len(toSum) != 0 {
 		t.Errorf("expected empty toSummarize, got %d messages", len(toSum))
 	}
 	if len(toKeep) != 2 {
-		t.Errorf("expected both messages in toKeep, got %d", len(toKeep))
+		t.Errorf("expected 2 messages in toKeep (tool+follow-up), got %d", len(toKeep))
 	}
 }
 
@@ -313,5 +322,27 @@ func TestRunCompaction_AllSerializeToEmpty(t *testing.T) {
 	}
 	if got != prev {
 		t.Errorf("expected %q, got %q", prev, got)
+	}
+}
+
+// TestSelectForCompaction_FirstUserMessageAnchored verifies the first user message (original task)
+// never appears in toSummarize or toKeep — it is excluded from the compaction window entirely.
+func TestSelectForCompaction_FirstUserMessageAnchored(t *testing.T) {
+	tok := NewTokenizer()
+	largeContent := strings.Repeat("word ", 300) // ~300 tokens
+
+	messages := []*schema.Message{
+		schema.SystemMessage("system prompt"),
+		schema.UserMessage("original task description"),
+		{Role: schema.Assistant, Content: largeContent},
+		{Role: schema.Tool, Content: "tool result"},
+	}
+
+	toSum, toKeep := selectForCompaction(messages, tok, 10)
+
+	for _, m := range append(toSum, toKeep...) {
+		if m.Role == schema.User && m.Content == "original task description" {
+			t.Error("original user task must never appear in toSummarize or toKeep")
+		}
 	}
 }

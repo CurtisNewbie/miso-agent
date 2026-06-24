@@ -13,7 +13,7 @@ import (
 func TestBuiltinTools_ReadFile(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file
 	testPath := "test.txt"
@@ -50,7 +50,7 @@ func TestBuiltinTools_ReadFile(t *testing.T) {
 func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	tool, ok := registry.Get("read_file")
 	if !ok {
@@ -75,7 +75,7 @@ func TestBuiltinTools_ReadFile_NotFound(t *testing.T) {
 func TestBuiltinTools_WriteFile(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	testPath := "write_test.txt"
 	testContent := "Written content"
@@ -118,7 +118,7 @@ func TestBuiltinTools_WriteFile(t *testing.T) {
 func TestBuiltinTools_EditFile_Success(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file
 	testPath := "edit_test.txt"
@@ -168,7 +168,7 @@ func TestBuiltinTools_EditFile_Success(t *testing.T) {
 func TestBuiltinTools_EditFile_ReplaceAll(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file
 	testPath := "edit_all_test.txt"
@@ -219,7 +219,7 @@ func TestBuiltinTools_EditFile_ReplaceAll(t *testing.T) {
 func TestBuiltinTools_EditFile_NotFound(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file
 	testPath := "edit_notfound_test.txt"
@@ -264,7 +264,7 @@ func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
 		Store: be,
 	}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file with multiple occurrences
 	testPath := "edit_multi_test.txt"
@@ -297,7 +297,7 @@ func TestBuiltinTools_EditFile_MultipleOccurrencesNoReplaceAll(t *testing.T) {
 func TestBuiltinTools_EditFile_SameStrings(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file
 	testPath := "edit_same_test.txt"
@@ -336,7 +336,7 @@ func TestBuiltinTools_EditFile_SameStrings(t *testing.T) {
 func TestBuiltinTools_EditFile_FileNotFound(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	tool, ok := registry.Get("edit_file")
 	if !ok {
@@ -418,7 +418,7 @@ func TestNewThinkTool_EmptyReflection(t *testing.T) {
 func TestBuiltinTools_ListDirectory(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create test files and directories
 	be.WriteFile(ctx, "file1.txt", []byte("content1"))
@@ -452,7 +452,7 @@ func TestBuiltinTools_ListDirectory(t *testing.T) {
 func TestBuiltinTools_Glob_Simple(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create test files
 	be.WriteFile(ctx, "file1.go", []byte("content"))
@@ -487,7 +487,7 @@ func TestBuiltinTools_Glob_Simple(t *testing.T) {
 func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create test files in nested directories
 	be.WriteFile(ctx, "file1.go", []byte("content"))
@@ -526,7 +526,7 @@ func TestBuiltinTools_Glob_DoubleStar(t *testing.T) {
 func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create test files
 	be.WriteFile(ctx, "src/file1.ts", []byte("content"))
@@ -572,7 +572,7 @@ func TestBuiltinTools_Glob_DoubleStarInMiddle(t *testing.T) {
 func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create test files
 	be.WriteFile(ctx, "file1.go", []byte("content"))
@@ -609,7 +609,7 @@ func TestBuiltinTools_Glob_QuestionMark(t *testing.T) {
 func TestBuiltinTools_Glob_DoubleStarAtEnd(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create test files
 	be.WriteFile(ctx, "test/file1.go", []byte("content"))
@@ -647,7 +647,7 @@ func TestBuiltinTools_Glob_DoubleStarAtEnd(t *testing.T) {
 func TestBuiltinTools_AddTodo(t *testing.T) {
 	ctx := context.Background()
 	todoManager := NewTodoManager()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	tool, ok := registry.Get("add_todo")
 	if !ok {
@@ -691,7 +691,7 @@ func TestBuiltinTools_AddTodo(t *testing.T) {
 func TestBuiltinTools_AddTodoMultiple(t *testing.T) {
 	ctx := context.Background()
 	todoManager := NewTodoManager()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	tool, ok := registry.Get("add_todo")
 	if !ok {
@@ -750,7 +750,7 @@ func TestBuiltinTools_AddTodoMultiple(t *testing.T) {
 func TestBuiltinTools_UpdateTodo(t *testing.T) {
 	ctx := context.Background()
 	todoManager := NewTodoManager()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Add a todo first
 	id, _ := todoManager.AddTodo("Test task", "Test description")
@@ -793,7 +793,7 @@ func TestBuiltinTools_UpdateTodo(t *testing.T) {
 func TestBuiltinTools_ListTodos(t *testing.T) {
 	ctx := context.Background()
 	todoManager := NewTodoManager()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Add some todos
 	todoManager.AddTodo("Task 1", "Description 1")
@@ -823,7 +823,7 @@ func TestBuiltinTools_ListTodos(t *testing.T) {
 func TestBuiltinTools_DeleteTodo(t *testing.T) {
 	ctx := context.Background()
 	todoManager := NewTodoManager()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Add a todo first
 	id, _ := todoManager.AddTodo("Test task", "Test description")
@@ -865,7 +865,7 @@ func TestBuiltinTools_DeleteTodo(t *testing.T) {
 func TestBuiltinTools_DeleteTodoMultiple(t *testing.T) {
 	ctx := context.Background()
 	todoManager := NewTodoManager()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Add multiple todos
 	id1, _ := todoManager.AddTodo("Task 1", "Description 1")
@@ -924,7 +924,7 @@ func TestBuiltinTools_DeleteTodoMultiple(t *testing.T) {
 func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 	ctx := context.Background()
 	todoManager := NewTodoManager()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	tool, ok := registry.Get("delete_todo")
 	if !ok {
@@ -947,7 +947,7 @@ func TestBuiltinTools_DeleteTodo_NotFound(t *testing.T) {
 }
 
 func TestBuiltinTools_AllToolsRegistered(t *testing.T) {
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	expectedTools := []string{
 		"read_file",
@@ -1101,7 +1101,7 @@ func TestTypedTodoAwareToolFunc(t *testing.T) {
 func TestBuiltinTools_AddArtifact(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file
 	testPath := "/test/artifact.txt"
@@ -1162,7 +1162,7 @@ func TestBuiltinTools_AddArtifact(t *testing.T) {
 func TestBuiltinTools_AddArtifact_NoMetadata(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Create a test file
 	testPath := "/test/artifact2.txt"
@@ -1209,7 +1209,7 @@ func TestBuiltinTools_AddArtifact_NoMetadata(t *testing.T) {
 func TestBuiltinTools_AddArtifact_FileNotFound(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Test adding an artifact for a non-existent file
 	tool, ok := registry.Get("add_artifact")
@@ -1244,7 +1244,7 @@ func TestBuiltinTools_AddArtifact_FileNotFound(t *testing.T) {
 func TestBuiltinTools_AddArtifact_EmptyPath(t *testing.T) {
 	ctx := context.Background()
 	be := newTestMemFileStore()
-	registry := BuiltinTools(WithEnableFileTool(true))
+	registry := BuiltinTools(WithEnableFileTool(true), WithEnableTodoTool(true))
 
 	// Test adding an artifact with empty path
 	tool, ok := registry.Get("add_artifact")
@@ -1437,8 +1437,8 @@ func TestAgentRequest_PreloadBackendFiles(t *testing.T) {
 }
 
 func TestBuiltinTools_FileToolDisabled(t *testing.T) {
-	// When EnableFileTool is not set, file tools must not be registered.
-	registry := BuiltinTools()
+	// Todo tools can be enabled independently of file tools.
+	registry := BuiltinTools(WithEnableTodoTool(true))
 
 	fileTools := []string{
 		"read_file",
@@ -1454,11 +1454,11 @@ func TestBuiltinTools_FileToolDisabled(t *testing.T) {
 		}
 	}
 
-	// Todo tools must still be registered regardless.
+	// Todo tools must be registered when WithEnableTodoTool(true) is set.
 	todoTools := []string{"add_todo", "update_todo", "list_todos", "delete_todo"}
 	for _, name := range todoTools {
 		if _, ok := registry.Get(name); !ok {
-			t.Errorf("Expected todo tool %q to be registered even when EnableFileTool is false", name)
+			t.Errorf("Expected todo tool %q to be registered when EnableTodoTool is true", name)
 		}
 	}
 }

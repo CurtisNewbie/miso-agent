@@ -88,23 +88,24 @@ func serializeForCompaction(msg *schema.Message) string {
 	}
 }
 
-// selectForCompaction splits conversation messages (excluding system at index 0) into:
-//   - toSummarize: older messages to compact
-//   - toKeep: recent messages to keep verbatim (up to keepTokens)
+// selectForCompaction splits messages[2:] into toSummarize and toKeep.
+// messages[0] (system) and messages[1] (original user task) are always preserved
+// by the caller — they are not included in either return slice.
 func selectForCompaction(messages []*schema.Message, tokenizer Tokenizer, keepTokens int) (toSummarize, toKeep []*schema.Message) {
-	start := 0
-	if len(messages) > 0 && messages[0].Role == schema.System {
-		start = 1
+	// Need at least [system, user, one-more] for there to be anything to compact.
+	if len(messages) < 3 {
+		return nil, nil
 	}
-	conv := messages[start:]
-	if len(conv) == 0 {
-		return nil, conv
+	if messages[0].Role != schema.System || messages[1].Role != schema.User {
+		// Invariant violated — skip compaction rather than operating on unexpected structure.
+		return nil, nil
 	}
+	candidate := messages[2:]
 
 	recentTokens := 0
 	splitIdx := 0
-	for i := len(conv) - 1; i >= 0; i-- {
-		t := tokenizer.CountMessageTokens(conv[i])
+	for i := len(candidate) - 1; i >= 0; i-- {
+		t := tokenizer.CountMessageTokens(candidate[i])
 		if recentTokens+t > keepTokens {
 			splitIdx = i + 1
 			break
@@ -114,15 +115,14 @@ func selectForCompaction(messages []*schema.Message, tokenizer Tokenizer, keepTo
 
 	// Advance splitIdx past any leading Tool messages so toKeep never starts with
 	// an orphaned tool result (no matching assistant message in scope).
-	// Those tool messages join toSummarize, keeping the assistant↔tool pair intact.
 	// Guard: only advance when splitIdx > 0; at 0 the intent is "keep everything".
 	if splitIdx > 0 {
-		for splitIdx < len(conv) && conv[splitIdx].Role == schema.Tool {
+		for splitIdx < len(candidate) && candidate[splitIdx].Role == schema.Tool {
 			splitIdx++
 		}
 	}
 
-	return conv[:splitIdx], conv[splitIdx:]
+	return candidate[:splitIdx], candidate[splitIdx:]
 }
 
 // buildCompactionPrompt builds the LLM prompt for summarizing toSummarize messages.
