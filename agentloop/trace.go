@@ -135,7 +135,8 @@ func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, 
 		rail.Infof("[%v] %v/%v start (no messages)", graphName, ri.Component, ri.Name)
 		return
 	}
-	for i, msg := range ci.Messages {
+	parts := make([]string, 0, len(ci.Messages))
+	for _, msg := range ci.Messages {
 		content := msg.Content
 		if len(msg.ToolCalls) > 0 {
 			tcNames := make([]string, 0, len(msg.ToolCalls))
@@ -152,8 +153,9 @@ func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, 
 		if msg.Role == schema.Tool {
 			content = trimLogContent(content, 30)
 		}
-		rail.Infof("[%v] %v/%v input[%v] [%v]: %v", graphName, ri.Component, ri.Name, i, msg.Role, content)
+		parts = append(parts, fmt.Sprintf("  [%v]: %v", msg.Role, content))
 	}
+	rail.Infof("[%v] %v/%v inputs:\n%v", graphName, ri.Component, ri.Name, strings.Join(parts, "\n"))
 }
 
 // trimLogContent trims s to at most head+tail runes, inserting a middle summary.
