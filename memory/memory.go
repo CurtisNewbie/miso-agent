@@ -70,8 +70,9 @@ func (s *longTermTempMemory) Store(rail miso.Rail, key string, value string, ttl
 }
 
 type TempMemory struct {
-	key     string
-	lockPat string
+	key            string
+	lockPat        string
+	compactLockPat string
 
 	shortTerm *shortTermTempMemory
 	longTerm  *longTermTempMemory
@@ -157,21 +158,22 @@ func (m *TempMemory) Append(rail miso.Rail, c Conversation) error {
 }
 
 func (m *TempMemory) compactMemory(rail miso.Rail) error {
-	lk := redis.NewRLockf(rail, m.lockPat, m.key)
-	ok, err := lk.TryLock(redis.WithBackoff(time.Second * 3))
+	// Compaction lock: held for the full duration including the LLM call.
+	// Uses a separate key from the data lock so Append is never blocked.
+	lkc := redis.NewRLockf(rail, m.compactLockPat, m.key)
+	ok, err := lkc.TryLock(redis.WithBackoff(time.Second * 3))
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return nil
 	}
-	defer lk.Unlock()
+	defer lkc.Unlock()
 
 	shortTerm, err := m.shortTerm.Load(rail, m.key)
 	if err != nil {
 		return err
 	}
-
 	if len(shortTerm) < m.compactThreshold {
 		return nil
 	}
@@ -181,10 +183,9 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 	if err != nil {
 		return err
 	}
+	compactedFirst := shortTerm[0] // identity of the first entry we are about to compact
 
 	trimmed := shortTerm[:m.compactCount]
-	shortTerm = shortTerm[m.compactCount:]
-
 	slices.Reverse(trimmed)
 	trimBuilder := strutil.NewBuilder()
 	for _, t := range trimmed {
@@ -209,10 +210,34 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 		return nil
 	}
 
-	if err := m.longTerm.Store(rail, m.key, longTerm, m.longTermMemoryTTL); err != nil {
+	// Acquire lock to write. Re-load shortTerm to capture any appends that
+	// happened while the LLM was running; only discard the compacted prefix.
+	lkw := redis.NewRLockf(rail, m.lockPat, m.key)
+	if err := lkw.Lock(); err != nil {
+		return err
+	}
+	defer lkw.Unlock()
+
+	shortTerm, err = m.shortTerm.Load(rail, m.key)
+	if err != nil {
 		return err
 	}
 
+	// Another compaction ran while the LLM was working and already trimmed our
+	// entries — the front of shortTerm no longer matches what we summarized.
+	// Abort to avoid trimming entries that were never incorporated into longTerm.
+	if len(shortTerm) < m.compactCount ||
+		shortTerm[0].Time.Compare(compactedFirst.Time) != 0 ||
+		shortTerm[0].User != compactedFirst.User ||
+		shortTerm[0].Assistant != compactedFirst.Assistant {
+		rail.Infof("ShortTermMemory already compacted by another goroutine, skipping write")
+		return nil
+	}
+
+	shortTerm = shortTerm[m.compactCount:]
+	if err := m.longTerm.Store(rail, m.key, longTerm, m.longTermMemoryTTL); err != nil {
+		return err
+	}
 	return m.shortTerm.Store(rail, m.key, shortTerm, m.shortTermMemoryTTL)
 }
 
@@ -269,6 +294,7 @@ func NewTempMemory(key string, agent *agents.MemorySummarizer, ops ...memoryConf
 		agent:              agent,
 		key:                key,
 		lockPat:            "miso-agent:memory:memory-store:%v",
+		compactLockPat:     "miso-agent:memory:compacting:%v",
 		compactThreshold:   m.compactThreshold,
 		compactCount:       m.compactCount,
 		shortTerm:          newShortTermTempMemory(),
