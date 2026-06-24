@@ -41,7 +41,7 @@ type AgentConfig struct {
 	LogOnEnd *bool
 
 	// LogInputs controls whether the agent logs input messages to the model.
-	// If nil, defaults to false.
+	// If nil, defaults to true.
 	LogInputs *bool
 
 	// LogOutputs controls whether the agent logs model output content.

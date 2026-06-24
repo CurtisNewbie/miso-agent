@@ -84,7 +84,7 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		language:                    config.Language,
 		logOnStart:                  boolOrDefault(config.LogOnStart, true),
 		logOnEnd:                    boolOrDefault(config.LogOnEnd, true),
-		logInputs:                   boolOrDefault(config.LogInputs, false),
+		logInputs:                   boolOrDefault(config.LogInputs, true),
 		logOutputs:                  boolOrDefault(config.LogOutputs, true),
 		toolEventCallback:           config.ToolEventCallback,
 		compaction:                  boolOrDefault(config.Compaction, false),

@@ -3,6 +3,7 @@ package agentloop
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/cloudwego/eino/callbacks"
@@ -123,6 +124,7 @@ func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 
 // logChatModelInput logs each input message sent to the ChatModel.
 // Tool-call-only messages (empty content) are summarized as "<tool_calls: name1, name2>".
+// Tool result messages (role=tool) are trimmed to first/last 30 runes with total length.
 func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in callbacks.CallbackInput) {
 	ci := model.ConvCallbackInput(in)
 	if ci == nil {
@@ -147,8 +149,24 @@ func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, 
 				content = content + " " + toolSummary
 			}
 		}
+		if msg.Role == schema.Tool {
+			content = trimLogContent(content, 30)
+		}
 		rail.Infof("[%v] %v/%v input[%v] [%v]: %v", graphName, ri.Component, ri.Name, i, msg.Role, content)
 	}
+}
+
+// trimLogContent trims s to at most head+tail runes, inserting a middle summary.
+// Format: "<first head runes>...<last tail runes> (len=N)"
+func trimLogContent(s string, n int) string {
+	runes := []rune(s)
+	total := len(runes)
+	if total <= n*2 {
+		return s
+	}
+	head := string(runes[:n])
+	tail := string(runes[total-n:])
+	return head + "..." + tail + " (len=" + fmt.Sprintf("%d", total) + ")"
 }
 
 // logToolStart logs tool-specific details for known builtin tools.
