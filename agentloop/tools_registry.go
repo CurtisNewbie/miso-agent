@@ -57,10 +57,16 @@ type toolWrapper struct {
 }
 
 func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	var paramsOneOf *schema.ParamsOneOf
+	if dt, ok := w.tool.(deductedTool); ok {
+		paramsOneOf = dt.ParamsOneOf()
+	} else {
+		paramsOneOf = schema.NewParamsOneOfByParams(w.tool.Parameters())
+	}
 	return &schema.ToolInfo{
 		Name:        w.tool.Name(),
 		Desc:        w.tool.Description(),
-		ParamsOneOf: schema.NewParamsOneOfByParams(w.tool.Parameters()),
+		ParamsOneOf: paramsOneOf,
 	}, nil
 }
 

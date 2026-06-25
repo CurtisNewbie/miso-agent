@@ -2,6 +2,10 @@ package agentloop
 
 import (
 	"context"
+	"reflect"
+
+	"github.com/cloudwego/eino/components/tool/utils"
+	"github.com/eino-contrib/jsonschema"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/util/llm"
@@ -298,6 +302,120 @@ func NewTypedCtxAwareToolFunc[T any](
 		parameters:  parameters,
 		execute:     execute,
 	}
+}
+
+// deductedTool is implemented by tools whose parameter schema is auto-deduced from the
+// args struct type via JSON-schema reflection, rather than built manually with ParameterInfo helpers.
+// toolWrapper.Info checks for this interface and uses ParamsOneOf() directly instead of
+// wrapping Parameters() with schema.NewParamsOneOfByParams.
+type deductedTool interface {
+	ParamsOneOf() *schema.ParamsOneOf
+}
+
+// AutoTypedCtxAwareToolFunc is a tool that auto-deduces its parameter schema from T
+// via JSON-schema reflection (using Eino's GoStruct2ParamsOneOf). It also has AgentContext access.
+// Use NewAutoTypedCtxAwareToolFunc to construct it.
+type AutoTypedCtxAwareToolFunc[T any] struct {
+	name        string
+	description string
+	paramsOneOf *schema.ParamsOneOf
+	execute     func(ctx context.Context, agentCtx AgentContext, args T) (string, error)
+}
+
+// Name returns the name of the tool.
+func (t *AutoTypedCtxAwareToolFunc[T]) Name() string {
+	return t.name
+}
+
+// Description returns the description of the tool.
+func (t *AutoTypedCtxAwareToolFunc[T]) Description() string {
+	return t.description
+}
+
+// Parameters returns nil — schema is provided via ParamsOneOf instead.
+func (t *AutoTypedCtxAwareToolFunc[T]) Parameters() map[string]*schema.ParameterInfo {
+	return nil
+}
+
+// ParamsOneOf returns the reflected parameter schema, satisfying deductedTool.
+func (t *AutoTypedCtxAwareToolFunc[T]) ParamsOneOf() *schema.ParamsOneOf {
+	return t.paramsOneOf
+}
+
+// Execute is unused; AutoTypedCtxAwareToolFunc implements SelfInvokeTool.
+func (t *AutoTypedCtxAwareToolFunc[T]) Execute(ctx context.Context, args map[string]interface{}) (string, error) {
+	return "", nil
+}
+
+// ExecuteJson executes the tool with JSON arguments.
+func (t *AutoTypedCtxAwareToolFunc[T]) ExecuteJson(ctx context.Context, jsonArg string) (string, error) {
+	var args T
+	if jsonArg != "" {
+		parsedArgs, err := llm.ParseLLMJsonAs[T](jsonArg)
+		if err != nil {
+			return "", err
+		}
+		args = parsedArgs
+	}
+
+	var agentCtx AgentContext
+	if v := ctx.Value(agentCtxKey); v != nil {
+		if ac, ok := v.(AgentContext); ok {
+			agentCtx = ac
+		}
+	}
+
+	return t.execute(ctx, agentCtx, args)
+}
+
+// autoSchemaModifier applies custom struct tags to the JSON schema during reflection.
+// Supported custom tags:
+//   - desc:"..." — sets the field description (shorthand for jsonschema:"description=...")
+func autoSchemaModifier(_ string, _ reflect.Type, tag reflect.StructTag, s *jsonschema.Schema) {
+	if desc := tag.Get("desc"); desc != "" {
+		s.Description = desc
+	}
+}
+
+// NewAutoTypedCtxAwareToolFunc creates a tool whose parameter schema is auto-deduced from T
+// via JSON-schema reflection. No manual ParameterInfo map is required.
+//
+// Supported struct tags:
+//   - json:"name[,omitempty]" — field name; omitempty marks the field as optional
+//   - desc:"..." — field description (custom shorthand)
+//   - jsonschema:"required,enum=a,enum=b,minimum=0,..." — standard JSON schema keywords
+//
+// Example:
+//
+//	type ReadFileArgs struct {
+//	    Path   string `json:"path"             desc:"Absolute path to the file"`
+//	    Offset int    `json:"offset,omitempty" desc:"Line to start from"`
+//	    Limit  int    `json:"limit,omitempty"  desc:"Max lines to read"`
+//	}
+//
+//	tool, err := NewAutoTypedCtxAwareToolFunc(
+//	    "read_file",
+//	    "Read file content",
+//	    func(ctx context.Context, agentCtx AgentContext, args ReadFileArgs) (string, error) {
+//	        content, err := agentCtx.Store.ReadFile(ctx, args.Path)
+//	        return string(content), err
+//	    },
+//	)
+func NewAutoTypedCtxAwareToolFunc[T any](
+	name string,
+	description string,
+	execute func(ctx context.Context, agentCtx AgentContext, args T) (string, error),
+) (Tool, error) {
+	paramsOneOf, err := utils.GoStruct2ParamsOneOf[T](utils.WithSchemaModifier(autoSchemaModifier))
+	if err != nil {
+		return nil, err
+	}
+	return &AutoTypedCtxAwareToolFunc[T]{
+		name:        name,
+		description: description,
+		paramsOneOf: paramsOneOf,
+		execute:     execute,
+	}, nil
 }
 
 // Name returns the name of the tool.
