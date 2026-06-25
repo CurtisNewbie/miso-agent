@@ -166,24 +166,28 @@ func (m *TempMemory) Append(rail miso.Rail, c Conversation) error {
 	if err := m.shortTerm.Store(rail, m.key, shortTerm, m.shortTermMemoryTTL); err != nil {
 		return err
 	}
-	if m.shouldCompact(shortTerm) {
+	curr, ok := m.shouldCompact(shortTerm)
+	if ok {
 		async.Fire(rail.NewCtx().NextSpanId(), func() error { return m.compactMemory(rail) })
+	} else {
+		rail.Infof("Short-term memory total tokens: %v", curr)
 	}
 	return nil
 }
 
 // shouldCompact returns true when short-term memory exceeds the compaction threshold.
 // If a token threshold is configured it takes precedence; otherwise falls back to the round threshold.
-func (m *TempMemory) shouldCompact(shortTerm []Conversation) bool {
+func (m *TempMemory) shouldCompact(shortTerm []Conversation) (int, bool) {
 	// Require at least 3 conversations before compacting: selectCompactCount keeps
 	// the last 2, so we need at least 1 eligible for compaction.
 	if len(shortTerm) < 3 {
-		return false
+		return 0, false
 	}
+	tt := totalTokens(shortTerm)
 	if m.compactTokenThreshold > 0 {
-		return totalTokens(shortTerm) >= m.compactTokenThreshold
+		return tt, tt >= m.compactTokenThreshold
 	}
-	return len(shortTerm) >= m.compactThreshold
+	return tt, len(shortTerm) >= m.compactThreshold
 }
 
 // selectCompactCount returns how many conversations (from the oldest end) to compact.
@@ -213,7 +217,7 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 	if err != nil {
 		return err
 	}
-	if !m.shouldCompact(shortTerm) {
+	if _, ok := m.shouldCompact(shortTerm); !ok {
 		return nil
 	}
 	if m.compactTokenThreshold > 0 {
