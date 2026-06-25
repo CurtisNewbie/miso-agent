@@ -78,10 +78,10 @@ type TempMemory struct {
 	longTerm  *longTermTempMemory
 	agent     *agents.MemorySummarizer
 
-	compactThreshold   int
-	compactCount       int
-	longTermMemoryTTL  time.Duration
-	shortTermMemoryTTL time.Duration
+	compactThreshold      int
+	compactTokenThreshold int
+	longTermMemoryTTL     time.Duration
+	shortTermMemoryTTL    time.Duration
 }
 
 func (m *TempMemory) LoadLocked(rail miso.Rail) (_longTerm string, shortTerm []Conversation, _err error) {
@@ -135,6 +135,21 @@ func (m *TempMemory) LoadFormatted(rail miso.Rail, lock bool) (_longTerm string,
 	return longTerm, shortTermFmt.String(), nil
 }
 
+// countConversationTokens approximates the token count of a Conversation
+// using the same 4-chars-per-token heuristic as the agentloop Tokenizer.
+func countConversationTokens(c Conversation) int {
+	return (len(c.User) + len(c.Assistant)) / 4
+}
+
+// totalTokens returns the total approximate token count across all conversations.
+func totalTokens(convs []Conversation) int {
+	total := 0
+	for _, c := range convs {
+		total += countConversationTokens(c)
+	}
+	return total
+}
+
 func (m *TempMemory) Append(rail miso.Rail, c Conversation) error {
 	lk := redis.NewRLockf(rail, m.lockPat, m.key)
 	if err := lk.Lock(); err != nil {
@@ -151,10 +166,34 @@ func (m *TempMemory) Append(rail miso.Rail, c Conversation) error {
 	if err := m.shortTerm.Store(rail, m.key, shortTerm, m.shortTermMemoryTTL); err != nil {
 		return err
 	}
-	if len(shortTerm) >= m.compactThreshold {
+	if m.shouldCompact(shortTerm) {
 		async.Fire(rail.NewCtx().NextSpanId(), func() error { return m.compactMemory(rail) })
 	}
 	return nil
+}
+
+// shouldCompact returns true when short-term memory exceeds the compaction threshold.
+// If a token threshold is configured it takes precedence; otherwise falls back to the round threshold.
+func (m *TempMemory) shouldCompact(shortTerm []Conversation) bool {
+	// Require at least 3 conversations before compacting: selectCompactCount keeps
+	// the last 2, so we need at least 1 eligible for compaction.
+	if len(shortTerm) < 3 {
+		return false
+	}
+	if m.compactTokenThreshold > 0 {
+		return totalTokens(shortTerm) >= m.compactTokenThreshold
+	}
+	return len(shortTerm) >= m.compactThreshold
+}
+
+// selectCompactCount returns how many conversations (from the oldest end) to compact.
+// Always compacts all but the two most recent conversations.
+func (m *TempMemory) selectCompactCount(shortTerm []Conversation) int {
+	max := len(shortTerm) - 2
+	if max <= 0 {
+		return 0
+	}
+	return max
 }
 
 func (m *TempMemory) compactMemory(rail miso.Rail) error {
@@ -174,10 +213,16 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 	if err != nil {
 		return err
 	}
-	if len(shortTerm) < m.compactThreshold {
+	if !m.shouldCompact(shortTerm) {
 		return nil
 	}
-	rail.Infof("ShortTermMemory len execeeds threshold: %v, compacting memory", len(shortTerm))
+	if m.compactTokenThreshold > 0 {
+		rail.Infof("ShortTermMemory exceeds token threshold (%v), compacting memory: %v conversations, ~%v tokens",
+			m.compactTokenThreshold, len(shortTerm), totalTokens(shortTerm))
+	} else {
+		rail.Infof("ShortTermMemory exceeds round threshold (%v), compacting memory: %v conversations",
+			m.compactThreshold, len(shortTerm))
+	}
 
 	longTerm, err := m.longTerm.Load(rail, m.key)
 	if err != nil {
@@ -185,7 +230,11 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 	}
 	compactedFirst := shortTerm[0] // identity of the first entry we are about to compact
 
-	trimmed := shortTerm[:m.compactCount]
+	compactCount := m.selectCompactCount(shortTerm)
+	if compactCount <= 0 {
+		return nil
+	}
+	trimmed := shortTerm[:compactCount]
 	slices.Reverse(trimmed)
 	trimBuilder := strutil.NewBuilder()
 	for _, t := range trimmed {
@@ -226,7 +275,7 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 	// Another compaction ran while the LLM was working and already trimmed our
 	// entries — the front of shortTerm no longer matches what we summarized.
 	// Abort to avoid trimming entries that were never incorporated into longTerm.
-	if len(shortTerm) < m.compactCount ||
+	if len(shortTerm) < compactCount ||
 		shortTerm[0].Time.Compare(compactedFirst.Time) != 0 ||
 		shortTerm[0].User != compactedFirst.User ||
 		shortTerm[0].Assistant != compactedFirst.Assistant {
@@ -234,7 +283,7 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 		return nil
 	}
 
-	shortTerm = shortTerm[m.compactCount:]
+	shortTerm = shortTerm[compactCount:]
 	if err := m.longTerm.Store(rail, m.key, longTerm, m.longTermMemoryTTL); err != nil {
 		return err
 	}
@@ -242,22 +291,36 @@ func (m *TempMemory) compactMemory(rail miso.Rail) error {
 }
 
 type memoryConfig struct {
-	compactThreshold   int
-	compactCount       int
-	longTermMemoryTTL  time.Duration
-	shortTermMemoryTTL time.Duration
+	compactThreshold      int
+	compactTokenThreshold int
+	longTermMemoryTTL     time.Duration
+	shortTermMemoryTTL    time.Duration
 }
 
-// Trigger memory compaction when the number of conversations is greater than or equal to n.
-//
-// Remove the earliest n / 2 conversations (CompactCount), summarize them, and merge them to long term memory.
+// WithCompactThreshold triggers memory compaction when the number of conversations
+// is greater than or equal to n. On compaction all but the two most recent
+// conversations are summarised and merged into long-term memory.
 func WithCompactThreshold(n int) memoryConfigFunc {
 	return func(mc *memoryConfig) {
 		if n < 2 {
 			n = 2
 		}
 		mc.compactThreshold = n
-		mc.compactCount = n / 2
+	}
+}
+
+// WithCompactTokenThreshold triggers memory compaction when the total approximate
+// token count of short-term memory reaches or exceeds n tokens. When triggered,
+// the oldest conversations totaling approximately n/2 tokens are summarized and
+// merged into long-term memory.
+//
+// This option takes precedence over [WithCompactThreshold] when both are set.
+func WithCompactTokenThreshold(n int) memoryConfigFunc {
+	return func(mc *memoryConfig) {
+		if n < 1 {
+			return
+		}
+		mc.compactTokenThreshold = n
 	}
 }
 
@@ -277,29 +340,35 @@ func WithShortTermMemoryTTL(v time.Duration) memoryConfigFunc {
 
 type memoryConfigFunc func(*memoryConfig)
 
-// Create TempMemory.
+// NewTempMemory creates a TempMemory backed by Redis.
 //
-// By default, CompactThreshold is set to 4, CompactCount is set to 2, and both the long term memory and short term memory are set to 30 days.
+// Default compaction policy: token-based at 4000 tokens (~4–6 typical customer-support
+// exchanges). This threshold keeps recent detail without bloating the model's context
+// window. On compaction the oldest conversations totalling ~2000 tokens are summarised
+// and merged into long-term memory, leaving ~2000 tokens of recent context intact.
+//
+// Override with [WithCompactTokenThreshold] (recommended) or [WithCompactThreshold]
+// (round-based, legacy). Both the short-term and long-term stores default to a 30-day TTL.
 func NewTempMemory(key string, agent *agents.MemorySummarizer, ops ...memoryConfigFunc) *TempMemory {
 	m := &memoryConfig{
-		compactThreshold:   4,
-		compactCount:       2,
-		longTermMemoryTTL:  time.Hour * 24 * 30,
-		shortTermMemoryTTL: time.Hour * 24 * 30,
+		compactTokenThreshold: 4000,
+		compactThreshold:      6,
+		longTermMemoryTTL:     time.Hour * 24 * 30,
+		shortTermMemoryTTL:    time.Hour * 24 * 30,
 	}
 	for _, op := range ops {
 		op(m)
 	}
 	return &TempMemory{
-		agent:              agent,
-		key:                key,
-		lockPat:            "miso-agent:memory:memory-store:%v",
-		compactLockPat:     "miso-agent:memory:compacting:%v",
-		compactThreshold:   m.compactThreshold,
-		compactCount:       m.compactCount,
-		shortTerm:          newShortTermTempMemory(),
-		longTerm:           newLongTermTempMemory(),
-		longTermMemoryTTL:  m.longTermMemoryTTL,
-		shortTermMemoryTTL: m.shortTermMemoryTTL,
+		agent:                 agent,
+		key:                   key,
+		lockPat:               "miso-agent:memory:memory-store:%v",
+		compactLockPat:        "miso-agent:memory:compacting:%v",
+		compactThreshold:      m.compactThreshold,
+		compactTokenThreshold: m.compactTokenThreshold,
+		shortTerm:             newShortTermTempMemory(),
+		longTerm:              newLongTermTempMemory(),
+		longTermMemoryTTL:     m.longTermMemoryTTL,
+		shortTermMemoryTTL:    m.shortTermMemoryTTL,
 	}
 }
