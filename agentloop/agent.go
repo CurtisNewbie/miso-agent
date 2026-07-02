@@ -13,16 +13,21 @@ import (
 // It is built from AgentConfig flat fields in NewAgent and used internally
 // for graph compilation and trace callbacks.
 type agentOps struct {
-	maxRunSteps                 int
-	language                    string
-	logOnStart                  bool
-	logOnEnd                    bool
-	logInputs                   bool
-	logOutputs                  bool
-	toolEventCallback           func(event ToolEvent)
-	compaction                  bool
-	compactPreserveRecentTokens int
-	compactBuffer               int // derived from compactionThreshold * MaxTokens
+	maxRunSteps                  int
+	language                     string
+	logOnStart                   bool
+	logOnEnd                     bool
+	logInputs                    bool
+	logOutputs                   bool
+	toolEventCallback            func(event ToolEvent)
+	compaction                   bool
+	compactPreserveRecentTokens  int
+	compactBuffer                int // derived from compactionThreshold * MaxTokens
+	toolOffloadTokenLimit        int // 0 = disabled
+	toolOffloadResultsPathPrefix string
+	enableFileTool               bool
+	enableTodoTool               bool
+	enableToolOffload            bool
 }
 
 type ctxKey int
@@ -112,6 +117,27 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		}
 	}
 
+	// Tool result offloading
+	const defaultToolTokenLimit = 20000
+	if config.ToolOffloadTokenLimit == nil {
+		ops.toolOffloadTokenLimit = defaultToolTokenLimit
+	} else {
+		ops.toolOffloadTokenLimit = *config.ToolOffloadTokenLimit
+	}
+	ops.toolOffloadResultsPathPrefix = config.ToolOffloadResultsPathPrefix
+	ops.enableFileTool = boolOrDefault(config.EnableFileTool, true)
+	ops.enableTodoTool = boolOrDefault(config.EnableTodoTool, false)
+
+	// Disable offloading when file tools are unavailable (read_file would be inaccessible).
+	ops.enableToolOffload = boolOrDefault(config.EnableToolOffload, true)
+	if ops.toolOffloadTokenLimit < 1 {
+		ops.enableToolOffload = false
+	}
+	if ops.enableToolOffload && !ops.enableFileTool {
+		rail.Warnf("tool result offloading disabled: EnableFileTool is false")
+		ops.enableToolOffload = false
+	}
+
 	// Warn if compaction is enabled but MaxTokens is not set; the compaction path
 	// is guarded by MaxTokens > 0, so it would be silently skipped.
 	if ops.compaction && config.MaxTokens <= 0 {
@@ -138,8 +164,8 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 
 	// Add built-in tools (will receive backend and todoManager via context)
 	builtinTools := BuiltinTools(
-		WithEnableFileTool(config.EnableFileTool),
-		WithEnableTodoTool(config.EnableTodoTool),
+		WithEnableFileTool(ops.enableFileTool),
+		WithEnableTodoTool(ops.enableTodoTool),
 	)
 	toolRegistry.Merge(builtinTools)
 

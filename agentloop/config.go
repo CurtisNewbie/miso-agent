@@ -97,13 +97,13 @@ type AgentConfig struct {
 
 	// EnableFileTool enables the built-in file tools: read_file, write_file, edit_file,
 	// list_directory, glob, and add_artifact. When false, these tools are not registered.
-	// Default: false
-	EnableFileTool bool
+	// If nil, defaults to true.
+	EnableFileTool *bool
 
 	// EnableTodoTool enables the built-in todo tools: add_todo, update_todo, list_todos,
 	// delete_todo. When false, these tools are not registered.
-	// Default: false
-	EnableTodoTool bool
+	// If nil, defaults to false.
+	EnableTodoTool *bool
 
 	// ToolEventCallback is called synchronously for each tool invocation during execution.
 	// Receives a ToolEvent with the tool name and raw JSON args before the tool runs.
@@ -122,6 +122,27 @@ type AgentConfig struct {
 	// When MaxTokens is known, defaults to max(2000, min(8000, MaxTokens * 0.25)) — i.e., 25% of the
 	// context window, clamped between 2k and 8k tokens. Set explicitly to override.
 	CompactPreserveRecentTokens int
+
+	// ToolOffloadTokenLimit is the token threshold above which a tool result is
+	// offloaded to the backend store and replaced with a short preview + file pointer.
+	// The agent can recover the full content by calling the read_file tool on the
+	// saved path. nil uses the default threshold of 20,000 tokens. Set to a non-nil
+	// pointer to 0 to disable offloading entirely.
+	//
+	// The following tools are never offloaded regardless of size: read_file,
+	// write_file, edit_file, list_directory, glob, grep, delete.
+	ToolOffloadTokenLimit *int
+
+	// ToolOffloadResultsPathPrefix is the FileStore path prefix for offloaded tool
+	// results. Each offloaded result is written to:
+	//   {ToolOffloadResultsPathPrefix}/{sanitized_tool_call_id}
+	// Defaults to "/large_tool_results" when empty.
+	ToolOffloadResultsPathPrefix string
+
+	// EnableToolOffload controls whether large tool results are offloaded to the
+	// backend store and replaced with a preview + file pointer.
+	// If nil, defaults to true. Set to a non-nil pointer to false to disable.
+	EnableToolOffload *bool
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.

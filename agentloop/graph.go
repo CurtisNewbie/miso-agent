@@ -123,6 +123,9 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 	modelPreHandle := func(ctx context.Context, input []*schema.Message, state *agentLoopState) ([]*schema.Message, error) {
 		state.cycleCount++
+		if agent.ops.enableToolOffload {
+			input = offloadToolResults(ctx, input, state.messages, state.taskInput.store, agent.tokenizer, agent.ops.toolOffloadTokenLimit, agent.ops.toolOffloadResultsPathPrefix)
+		}
 		state.messages = append(state.messages, input...)
 
 		// Compact if MaxTokens is set and exceeded threshold
