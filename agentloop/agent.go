@@ -287,15 +287,14 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		Metadata:  metadataStore,
 	})
 
-	// Execute graph with agent-specific trace callback
-	var invokeOpts []compose.Option
-	if a.ops.logOnStart || a.ops.logOnEnd {
-		invokeOpts = append(invokeOpts, withAgentTraceCallback(a.config.Name, a.ops))
-	}
+	// Execute graph with agent-specific trace callback (always registered to collect token usage)
+	acc := &tokenAccumulator{}
+	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc)}
 	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
 	if err != nil {
 		return TaskOutput{}, errs.Wrapf(err, "failed to execute graph")
 	}
+	result.TokenUsage = acc.snapshot()
 
 	// Call ArtifactCallback if provided
 	if req.ArtifactCallback != nil && len(result.Artifacts) > 0 {

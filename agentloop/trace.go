@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components/model"
@@ -24,6 +25,30 @@ const (
 	ToolEventKindResult ToolEventKind = "result"
 )
 
+// tokenAccumulator collects cumulative token usage across all LLM calls in one execution.
+type tokenAccumulator struct {
+	mu               sync.Mutex
+	promptTokens     int
+	completionTokens int
+}
+
+func (a *tokenAccumulator) add(prompt, completion int) {
+	a.mu.Lock()
+	a.promptTokens += prompt
+	a.completionTokens += completion
+	a.mu.Unlock()
+}
+
+func (a *tokenAccumulator) snapshot() TokenUsage {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return TokenUsage{
+		PromptTokens:     a.promptTokens,
+		CompletionTokens: a.completionTokens,
+		TotalTokens:      a.promptTokens + a.completionTokens,
+	}
+}
+
 // ToolEvent is emitted during agent execution for each tool invocation.
 // If ToolEventCallback is set in AgentConfig, it is called synchronously for each event.
 type ToolEvent struct {
@@ -36,11 +61,11 @@ type ToolEvent struct {
 // It extends the generic graph.WithTraceCallback with tool-specific logging:
 // file paths for read/write/edit/list_directory/add_artifact, glob patterns,
 // and todo item details for add_todo/update_todo/delete_todo.
-func withAgentTraceCallback(name string, ops agentOps) compose.Option {
-	return compose.WithCallbacks(buildTraceHandler(name, ops))
+func withAgentTraceCallback(name string, ops agentOps, acc *tokenAccumulator) compose.Option {
+	return compose.WithCallbacks(buildTraceHandler(name, ops, acc))
 }
 
-func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
+func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbacks.Handler {
 	b := callbacks.NewHandlerBuilder()
 	if ops.logOnStart || ops.toolEventCallback != nil {
 		b = b.OnStartFn(func(ctx context.Context, ri *callbacks.RunInfo, in callbacks.CallbackInput) context.Context {
@@ -82,7 +107,7 @@ func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 			return ctx
 		})
 	}
-	if ops.toolEventCallback != nil || ops.logOnEnd {
+	if ops.toolEventCallback != nil || ops.logOnEnd || acc != nil {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
 			if ops.toolEventCallback != nil && ri.Component == "Tool" {
 				args, _ := ctx.Value(toolArgsCtxKey).(string)
@@ -92,26 +117,30 @@ func buildTraceHandler(name string, ops agentOps) callbacks.Handler {
 					Args: args,
 				})
 			}
-			if ops.logOnEnd {
-				rail := flow.NewRail(ctx)
-				if ri.Component == "ChatModel" && ri.Name == "" {
+			if ri.Component == "ChatModel" {
+				if ri.Name == "" {
 					// skip inner component-level callback; node-level fires separately
 					return ctx
 				}
 				inToken, outToken, ok := agentTokenUsage(output)
 				if ok {
-					rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
+					if acc != nil {
+						acc.add(inToken, outToken)
+					}
+					if ops.logOnEnd {
+						rail := flow.NewRail(ctx)
+						rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
+					}
 				}
-				if ops.logOutputs {
-					if ri.Component == "ChatModel" {
-						msg := agentExtractMessage(output)
-						if msg != nil {
-							if msg.Content != "" {
-								rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, msg.Content)
-							}
-							if msg.ReasoningContent != "" {
-								rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, msg.ReasoningContent)
-							}
+				if ops.logOnEnd && ops.logOutputs {
+					msg := agentExtractMessage(output)
+					if msg != nil {
+						rail := flow.NewRail(ctx)
+						if msg.Content != "" {
+							rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, msg.Content)
+						}
+						if msg.ReasoningContent != "" {
+							rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, msg.ReasoningContent)
 						}
 					}
 				}

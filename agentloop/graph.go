@@ -35,6 +35,13 @@ func resolveBranchTarget(shouldContinue bool) string {
 	return "final_output"
 }
 
+// TokenUsage tracks total token consumption across all LLM calls in a single agent execution.
+type TokenUsage struct {
+	PromptTokens     int // Total input tokens consumed across all LLM calls
+	CompletionTokens int // Total output tokens generated across all LLM calls
+	TotalTokens      int // PromptTokens + CompletionTokens
+}
+
 // Artifact represents a discovered or created artifact during agent execution
 type Artifact struct {
 	Path        string            // Backend file path
@@ -44,9 +51,10 @@ type Artifact struct {
 
 // TaskOutput represents the output from an agent execution
 type TaskOutput struct {
-	Response  string         // Main response (research report)
-	Artifacts []Artifact     // Artifacts collected during execution
-	Metadata  map[string]any // Snapshot of MetadataStore at end of execution
+	Response   string         // Main response (research report)
+	Artifacts  []Artifact     // Artifacts collected during execution
+	Metadata   map[string]any // Snapshot of MetadataStore at end of execution
+	TokenUsage TokenUsage     // Aggregate token usage across all LLM calls
 }
 
 // taskOutput is the internal output type used by the graph
