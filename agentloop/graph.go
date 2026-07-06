@@ -93,7 +93,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			}
 		}
 		promptBuilder := NewPromptBuilder().
-			WithCustomPrompt(agent.config.SystemPrompt).
+			WithTaskPrompt(agent.config.SystemPrompt).
 			WithMiddlewareFragments(fragments).
 			WithSkills(input.skills).
 			WithLanguage(agent.ops.language).

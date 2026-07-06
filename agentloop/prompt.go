@@ -49,7 +49,6 @@ If you intend to call multiple tools and there are no dependencies between the t
 // PromptBuilder builds the system prompt for the agent.
 type PromptBuilder struct {
 	basePrompt          string
-	customPrompt        string
 	middlewareFragments []string
 	taskPrompt          string
 	skills              *Skills
@@ -64,12 +63,6 @@ func NewPromptBuilder() *PromptBuilder {
 		basePrompt: BasePrompt,
 		language:   "English",
 	}
-}
-
-// WithCustomPrompt sets a custom prompt that will be prepended to the base prompt.
-func (pb *PromptBuilder) WithCustomPrompt(prompt string) *PromptBuilder {
-	pb.customPrompt = prompt
-	return pb
 }
 
 // WithMiddlewareFragments appends middleware system prompt fragments.
@@ -113,12 +106,6 @@ func (pb *PromptBuilder) WithFileOps(enabled bool) *PromptBuilder {
 // Build builds the system prompt.
 func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 	sb := strutil.NewBuilder()
-
-	// Add custom prompt if provided
-	if pb.customPrompt != "" {
-		sb.WriteString(pb.customPrompt)
-		sb.WriteString("\n\n")
-	}
 
 	// Add middleware system prompt fragments
 	for _, f := range pb.middlewareFragments {
