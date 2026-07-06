@@ -77,6 +77,7 @@ func NewTavilyExtractTool(apiKey string, opts ...TavilyExtractOption) agentloop.
 				return "", errs.NewErrf("urls required")
 			}
 			rail := flow.NewRail(ctx)
+			rail.Infof("tavily_extract args: %+v", args)
 			req := TavilyExtractReq{
 				URLs:  args.URLs,
 				Query: args.Query,
