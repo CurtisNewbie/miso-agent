@@ -77,7 +77,7 @@ func NewCsvFormatAgent(chatModel model.ToolCallingChatModel, opts ...CsvFormatOp
 		Model:          chatModel,
 		EnableFileTool: ptr.BoolPtr(true),
 		EnableTodoTool: ptr.BoolPtr(true),
-		TaskPrompt:     taskPrompt,
+		SystemPrompt:   taskPrompt,
 		Compaction:     ptr.BoolPtr(true),
 		Tools:          []agentloop.Tool{agentloop.NewTransformCsvLuaTool()},
 	})

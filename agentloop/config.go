@@ -69,9 +69,6 @@ type AgentConfig struct {
 	//   - [NewTypedCtxAwareToolFunc] - for tools with typed arguments and AgentContext
 	Tools []Tool
 
-	// TaskPrompt is the main task prompt for the agent.
-	TaskPrompt string
-
 	// SystemPrompt is an optional custom system prompt.
 	// If provided, it will be prepended to the base system prompt.
 	SystemPrompt string
