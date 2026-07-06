@@ -45,11 +45,12 @@ var (
 //   - Skills system with progressive disclosure
 //   - Token-aware message pruning
 type Agent struct {
-	config    AgentConfig
-	ops       agentOps
-	tools     *ToolRegistry
-	tokenizer Tokenizer
-	graph     compose.Runnable[taskInput, taskOutput]
+	config     AgentConfig
+	ops        agentOps
+	tools      *ToolRegistry
+	tokenizer  Tokenizer
+	graph      compose.Runnable[taskInput, taskOutput]
+	middleware []Middleware
 }
 
 // boolOrDefault returns *p if p is non-nil, otherwise returns def.
@@ -174,6 +175,16 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 		toolRegistry.Register(t)
 	}
 
+	// Register tools from middleware. Panic on name collision.
+	for _, m := range config.Middleware {
+		for _, t := range m.Tools() {
+			if _, exists := toolRegistry.Get(t.Name()); exists {
+				return nil, errs.NewErrf("middleware %q: tool name collision %q", m.Name(), t.Name())
+			}
+			toolRegistry.Register(t)
+		}
+	}
+
 	names := make([]string, 0, len(toolRegistry.List()))
 	for _, t := range toolRegistry.List() {
 		names = append(names, t.Name())
@@ -181,10 +192,11 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	rail.Infof("NewAgent %q tools: %v", config.Name, names)
 
 	agent := &Agent{
-		config:    config,
-		ops:       ops,
-		tools:     toolRegistry,
-		tokenizer: tokenizer,
+		config:     config,
+		ops:        ops,
+		tools:      toolRegistry,
+		tokenizer:  tokenizer,
+		middleware: config.Middleware,
 	}
 
 	// Build the Eino graph (compiled once)
@@ -197,6 +209,8 @@ func NewAgent(config AgentConfig) (*Agent, error) {
 	return agent, nil
 }
 
+// AgentContext holds per-execution stateful components.
+// Accessible from tool and middleware callbacks via the context.
 type AgentContext struct {
 	Store     FileStore
 	Todos     *TodoManager
@@ -279,22 +293,41 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	// Initialize metadata store (fresh on each execution)
 	metadataStore := NewMetadataStore()
 
-	// Propagate stateful components via context
-	rail = rail.WithCtxVal(agentCtxKey, AgentContext{
+	agentCtxVal := AgentContext{
 		Store:     backend,
 		Todos:     todoManager,
 		Artifacts: artifactManager,
 		Metadata:  metadataStore,
-	})
+	}
+	rail = rail.WithCtxVal(agentCtxKey, agentCtxVal)
+
+	// Call BeforeAgent on each middleware. Any error aborts execution.
+	for _, m := range a.middleware {
+		if err := m.BeforeAgent(agentCtxVal, &req); err != nil {
+			return TaskOutput{}, errs.Wrapf(err, "middleware %q BeforeAgent failed", m.Name())
+		}
+	}
 
 	// Execute graph with agent-specific trace callback (always registered to collect token usage)
 	acc := &tokenAccumulator{}
 	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc)}
 	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
 	if err != nil {
+		for _, m := range a.middleware {
+			if afterErr := m.AfterAgent(agentCtxVal, nil, err); afterErr != nil {
+				rail.Errorf("middleware %q AfterAgent error: %v", m.Name(), afterErr)
+			}
+		}
 		return TaskOutput{}, errs.Wrapf(err, "failed to execute graph")
 	}
 	result.TokenUsage = acc.snapshot()
+
+	// Call AfterAgent on each middleware.
+	for _, m := range a.middleware {
+		if afterErr := m.AfterAgent(agentCtxVal, &result, nil); afterErr != nil {
+			rail.Errorf("middleware %q AfterAgent error: %v", m.Name(), afterErr)
+		}
+	}
 
 	// Call ArtifactCallback if provided
 	if req.ArtifactCallback != nil && len(result.Artifacts) > 0 {

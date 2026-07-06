@@ -86,8 +86,15 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 	// Prepare messages node - runs once at start
 	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, input taskInput) ([]*schema.Message, error) {
+		fragments := make([]string, 0, len(agent.middleware))
+		for _, m := range agent.middleware {
+			if f := m.SystemPromptFragment(ctx); f != "" {
+				fragments = append(fragments, f)
+			}
+		}
 		promptBuilder := NewPromptBuilder().
 			WithCustomPrompt(agent.config.SystemPrompt).
+			WithMiddlewareFragments(fragments).
 			WithTaskPrompt(agent.config.TaskPrompt).
 			WithSkills(input.skills).
 			WithLanguage(agent.ops.language).
@@ -108,7 +115,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	}), compose.WithNodeName("Prepare Messages"))
 
 	// Chat model node - uses StatePreHandler to manage message accumulation
-	toolInfos := agent.tools.ToEinoTools()
+	toolInfos := agent.tools.ToEinoToolsWithChain(agent.middleware)
 	toolInfoList := make([]*schema.ToolInfo, len(toolInfos))
 	for i, tool := range toolInfos {
 		info, err := tool.Info(context.Background())
@@ -127,6 +134,22 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}
 	} else {
 		chatModel = agent.config.Model
+	}
+
+	// Wrap chatModel with middleware WrapModelCall chain, if any middleware registered.
+	// This preserves AddChatModelNode semantics (callbacks, token tracking) while allowing
+	// middleware to intercept model inputs and outputs.
+	if len(agent.middleware) > 0 {
+		inner := chatModel
+		terminal := func(ctx context.Context, req *ModelCallRequest) (*ModelCallResponse, error) {
+			msg, err := inner.Generate(ctx, req.Messages)
+			if err != nil {
+				return nil, err
+			}
+			return &ModelCallResponse{Message: msg}, nil
+		}
+		chain := buildModelCallChain(agent.middleware, terminal)
+		chatModel = &middlewareModel{ToolCallingChatModel: inner, chain: chain}
 	}
 
 	modelPreHandle := func(ctx context.Context, input []*schema.Message, state *agentLoopState) ([]*schema.Message, error) {
@@ -291,4 +314,26 @@ func buildUnknownToolHandler(tools []tool.BaseTool) func(ctx context.Context, na
 	return func(ctx context.Context, name, input string) (string, error) {
 		return fmt.Sprintf("tool %q does not exist. Available tools: %s", name, available), nil
 	}
+}
+
+// middlewareModel wraps a model.ToolCallingChatModel to intercept Generate calls
+// through the WrapModelCall middleware chain. All other interface methods delegate
+// to the embedded inner model.
+type middlewareModel struct {
+	model.ToolCallingChatModel
+	chain ModelCallHandler
+}
+
+// Generate runs the WrapModelCall middleware chain and returns the assistant reply.
+func (m *middlewareModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	var task string
+	_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+		task = state.taskInput.task
+		return nil
+	})
+	resp, err := m.chain(ctx, &ModelCallRequest{Messages: input, Task: task})
+	if err != nil {
+		return nil, err
+	}
+	return resp.Message, nil
 }

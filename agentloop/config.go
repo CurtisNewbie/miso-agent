@@ -143,6 +143,12 @@ type AgentConfig struct {
 	// backend store and replaced with a preview + file pointer.
 	// If nil, defaults to true. Set to a non-nil pointer to false to disable.
 	EnableToolOffload *bool
+
+	// Middleware is an ordered list of middleware to apply to the agent loop.
+	// Middlewares are called in registration order for BeforeAgent, AfterAgent,
+	// SystemPromptFragment, and Tools; and composed into chains for WrapModelCall
+	// and WrapToolCall. Middleware cannot be registered after NewAgent() returns.
+	Middleware []Middleware
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.

@@ -53,7 +53,8 @@ func (r *ToolRegistry) Merge(other *ToolRegistry) {
 
 // toolWrapper wraps a Tool to implement tool.BaseTool.
 type toolWrapper struct {
-	tool Tool
+	tool          Tool
+	toolCallChain ToolCallHandler // nil when no middleware registered
 }
 
 func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
@@ -71,8 +72,25 @@ func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 }
 
 func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...tool.Option) (string, error) {
-	// Convert tool errors to a tool result message so the LLM can see what went wrong
-	// and retry with corrected arguments, rather than crashing the graph.
+	if w.toolCallChain != nil {
+		var args map[string]interface{}
+		if input != "" {
+			parsedArgs, err := llm.ParseLLMJsonAs[map[string]interface{}](input)
+			if err == nil {
+				args = parsedArgs
+			}
+		}
+		if args == nil {
+			args = map[string]interface{}{}
+		}
+		resp, err := w.toolCallChain(ctx, &ToolCallRequest{Name: w.tool.Name(), Args: args, RawInput: input})
+		if err != nil {
+			return fmt.Sprintf("Error: %v", err), nil
+		}
+		return resp.Result, nil
+	}
+
+	// No middleware: use direct execution path.
 	if selfInvokeTool, ok := w.tool.(SelfInvokeTool); ok {
 		result, err := selfInvokeTool.ExecuteJson(ctx, input)
 		if err != nil {
@@ -91,7 +109,6 @@ func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...to
 	if args == nil {
 		args = map[string]interface{}{}
 	}
-
 	result, err := w.tool.Execute(ctx, args)
 	if err != nil {
 		return fmt.Sprintf("Error: %v", err), nil
@@ -105,6 +122,35 @@ func (r *ToolRegistry) ToEinoTools() []tool.BaseTool {
 	for _, t := range r.tools {
 		wrapper := &toolWrapper{tool: t}
 		result = append(result, wrapper)
+	}
+	return result
+}
+
+// ToEinoToolsWithChain converts the registry to Eino tool instances with a per-tool
+// WrapToolCall middleware chain. When middlewares is empty, equivalent to ToEinoTools.
+func (r *ToolRegistry) ToEinoToolsWithChain(middlewares []Middleware) []tool.BaseTool {
+	if len(middlewares) == 0 {
+		return r.ToEinoTools()
+	}
+	result := make([]tool.BaseTool, 0, len(r.tools))
+	for _, t := range r.tools {
+		tLocal := t
+		terminal := func(ctx context.Context, req *ToolCallRequest) (*ToolCallResponse, error) {
+			if st, ok := tLocal.(SelfInvokeTool); ok {
+				result, err := st.ExecuteJson(ctx, req.RawInput)
+				if err != nil {
+					return &ToolCallResponse{Result: fmt.Sprintf("Error: %v", err), IsError: true}, nil
+				}
+				return &ToolCallResponse{Result: result}, nil
+			}
+			res, err := tLocal.Execute(ctx, req.Args)
+			if err != nil {
+				return &ToolCallResponse{Result: fmt.Sprintf("Error: %v", err), IsError: true}, nil
+			}
+			return &ToolCallResponse{Result: res}, nil
+		}
+		chain := buildToolCallChain(middlewares, terminal)
+		result = append(result, &toolWrapper{tool: t, toolCallChain: chain})
 	}
 	return result
 }

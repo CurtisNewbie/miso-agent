@@ -48,12 +48,13 @@ Keep working until the task is fully complete. Don't stop partway and explain wh
 
 // PromptBuilder builds the system prompt for the agent.
 type PromptBuilder struct {
-	basePrompt   string
-	customPrompt string
-	taskPrompt   string
-	skills       *Skills
-	language     string
-	currentTime  string
+	basePrompt          string
+	customPrompt        string
+	middlewareFragments []string
+	taskPrompt          string
+	skills              *Skills
+	language            string
+	currentTime         string
 }
 
 // NewPromptBuilder creates a new prompt builder.
@@ -67,6 +68,13 @@ func NewPromptBuilder() *PromptBuilder {
 // WithCustomPrompt sets a custom prompt that will be prepended to the base prompt.
 func (pb *PromptBuilder) WithCustomPrompt(prompt string) *PromptBuilder {
 	pb.customPrompt = prompt
+	return pb
+}
+
+// WithMiddlewareFragments appends middleware system prompt fragments.
+// Fragments are injected after the custom prompt and before the base ReAct prompt.
+func (pb *PromptBuilder) WithMiddlewareFragments(fragments []string) *PromptBuilder {
+	pb.middlewareFragments = fragments
 	return pb
 }
 
@@ -102,6 +110,14 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 	if pb.customPrompt != "" {
 		sb.WriteString(pb.customPrompt)
 		sb.WriteString("\n\n")
+	}
+
+	// Add middleware system prompt fragments
+	for _, f := range pb.middlewareFragments {
+		if f != "" {
+			sb.WriteString(f)
+			sb.WriteString("\n\n")
+		}
 	}
 
 	// Add task prompt if provided
