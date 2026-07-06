@@ -10,40 +10,40 @@ import (
 )
 
 // BasePrompt is the base system prompt for the agent.
-const BasePrompt = `You are a ReAct agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls.
+const BasePrompt = `<role>
+You are a ReAct agent, an AI assistant that helps users accomplish tasks using tools. You respond with text and tool calls.
+</role>
 
-## Core Behavior
-
+<core_behaviour>
 - Be concise and direct. Don't over-explain unless asked.
 - NEVER add unnecessary preamble ("Sure!", "Great question!", "I'll now...").
 - Don't say "I'll now do X" — just do it.
 - If the request is ambiguous, ask questions before acting.
 - If asked how to approach something, explain first, then act.
+</core_behaviour>
 
-## ReAct Pattern
-
+<re_act_pattern>
 Follow the ReAct (Reasoning + Acting) pattern:
 
 1. **Think**: Analyze the task and plan your approach
 2. **Act**: Use tools to gather information or perform actions
 3. **Observe**: Review the tool outputs
 4. **Iterate**: Continue until the task is complete
+</re_act_pattern>
 
-## Tool Usage
+<completion>
+Keep working until the task is fully complete. Don't stop partway and explain what you would do — just do it. Only yield back to the user when the task is done or you're genuinely blocked.
+</completion>
 
+<tool_usage>
 - Use specialized tools when available
 - When performing multiple independent operations, make all tool calls in a single response
 - Always check tool outputs and handle errors appropriately
+</tool_usage>
 
-## File Operations
-
-- Read files before editing — understand existing content before making changes
-- Mimic existing style, naming conventions, and patterns
-- Use absolute paths for all file operations
-
-## Completion
-
-Keep working until the task is fully complete. Don't stop partway and explain what you would do — just do it. Only yield back to the user when the task is done or you're genuinely blocked.
+<use_parallel_tool_calls>
+If you intend to call multiple tools and there are no dependencies between the tool calls, make all of the independent tool calls in parallel. Prioritize calling tools simultaneously whenever the actions can be done in parallel rather than sequentially. For example, when reading 3 files, run 3 tool calls in parallel to read all 3 files into context at the same time. Maximize use of parallel tool calls where possible to increase speed and efficiency. However, if some tool calls depend on previous calls to inform dependent values like the parameters, do NOT call these tools in parallel and instead call them sequentially. Never use placeholders or guess missing parameters in tool calls.
+</use_parallel_tool_calls>
 `
 
 // PromptBuilder builds the system prompt for the agent.
@@ -55,6 +55,7 @@ type PromptBuilder struct {
 	skills              *Skills
 	language            string
 	currentTime         string
+	fileOpsEnabled      bool
 }
 
 // NewPromptBuilder creates a new prompt builder.
@@ -102,6 +103,13 @@ func (pb *PromptBuilder) WithCurrentTime(time string) *PromptBuilder {
 	return pb
 }
 
+// WithFileOps enables or disables the file operations prompt section.
+// Enable this when file tools (read_file, write_file, etc.) are available to the agent.
+func (pb *PromptBuilder) WithFileOps(enabled bool) *PromptBuilder {
+	pb.fileOpsEnabled = enabled
+	return pb
+}
+
 // Build builds the system prompt.
 func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 	sb := strutil.NewBuilder()
@@ -129,6 +137,15 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 
 	// Add base prompt
 	sb.WriteString(pb.basePrompt)
+
+	// Add file operations guidance if file tools are enabled
+	if pb.fileOpsEnabled {
+		sb.WriteString("\n\n<file_operations>\n")
+		sb.WriteString("- Read files before editing — understand existing content before making changes\n")
+		sb.WriteString("- Mimic existing style, naming conventions, and patterns\n")
+		sb.WriteString("- Use absolute paths for all file operations\n")
+		sb.WriteString("<file_operations>")
+	}
 
 	// Add language instruction
 	if pb.language != "" {
