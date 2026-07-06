@@ -163,7 +163,7 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 			sb.WriteString("- User's request matches a skill's domain (e.g., \"research X\" -> web-research skill)\n")
 			sb.WriteString("- You need specialized knowledge or structured workflows\n")
 			sb.WriteString("- A skill provides proven patterns for complex tasks\n\n")
-			sb.WriteString("<skills_system>")
+			sb.WriteString("</skills_system>")
 		}
 	}
 
