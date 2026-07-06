@@ -3,6 +3,7 @@ package agentloop
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/util/atom"
@@ -110,15 +111,14 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 	// Add middleware system prompt fragments
 	for _, f := range pb.middlewareFragments {
 		if f != "" {
-			sb.WriteString(f)
+			sb.WriteString(wrapTag("instruction", f))
 			sb.WriteString("\n\n")
 		}
 	}
 
 	// Add task prompt if provided
 	if pb.taskPrompt != "" {
-		sb.WriteString("## Task\n\n")
-		sb.WriteString(pb.taskPrompt)
+		sb.WriteString(wrapTag("task", pb.taskPrompt))
 		sb.WriteString("\n\n")
 	}
 
@@ -131,24 +131,26 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 		sb.WriteString("- Read files before editing — understand existing content before making changes\n")
 		sb.WriteString("- Mimic existing style, naming conventions, and patterns\n")
 		sb.WriteString("- Use absolute paths for all file operations\n")
-		sb.WriteString("<file_operations>")
+		sb.WriteString("</file_operations>")
 	}
 
 	// Add language instruction
 	if pb.language != "" {
-		sb.WriteString(fmt.Sprintf("\n\n**Language:** You must respond in %s.\n", pb.language))
+		sb.WriteString("\n\n")
+		sb.WriteString(wrapTag("language", fmt.Sprintf("You must respond in %s.", pb.language)))
 	}
 
 	// Add current time
 	if pb.currentTime != "" {
-		sb.WriteString(fmt.Sprintf("\n\n**Current Time:** %s\n", pb.currentTime))
+		sb.WriteString("\n\n")
+		sb.WriteString(wrapTag("current_time", pb.currentTime))
 	}
 
 	// Inject skills with progressive disclosure
 	if pb.skills != nil {
 		skillsMetadata := pb.skills.InjectMetadata("")
 		if skillsMetadata != "" {
-			sb.WriteString("\n\n## Skills System\n\n")
+			sb.WriteString("\n\n<skills_system>\n\n")
 			sb.WriteString("You have access to a skills library that provides specialized capabilities and domain knowledge.\n\n")
 			sb.WriteString("**Available Skills:**\n\n")
 			sb.WriteString(skillsMetadata)
@@ -161,10 +163,20 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 			sb.WriteString("- User's request matches a skill's domain (e.g., \"research X\" -> web-research skill)\n")
 			sb.WriteString("- You need specialized knowledge or structured workflows\n")
 			sb.WriteString("- A skill provides proven patterns for complex tasks\n\n")
+			sb.WriteString("<skills_system>")
 		}
 	}
 
 	return schema.SystemMessage(sb.String()), nil
+}
+
+// wrapTag wraps content in <tag>...</tag> if it is not already wrapped with that tag.
+func wrapTag(tag, content string) string {
+	open := "<" + tag + ">"
+	if strings.HasPrefix(strings.TrimSpace(content), open) {
+		return strings.TrimSpace(content)
+	}
+	return open + "\n" + strings.TrimSpace(content) + "\n</" + tag + ">"
 }
 
 // GetCurrentTime returns the current time formatted for display.
