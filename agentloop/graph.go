@@ -97,7 +97,8 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			WithMiddlewareFragments(fragments).
 			WithSkills(input.skills).
 			WithLanguage(agent.ops.language).
-			WithCurrentTime(GetCurrentTime(agent.config.Timezone))
+			WithCurrentTime(GetCurrentTime(agent.config.Timezone)).
+			WithFileOps(agent.ops.enableFileTool)
 		systemMsg, err := promptBuilder.Build(ctx)
 		if err != nil {
 			return nil, err

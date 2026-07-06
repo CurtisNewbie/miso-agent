@@ -20,7 +20,6 @@ analyze.log
 
 __debug_bin*
 doc/api.md
-AGENTS.md
 PROGRESS.md
 MISTAKE.md
 agentdoc
