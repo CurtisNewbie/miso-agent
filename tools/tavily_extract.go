@@ -68,7 +68,7 @@ var tavilyExtractURL = "https://api.tavily.com/extract"
 //	agent, _ := agentloop.NewAgent(agentloop.AgentConfig{
 //	    Tools: []agentloop.Tool{tools.NewTavilyExtractTool(os.Getenv("TAVILY_API_KEY"))},
 //	})
-func NewTavilyExtractTool(apiKey string, opts ...TavilyExtractOption) (agentloop.Tool, error) {
+func NewTavilyExtractTool(apiKey string, opts ...TavilyExtractOption) agentloop.Tool {
 	return agentloop.NewAutoTypedCtxAwareToolFunc(
 		"tavily_extract",
 		"Extract the full content of one or more web pages from their URLs using Tavily. Returns the raw text or markdown content of each page. Use this tool when you need to read or analyze the content of a specific URL.",

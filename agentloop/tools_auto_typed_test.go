@@ -15,17 +15,13 @@ type descTagArgs struct {
 
 func buildDescTagTool(t *testing.T) Tool {
 	t.Helper()
-	tool, err := NewAutoTypedCtxAwareToolFunc[descTagArgs](
+	return NewAutoTypedCtxAwareToolFunc[descTagArgs](
 		"desc_tag_tool",
 		"Test desc tag reflection",
 		func(ctx context.Context, agentCtx AgentContext, args descTagArgs) (string, error) {
 			return args.Path, nil
 		},
 	)
-	if err != nil {
-		t.Fatalf("NewAutoTypedCtxAwareToolFunc failed: %v", err)
-	}
-	return tool
 }
 
 func schemaToMap(t *testing.T, tool Tool) map[string]interface{} {
@@ -105,16 +101,13 @@ type greetArgs struct {
 }
 
 func TestNewAutoTypedCtxAwareToolFunc_Execute(t *testing.T) {
-	tool, err := NewAutoTypedCtxAwareToolFunc[greetArgs](
+	tool := NewAutoTypedCtxAwareToolFunc[greetArgs](
 		"greet",
 		"Greet someone",
 		func(ctx context.Context, agentCtx AgentContext, args greetArgs) (string, error) {
 			return "Hello, " + args.Name, nil
 		},
 	)
-	if err != nil {
-		t.Fatalf("NewAutoTypedCtxAwareToolFunc failed: %v", err)
-	}
 
 	sit, ok := tool.(SelfInvokeTool)
 	if !ok {
@@ -132,7 +125,7 @@ func TestNewAutoTypedCtxAwareToolFunc_Execute(t *testing.T) {
 
 func TestNewAutoTypedCtxAwareToolFunc_AgentContextInjected(t *testing.T) {
 	var capturedCtx AgentContext
-	tool, err := NewAutoTypedCtxAwareToolFunc[greetArgs](
+	tool := NewAutoTypedCtxAwareToolFunc[greetArgs](
 		"greet_ctx",
 		"Greet with context",
 		func(ctx context.Context, agentCtx AgentContext, args greetArgs) (string, error) {
@@ -140,9 +133,6 @@ func TestNewAutoTypedCtxAwareToolFunc_AgentContextInjected(t *testing.T) {
 			return "ok", nil
 		},
 	)
-	if err != nil {
-		t.Fatalf("NewAutoTypedCtxAwareToolFunc failed: %v", err)
-	}
 
 	store := newTestMemFileStore()
 	todos := NewTodoManager()
@@ -150,7 +140,7 @@ func TestNewAutoTypedCtxAwareToolFunc_AgentContextInjected(t *testing.T) {
 	ctx := context.WithValue(context.Background(), agentCtxKey, agentCtx)
 
 	sit := tool.(SelfInvokeTool)
-	_, err = sit.ExecuteJson(ctx, `{"name":"test"}`)
+	_, err := sit.ExecuteJson(ctx, `{"name":"test"}`)
 	if err != nil {
 		t.Fatalf("ExecuteJson failed: %v", err)
 	}
@@ -168,16 +158,13 @@ type emptyArgs struct {
 }
 
 func TestNewAutoTypedCtxAwareToolFunc_EmptyArgs(t *testing.T) {
-	tool, err := NewAutoTypedCtxAwareToolFunc[emptyArgs](
+	tool := NewAutoTypedCtxAwareToolFunc[emptyArgs](
 		"empty_tool",
 		"Tool with empty args",
 		func(ctx context.Context, agentCtx AgentContext, args emptyArgs) (string, error) {
 			return "value=" + args.Value, nil
 		},
 	)
-	if err != nil {
-		t.Fatalf("NewAutoTypedCtxAwareToolFunc failed: %v", err)
-	}
 
 	sit := tool.(SelfInvokeTool)
 	result, err := sit.ExecuteJson(context.Background(), "")
@@ -191,16 +178,13 @@ func TestNewAutoTypedCtxAwareToolFunc_EmptyArgs(t *testing.T) {
 
 func TestNewAutoTypedCtxAwareToolFunc_ExecuteError(t *testing.T) {
 	wantErr := errors.New("execution failed")
-	tool, err := NewAutoTypedCtxAwareToolFunc[greetArgs](
+	tool := NewAutoTypedCtxAwareToolFunc[greetArgs](
 		"error_tool",
 		"Always errors",
 		func(ctx context.Context, agentCtx AgentContext, args greetArgs) (string, error) {
 			return "", wantErr
 		},
 	)
-	if err != nil {
-		t.Fatalf("NewAutoTypedCtxAwareToolFunc failed: %v", err)
-	}
 
 	sit := tool.(SelfInvokeTool)
 	_, gotErr := sit.ExecuteJson(context.Background(), `{"name":"test"}`)
@@ -213,16 +197,13 @@ func TestNewAutoTypedCtxAwareToolFunc_ExecuteError(t *testing.T) {
 }
 
 func TestToolWrapper_Info_DeductedTool(t *testing.T) {
-	tool, err := NewAutoTypedCtxAwareToolFunc[greetArgs](
+	tool := NewAutoTypedCtxAwareToolFunc[greetArgs](
 		"greet_info",
 		"Greet tool for info test",
 		func(ctx context.Context, agentCtx AgentContext, args greetArgs) (string, error) {
 			return "Hello, " + args.Name, nil
 		},
 	)
-	if err != nil {
-		t.Fatalf("NewAutoTypedCtxAwareToolFunc failed: %v", err)
-	}
 
 	w := &toolWrapper{tool: tool}
 	info, err := w.Info(context.Background())

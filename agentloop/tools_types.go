@@ -405,17 +405,17 @@ func NewAutoTypedCtxAwareToolFunc[T any](
 	name string,
 	description string,
 	execute func(ctx context.Context, agentCtx AgentContext, args T) (string, error),
-) (Tool, error) {
+) Tool {
 	paramsOneOf, err := utils.GoStruct2ParamsOneOf[T](utils.WithSchemaModifier(autoSchemaModifier))
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	return &AutoTypedCtxAwareToolFunc[T]{
 		name:        name,
 		description: description,
 		paramsOneOf: paramsOneOf,
 		execute:     execute,
-	}, nil
+	}
 }
 
 // Name returns the name of the tool.
