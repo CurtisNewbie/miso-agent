@@ -48,7 +48,10 @@ type AgentConfig struct {
 	// If nil, defaults to true.
 	LogOutputs *bool
 
-	// Skills is a list of skill paths to load.
+	// Skills is a list of paths to load skills from.
+	// Each path may be:
+	//   - A skill directory that directly contains a SKILL.md file (e.g., "humanizer").
+	//   - A parent directory containing skill subdirectories with SKILL.md files (e.g., "/", "skills/").
 	// Skills are loaded from the backend and injected into the system prompt.
 	Skills []string
 

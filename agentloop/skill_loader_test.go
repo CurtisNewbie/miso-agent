@@ -229,6 +229,19 @@ description: Data analysis skill
 			t.Errorf("got %d skills, want 0", len(skills))
 		}
 	})
+
+	t.Run("load from skill directory directly", func(t *testing.T) {
+		skills, err := loader.LoadFromSource(ctx, "skills/web-research")
+		if err != nil {
+			t.Fatalf("LoadFromSource failed: %v", err)
+		}
+		if len(skills) != 1 {
+			t.Errorf("got %d skills, want 1", len(skills))
+		}
+		if _, ok := skills["web-research"]; !ok {
+			t.Error("skills map missing 'web-research'")
+		}
+	})
 }
 
 func TestSkillLoader_LoadFromSources(t *testing.T) {

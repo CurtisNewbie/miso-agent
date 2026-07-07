@@ -43,11 +43,19 @@ func (l *SkillLoader) LoadFromSources(ctx context.Context, sources []string) (Sk
 }
 
 // LoadFromSource loads skills from a single source directory.
+// source may be either:
+//   - A parent directory containing skill subdirectories, each with a SKILL.md file.
+//   - A skill directory itself that directly contains a SKILL.md file.
 func (l *SkillLoader) LoadFromSource(ctx context.Context, source string) (SkillsMap, error) {
 	// Normalize source path
 	source = normalizePath(source)
 
-	// List directory contents
+	// If the source itself is a skill directory (contains SKILL.md directly), load it.
+	if skill, err := l.LoadSkillFile(ctx, filepath.Join(source, "SKILL.md")); err == nil {
+		return SkillsMap{skill.Metadata.Name: skill}, nil
+	}
+
+	// Otherwise treat source as a parent directory containing skill subdirectories.
 	files, err := l.backend.ListDirectory(ctx, source)
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to list directory %s", source)
