@@ -2,6 +2,7 @@ package agentloop
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/curtisnewbie/miso-agent/agents"
@@ -45,12 +46,13 @@ var (
 //   - Skills system with progressive disclosure
 //   - Token-aware message pruning
 type Agent struct {
-	config     AgentConfig
-	ops        agentOps
-	tools      *ToolRegistry
-	tokenizer  Tokenizer
-	graph      compose.Runnable[taskInput, taskOutput]
-	middleware []Middleware
+	config        AgentConfig
+	ops           agentOps
+	tools         *ToolRegistry
+	tokenizer     Tokenizer
+	graph         compose.Runnable[taskInput, taskOutput]
+	middleware    []Middleware
+	logPromptOnce sync.Once
 }
 
 // boolOrDefault returns *p if p is non-nil, otherwise returns def.

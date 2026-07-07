@@ -84,6 +84,10 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}),
 	)
 
+	// toolInfoList is declared here so the prepare_messages closure can capture it;
+	// it is populated below after toolInfos is computed.
+	var toolInfoList []*schema.ToolInfo
+
 	// Prepare messages node - runs once at start
 	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, input taskInput) ([]*schema.Message, error) {
 		fragments := make([]string, 0, len(agent.middleware))
@@ -103,6 +107,15 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		if err != nil {
 			return nil, err
 		}
+		agent.logPromptOnce.Do(func() {
+			r := flow.NewRail(ctx)
+			r.Infof("[%v] System Prompt:\n%s", agent.config.Name, systemMsg.Content)
+			names := make([]string, len(toolInfoList))
+			for i, t := range toolInfoList {
+				names[i] = t.Name
+			}
+			r.Infof("[%v] Tools: %v", agent.config.Name, names)
+		})
 
 		userMsg := schema.UserMessage(input.task)
 
@@ -116,7 +129,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 	// Chat model node - uses StatePreHandler to manage message accumulation
 	toolInfos := agent.tools.ToEinoToolsWithChain(agent.middleware)
-	toolInfoList := make([]*schema.ToolInfo, len(toolInfos))
+	toolInfoList = make([]*schema.ToolInfo, len(toolInfos))
 	for i, tool := range toolInfos {
 		info, err := tool.Info(context.Background())
 		if err != nil {
