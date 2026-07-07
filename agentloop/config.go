@@ -155,20 +155,28 @@ type AgentConfig struct {
 // The baseDirs are the root directories within the embedded FS to start from.
 // File paths in the returned map will be relative to the baseDir and prefixed with '/'.
 //
-// Example:
+// Pass "." to embed everything from the package root — the idiomatic pattern when
+// all skills live alongside an embed.go file in the same package:
 //
-//	//go:embed skills/*
+//	//go:embed all:*
 //	var skillsFS embed.FS
 //
-//	preloaded := BuildPreloadedSkills(skillsFS, "skills")
+//	preloaded := BuildPreloadedSkills(skillsFS, ".")
 //	// Returns: map[string]string{
-//	//   "/skills/web-research/SKILL.md": "...",
-//	//   "/skills/code-analysis/SKILL.md": "...",
+//	//   "/humanizer/SKILL.md": "...",
+//	//   "/web-research/SKILL.md": "...",
 //	// }
 //
-// Multiple base dirs:
+// Pass a specific directory name to embed only that skill or subtree:
 //
-//	preloaded := BuildPreloadedSkills(skillsFS, "skills", "templates")
+//	preloaded := BuildPreloadedSkills(skillsFS, "humanizer")
+//	// Returns: map[string]string{
+//	//   "/humanizer/SKILL.md": "...",
+//	// }
+//
+// The returned map is passed to [AgentConfig.PreloadedSkills]. Skills are then
+// loaded by setting [AgentConfig.Skills] to either the skill directory name
+// (e.g. "humanizer") or a parent directory (e.g. "/") — see [AgentConfig.Skills].
 func BuildPreloadedSkills(efs embed.FS, baseDirs ...string) map[string]string {
 	result := make(map[string]string)
 
