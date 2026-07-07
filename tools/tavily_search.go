@@ -30,9 +30,31 @@ type TavilySearchArgs struct {
 	EndDate string `json:"end_date,omitempty"`
 }
 
-// TavilySearchOption is a functional option that customizes the SearchReq before it is sent to Tavily.
+// tavilySearchConfig holds tool-level configuration for NewTavilySearchTool.
+type tavilySearchConfig struct {
+	name        string
+	description string
+	searchOpts  []func(*search.SearchReq)
+}
+
+// TavilySearchOption is a functional option for NewTavilySearchTool.
+type TavilySearchOption func(o *tavilySearchConfig)
+
+// WithToolName overrides the tool name exposed to the LLM (default: "tavily_search").
+func WithToolName(name string) TavilySearchOption {
+	return func(o *tavilySearchConfig) { o.name = name }
+}
+
+// WithToolDescription overrides the tool description exposed to the LLM.
+func WithToolDescription(desc string) TavilySearchOption {
+	return func(o *tavilySearchConfig) { o.description = desc }
+}
+
+// WithSearchOption applies fn to each SearchReq before it is sent to Tavily.
 // It is applied after all TavilySearchArgs fields have been set, so it can override any field.
-type TavilySearchOption func(o *search.SearchReq)
+func WithSearchOption(fn func(*search.SearchReq)) TavilySearchOption {
+	return func(o *tavilySearchConfig) { o.searchOpts = append(o.searchOpts, fn) }
+}
 
 // NewTavilySearchTool creates an agentloop Tool that performs a Tavily web search.
 // apiKey is captured in a closure and never exposed to the LLM.
@@ -48,9 +70,16 @@ func NewTavilySearchTool(apiKey string, maxResults int, opts ...TavilySearchOpti
 	if maxResults < 1 {
 		maxResults = 5
 	}
+	cfg := tavilySearchConfig{
+		name:        "tavily_search",
+		description: "Search the web using Tavily. Returns a direct answer (when available) followed by relevant result snippets with URLs. Use this tool to find up-to-date information, news, or factual details.",
+	}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return agentloop.NewTypedToolFunc(
-		"tavily_search",
-		"Search the web using Tavily. Returns a direct answer (when available) followed by relevant result snippets with URLs. Use this tool to find up-to-date information, news, or factual details.",
+		cfg.name,
+		cfg.description,
 		map[string]*schema.ParameterInfo{
 			"query": agentloop.StringParam(
 				"The search query string.",
@@ -87,7 +116,7 @@ func NewTavilySearchTool(apiKey string, maxResults int, opts ...TavilySearchOpti
 				EndDate:       args.EndDate,
 				IncludeAnswer: true,
 			}
-			for _, opt := range opts {
+			for _, opt := range cfg.searchOpts {
 				opt(&req)
 			}
 			resp, err := search.Search(rail, apiKey, req)
