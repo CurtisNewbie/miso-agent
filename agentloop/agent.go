@@ -8,6 +8,7 @@ import (
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/slutil"
 )
 
 // agentOps holds the resolved operational configuration for the agent loop.
@@ -67,8 +68,8 @@ func boolOrDefault(p *bool, def bool) bool {
 //
 // Retry on model errors is not handled by the agent — configure it on the model itself.
 // See [agents.NewOpenAIChatModel] and [agents.WithRetry].
-func NewAgent(config AgentConfig) (*Agent, error) {
-	rail := flow.NewRail(context.Background())
+func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
+	rail := flow.NewRail(slutil.VarArgAny(optCtx, func() context.Context { return context.Background() }))
 
 	// Set defaults
 	if config.Name == "" {
