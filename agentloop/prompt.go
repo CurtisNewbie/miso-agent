@@ -148,7 +148,7 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 
 	// Inject skills with progressive disclosure
 	if pb.skills != nil {
-		skillsMetadata := pb.skills.InjectMetadata("")
+		skillsMetadata := pb.skills.GetSkills().FormatMetadata()
 		if skillsMetadata != "" {
 			sb.WriteString("\n\n<skills_system>\n\n")
 			sb.WriteString("You have access to a skills library that provides specialized capabilities and domain knowledge.\n\n")

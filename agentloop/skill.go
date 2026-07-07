@@ -131,7 +131,8 @@ func (s *Skill) FormatMetadataOnly() string {
 		annotations = append(annotations, fmt.Sprintf("Compatibility: %s", s.Metadata.Compatible))
 	}
 
-	descLine := fmt.Sprintf("- **%s**: %s", s.Metadata.Name, s.Metadata.Description)
+	desc := strings.Join(strings.Fields(s.Metadata.Description), " ")
+	descLine := fmt.Sprintf("- **%s**: %s", s.Metadata.Name, desc)
 	if len(annotations) > 0 {
 		descLine += fmt.Sprintf(" (%s)", strings.Join(annotations, ", "))
 	}
