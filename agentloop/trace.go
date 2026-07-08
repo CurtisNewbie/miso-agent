@@ -97,6 +97,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 				} else {
 					rail.Infof("[%v] %v/%v start", name, ri.Component, ri.Name)
 				}
+				logChatModelTokenContext(rail, name, ops.maxTokens, in)
 			} else {
 				if ops.logInputs {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
@@ -371,6 +372,22 @@ func extractTodoTasks(jsonStr string) []string {
 		tasks = append(tasks, t.Task)
 	}
 	return tasks
+}
+
+// logChatModelTokenContext logs input token count, model max tokens, and context occupation percentage.
+func logChatModelTokenContext(rail flow.Rail, graphName string, maxTokens int, in callbacks.CallbackInput) {
+	ci := model.ConvCallbackInput(in)
+	if ci == nil || len(ci.Messages) == 0 {
+		return
+	}
+	t := Tokenizer{}
+	inputTokens := t.CountMessagesTokens(ci.Messages)
+	if maxTokens > 0 {
+		pct := float64(inputTokens) * 100.0 / float64(maxTokens)
+		rail.Infof("[%v] ChatModel ctx — input_tokens: %v, max_tokens: %v, ctx_usage: %.1f%%", graphName, inputTokens, maxTokens, pct)
+	} else {
+		rail.Infof("[%v] ChatModel ctx — input_tokens: %v, max_tokens: unknown", graphName, inputTokens)
+	}
 }
 
 // agentTokenUsage extracts token usage from a callback output.

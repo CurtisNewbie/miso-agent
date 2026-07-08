@@ -25,6 +25,7 @@ type agentOps struct {
 	compaction                   bool
 	compactPreserveRecentTokens  int
 	compactBuffer                int // derived from compactionThreshold * MaxTokens
+	maxTokens                    int // model context window size (0 = unknown)
 	toolOffloadTokenLimit        int // 0 = disabled
 	toolOffloadResultsPathPrefix string
 	enableFileTool               bool
@@ -109,6 +110,9 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 			}
 		}
 	}
+
+	// Propagate MaxTokens into ops so trace callbacks can report context occupation.
+	ops.maxTokens = config.MaxTokens
 
 	// Derive compactBuffer and compactPreserveRecentTokens from MaxTokens.
 	// Both are percentage-based to stay consistent regardless of model context size.
