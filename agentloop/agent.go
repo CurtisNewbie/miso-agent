@@ -8,6 +8,7 @@ import (
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/idutil"
 	"github.com/curtisnewbie/miso/util/slutil"
 )
 
@@ -219,6 +220,7 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 // AgentContext holds per-execution stateful components.
 // Accessible from tool and middleware callbacks via the context.
 type AgentContext struct {
+	SessionId string
 	Store     FileStore
 	Todos     *TodoManager
 	Artifacts *ArtifactManager
@@ -227,6 +229,9 @@ type AgentContext struct {
 
 // AgentRequest represents a request to execute an agent
 type AgentRequest struct {
+	// SessionId is an optional identifier for this execution.
+	// If empty, a unique ID is generated automatically with the prefix "sess_".
+	SessionId           string
 	UserInput           string
 	PreloadBackendFiles func(store FileStore) error                       // Optional callback to preload files into the backend before execution
 	ArtifactCallback    func(store FileStore, artifacts []Artifact) error // Optional callback for artifacts
@@ -235,7 +240,10 @@ type AgentRequest struct {
 // Execute runs the agent with the given request.
 func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	rail = rail.NextSpanId()
-	rail.Infof("Execute agent %q, UserInput: %q", a.config.Name, req.UserInput)
+	if req.SessionId == "" {
+		req.SessionId = idutil.Id("sess_")
+	}
+	rail.Infof("Execute agent %q, SessionId: %q, UserInput: %q", a.config.Name, req.SessionId, req.UserInput)
 
 	// Initialize backend (fresh on each execution)
 	var backend FileStore
@@ -301,6 +309,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	metadataStore := NewMetadataStore()
 
 	agentCtxVal := AgentContext{
+		SessionId: req.SessionId,
 		Store:     backend,
 		Todos:     todoManager,
 		Artifacts: artifactManager,
