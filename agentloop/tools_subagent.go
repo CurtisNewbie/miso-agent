@@ -91,7 +91,7 @@ func NewSubAgentTool(specs ...*AgentSpec) Tool {
 				return "", err
 			}
 
-			out, err := agent.Execute(flow.NewRail(ctx), AgentRequest{
+			out, err := agent.Execute(flow.NewRail(ctx).NextSpan(), AgentRequest{
 				UserInput: args.Task,
 			})
 			if err != nil {
