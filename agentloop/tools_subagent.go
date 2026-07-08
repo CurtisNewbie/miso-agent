@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
@@ -91,7 +92,10 @@ func NewSubAgentTool(specs ...*AgentSpec) Tool {
 				return "", err
 			}
 
-			out, err := agent.Execute(flow.NewRail(ctx).NextSpanId(), AgentRequest{
+			// Strip parent graph callbacks from ctx so the parent's trace handler
+			// does not fire again for nodes inside the subagent's graph.
+			cleanCtx := callbacks.InitCallbacks(ctx, nil)
+			out, err := agent.Execute(flow.NewRail(cleanCtx).NextSpanId(), AgentRequest{
 				UserInput: args.Task,
 			})
 			if err != nil {
