@@ -129,7 +129,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 				if ok && acc != nil {
 					acc.add(inToken, outToken, cachedToken)
 				}
-				if ops.logOnEnd {
+				{
 					rail := flow.NewRail(ctx)
 					if ok {
 						msg := fmt.Sprintf("[%v] %v/%v — in: %v tokens", name, ri.Component, ri.Name, inToken)
