@@ -15,7 +15,7 @@ import (
 // cache the *Agent internally if construction is expensive.
 type AgentSpec struct {
 	Capabilities string
-	Builder      func(AgentContext) *Agent
+	Builder      func(AgentContext) (*Agent, error)
 }
 
 type subAgentArgs struct {
@@ -54,7 +54,10 @@ func NewSubAgentTool(specs map[string]*AgentSpec) Tool {
 				return "", errs.NewErrf("unknown sub-agent: %s", args.AgentName)
 			}
 
-			agent := spec.Builder(agentCtx)
+			agent, err := spec.Builder(agentCtx)
+			if err != nil {
+				return "", errs.Wrapf(err, "failed to build sub-agent: %s", args.AgentName)
+			}
 			if agent == nil {
 				return "", errs.NewErrf("builder returned nil agent for: %s", args.AgentName)
 			}
