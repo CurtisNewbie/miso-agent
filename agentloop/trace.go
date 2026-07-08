@@ -90,8 +90,8 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 					return context.WithValue(ctx, toolArgsCtxKey, args)
 				}
 			} else if ri.Component == "ChatModel" {
-				if ri.Name == "" {
-					// skip inner component-level callback; node-level fires separately
+				if ri.Name != "" {
+					// skip graph node-level callback; inner component-level carries *model.CallbackOutput with TokenUsage
 					return ctx
 				}
 				if ops.logInputs {
@@ -121,8 +121,8 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 				})
 			}
 			if ri.Component == "ChatModel" {
-				if ri.Name == "" {
-					// skip inner component-level callback; node-level fires separately
+				if ri.Name != "" {
+					// skip graph node-level callback; inner component-level carries *model.CallbackOutput with TokenUsage
 					return ctx
 				}
 				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
