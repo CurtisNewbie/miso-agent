@@ -249,42 +249,47 @@ func formatRetrieveRespDedup(resp dify.RetrieveRes, meta *agentloop.MetadataStor
 		return "No relevant documents found."
 	}
 
-	// Load or initialise the seen-set from shared metadata.
-	var seen map[string]struct{}
-	if meta != nil {
-		if v, ok := agentloop.GetMeta[map[string]struct{}](meta, difySeenSegmentsKey); ok {
-			seen = v
-		} else {
-			seen = make(map[string]struct{})
-			meta.Set(difySeenSegmentsKey, seen)
+	var sb strings.Builder
+	loop := func(seen map[string]struct{}) {
+		for i, rec := range resp.Records {
+			seg := rec.Segment
+			segKey := seg.DocumentID + ":" + seg.ID
+			if seen != nil {
+				if _, dup := seen[segKey]; dup {
+					continue
+				}
+				seen[segKey] = struct{}{}
+			}
+			fmt.Fprintf(&sb, "[%d] %s (position: %d, score: %.4f)\n", i+1, seg.Document.Name, seg.Position, rec.Score)
+			// if seg.CreatedAt != nil {
+			// 	fmt.Fprintf(&sb, "Created: %s\n", seg.CreatedAt)
+			// }
+			if seg.Content != "" {
+				sb.WriteString(strings.TrimSpace(seg.Content))
+				sb.WriteString("\n")
+			}
+			if seg.Answer != "" {
+				sb.WriteString("Answer: ")
+				sb.WriteString(strings.TrimSpace(seg.Answer))
+				sb.WriteString("\n")
+			}
+			sb.WriteString("\n")
 		}
 	}
-
-	var sb strings.Builder
-	for i, rec := range resp.Records {
-		seg := rec.Segment
-		segKey := seg.DocumentID + ":" + seg.ID
-		fmt.Fprintf(&sb, "[%d] %s (position: %d, score: %.4f)\n", i+1, seg.Document.Name, seg.Position, rec.Score)
-		if seen != nil {
-			if _, duplicate := seen[segKey]; duplicate {
-				sb.WriteString("[already retrieved, content skipped]\n\n")
-				continue
+	if meta != nil {
+		meta.RunWithLock(func(m agentloop.MetadataView) {
+			v, ok := m.Get(difySeenSegmentsKey)
+			var s map[string]struct{}
+			if ok {
+				s = v.(map[string]struct{})
+			} else {
+				s = make(map[string]struct{})
+				m.Set(difySeenSegmentsKey, s)
 			}
-			seen[segKey] = struct{}{}
-		}
-		// if seg.CreatedAt != nil {
-		// 	fmt.Fprintf(&sb, "Created: %s\n", seg.CreatedAt)
-		// }
-		if seg.Content != "" {
-			sb.WriteString(strings.TrimSpace(seg.Content))
-			sb.WriteString("\n")
-		}
-		if seg.Answer != "" {
-			sb.WriteString("Answer: ")
-			sb.WriteString(strings.TrimSpace(seg.Answer))
-			sb.WriteString("\n")
-		}
-		sb.WriteString("\n")
+			loop(s)
+		})
+	} else {
+		loop(nil)
 	}
 
 	return strings.TrimSpace(sb.String())

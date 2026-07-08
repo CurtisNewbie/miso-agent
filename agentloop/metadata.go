@@ -69,6 +69,30 @@ func Append[T any](m *MetadataStore, key string, items ...T) {
 	m.data[key] = append(existing.([]T), items...)
 }
 
+// MetadataView provides lock-free Get, Set, and Delete access to a MetadataStore.
+// It is only valid for the duration of a RunWithLock callback.
+type MetadataView interface {
+	Set(key string, value any)
+	Get(key string) (any, bool)
+	Delete(key string)
+}
+
+type metadataView struct {
+	data map[string]any
+}
+
+func (v metadataView) Set(key string, value any)  { v.data[key] = value }
+func (v metadataView) Get(key string) (any, bool) { val, ok := v.data[key]; return val, ok }
+func (v metadataView) Delete(key string)          { delete(v.data, key) }
+
+// RunWithLock acquires the write lock and calls fn with a lock-free MetadataView.
+// Use this when multiple Get/Set/Delete operations must execute atomically.
+func (m *MetadataStore) RunWithLock(fn func(m MetadataView)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	fn(metadataView{data: m.data})
+}
+
 // GetMeta retrieves a typed value from a MetadataStore.
 // Returns the typed value and true if the key exists and the value is assignable to T,
 // zero value and false otherwise.
