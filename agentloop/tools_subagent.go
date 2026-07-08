@@ -91,11 +91,16 @@ func NewSubAgentTool(specs ...*AgentSpec) Tool {
 				return "", err
 			}
 
-			out, err := agent.Execute(flow.NewRail(ctx).NextSpan(), AgentRequest{
+			out, err := agent.Execute(flow.NewRail(ctx).NextSpanId(), AgentRequest{
 				UserInput: args.Task,
 			})
 			if err != nil {
 				return "", errs.Wrapf(err, "sub-agent %s failed", args.AgentName)
+			}
+
+			if parentAcc, ok := ctx.Value(tokenAccCtxKey).(*tokenAccumulator); ok && parentAcc != nil {
+				tu := out.TokenUsage
+				parentAcc.add(tu.PromptTokens, tu.CompletionTokens, tu.CachedTokens)
 			}
 
 			return out.Response, nil

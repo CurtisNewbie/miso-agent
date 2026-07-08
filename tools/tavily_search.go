@@ -106,7 +106,6 @@ func NewTavilySearchTool(apiKey string, maxResults int, opts ...TavilySearchOpti
 		},
 		func(ctx context.Context, args TavilySearchArgs) (string, error) {
 			rail := flow.NewRail(ctx)
-			rail.Infof("tavily_search args: %+v", args)
 			req := search.SearchReq{
 				Query:         args.Query,
 				MaxResults:    maxResults,

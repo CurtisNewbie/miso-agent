@@ -126,12 +126,12 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 					return ctx
 				}
 				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
-				if ok {
-					if acc != nil {
-						acc.add(inToken, outToken, cachedToken)
-					}
-					if ops.logOnEnd {
-						rail := flow.NewRail(ctx)
+				if ok && acc != nil {
+					acc.add(inToken, outToken, cachedToken)
+				}
+				if ops.logOnEnd {
+					rail := flow.NewRail(ctx)
+					if ok {
 						msg := fmt.Sprintf("[%v] %v/%v — in: %v tokens", name, ri.Component, ri.Name, inToken)
 						if ops.maxTokens > 0 {
 							msg += fmt.Sprintf(" (ctx: %.1f%%, max: %v)", float64(inToken)*100.0/float64(ops.maxTokens), ops.maxTokens)
@@ -141,6 +141,8 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 							msg += fmt.Sprintf(", cache hit: %v (%.1f%%)", cachedToken, float64(cachedToken)*100.0/float64(inToken))
 						}
 						rail.Infof("%s", msg)
+					} else {
+						rail.Infof("[%v] %v/%v done", name, ri.Component, ri.Name)
 					}
 				}
 				if ops.logOnEnd && ops.logOutputs {
@@ -271,6 +273,11 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 		ids := extractJSONStringSliceField(argsJSON, "ids")
 		rail.Infof("[%v] Tool/delete_todo — ids: [%v]", graphName, strings.Join(ids, ", "))
 
+	case "task":
+		agentName := extractJSONStringField(argsJSON, "agent_name")
+		task := trimLogContent(extractJSONStringField(argsJSON, "task"), 80)
+		rail.Infof("[%v] Tool/task — agent: %v, task: %v", graphName, agentName, task)
+
 	case "think_tool":
 		reflection := extractJSONStringField(argsJSON, "reflection")
 		rail.Infof("[%v] Tool/think_tool — reflection: %v", graphName, reflection)
@@ -284,6 +291,28 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 		} else {
 			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, script: \n%v\n", graphName, inputPath, script)
 		}
+
+	case "tavily_search":
+		query := extractJSONStringField(argsJSON, "query")
+		timeRange := extractJSONStringField(argsJSON, "time_range")
+		topic := extractJSONStringField(argsJSON, "topic")
+		msg := fmt.Sprintf("[%v] Tool/tavily_search — query: %v", graphName, query)
+		if timeRange != "" {
+			msg += fmt.Sprintf(", time_range: %v", timeRange)
+		}
+		if topic != "" {
+			msg += fmt.Sprintf(", topic: %v", topic)
+		}
+		rail.Infof("%s", msg)
+
+	case "tavily_extract":
+		urls := extractJSONStringSliceField(argsJSON, "urls")
+		query := extractJSONStringField(argsJSON, "query")
+		msg := fmt.Sprintf("[%v] Tool/tavily_extract — urls: [%v]", graphName, strings.Join(urls, ", "))
+		if query != "" {
+			msg += fmt.Sprintf(", query: %v", query)
+		}
+		rail.Infof("%s", msg)
 
 	default:
 		rail.Infof("[%v] Tool/%v called", graphName, ri.Name)

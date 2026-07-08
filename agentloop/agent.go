@@ -40,6 +40,7 @@ type ctxKey int
 var (
 	agentCtxKey    ctxKey = 0
 	toolArgsCtxKey ctxKey = 1
+	tokenAccCtxKey ctxKey = 2
 )
 
 // Agent is a ReAct (Reasoning + Acting) agent that can process tasks using tools and skills.
@@ -329,6 +330,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 
 	// Execute graph with agent-specific trace callback (always registered to collect token usage)
 	acc := &tokenAccumulator{}
+	rail = rail.WithCtxVal(tokenAccCtxKey, acc)
 	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc)}
 	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
 	if err != nil {
