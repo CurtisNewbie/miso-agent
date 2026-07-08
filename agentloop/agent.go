@@ -2,6 +2,7 @@ package agentloop
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cloudwego/eino/compose"
@@ -339,6 +340,14 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		return TaskOutput{}, errs.Wrapf(err, "failed to execute graph")
 	}
 	result.TokenUsage = acc.snapshot()
+	tu := result.TokenUsage
+	if tu.PromptTokens > 0 {
+		msg := fmt.Sprintf("[%v] total — in: %v tokens, out: %v tokens", a.config.Name, tu.PromptTokens, tu.CompletionTokens)
+		if tu.CachedTokens > 0 {
+			msg += fmt.Sprintf(", cache hit: %v (%.1f%%)", tu.CachedTokens, float64(tu.CachedTokens)*100.0/float64(tu.PromptTokens))
+		}
+		rail.Info(msg)
+	}
 
 	// Call AfterAgent on each middleware.
 	for _, m := range a.middleware {

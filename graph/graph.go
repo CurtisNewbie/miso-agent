@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components/model"
@@ -37,9 +38,13 @@ func WithTraceCallback(name string, genops *GenericOps) compose.Option {
 	if genops.LogOnEnd {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
 			rail := flow.NewRail(ctx)
-			inToken, outToken, ok := tokenUsage(output)
+			inToken, outToken, cachedToken, ok := tokenUsage(output)
 			if ok {
-				rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
+				msg := fmt.Sprintf("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
+				if cachedToken > 0 && inToken > 0 {
+					msg += fmt.Sprintf(", cache hit: %v (%.1f%%)", cachedToken, float64(cachedToken)*100.0/float64(inToken))
+				}
+				rail.Infof("%s", msg)
 			}
 			if genops.LogOutputs {
 				if ri.Component == "ChatModel" {
@@ -60,14 +65,14 @@ func WithTraceCallback(name string, genops *GenericOps) compose.Option {
 	return compose.WithCallbacks(b.Build())
 }
 
-func tokenUsage(in callbacks.CallbackOutput) (_in int, _out int, ok bool) {
+func tokenUsage(in callbacks.CallbackOutput) (_in int, _out int, _cached int, ok bool) {
 	switch m := in.(type) {
 	case *model.CallbackOutput:
 		if m.TokenUsage != nil {
-			return m.TokenUsage.PromptTokens, m.TokenUsage.CompletionTokens, true
+			return m.TokenUsage.PromptTokens, m.TokenUsage.CompletionTokens, m.TokenUsage.PromptTokenDetails.CachedTokens, true
 		}
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
 func extractMessage(in callbacks.CallbackOutput) *schema.Message {

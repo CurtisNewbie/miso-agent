@@ -30,12 +30,14 @@ type tokenAccumulator struct {
 	mu               sync.Mutex
 	promptTokens     int
 	completionTokens int
+	cachedTokens     int
 }
 
-func (a *tokenAccumulator) add(prompt, completion int) {
+func (a *tokenAccumulator) add(prompt, completion, cached int) {
 	a.mu.Lock()
 	a.promptTokens += prompt
 	a.completionTokens += completion
+	a.cachedTokens += cached
 	a.mu.Unlock()
 }
 
@@ -45,7 +47,7 @@ func (a *tokenAccumulator) snapshot() TokenUsage {
 	return TokenUsage{
 		PromptTokens:     a.promptTokens,
 		CompletionTokens: a.completionTokens,
-		TotalTokens:      a.promptTokens + a.completionTokens,
+		CachedTokens:     a.cachedTokens,
 	}
 }
 
@@ -97,7 +99,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 				} else {
 					rail.Infof("[%v] %v/%v start", name, ri.Component, ri.Name)
 				}
-				logChatModelTokenContext(rail, name, ops.maxTokens, in)
+
 			} else {
 				if ops.logInputs {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
@@ -123,14 +125,22 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 					// skip inner component-level callback; node-level fires separately
 					return ctx
 				}
-				inToken, outToken, ok := agentTokenUsage(output)
+				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
 				if ok {
 					if acc != nil {
-						acc.add(inToken, outToken)
+						acc.add(inToken, outToken, cachedToken)
 					}
 					if ops.logOnEnd {
 						rail := flow.NewRail(ctx)
-						rail.Infof("[%v] %v/%v — in: %v tokens, out: %v tokens", name, ri.Component, ri.Name, inToken, outToken)
+						msg := fmt.Sprintf("[%v] %v/%v — in: %v tokens", name, ri.Component, ri.Name, inToken)
+						if ops.maxTokens > 0 {
+							msg += fmt.Sprintf(" (ctx: %.1f%%, max: %v)", float64(inToken)*100.0/float64(ops.maxTokens), ops.maxTokens)
+						}
+						msg += fmt.Sprintf(", out: %v tokens", outToken)
+						if cachedToken > 0 && inToken > 0 {
+							msg += fmt.Sprintf(", cache hit: %v (%.1f%%)", cachedToken, float64(cachedToken)*100.0/float64(inToken))
+						}
+						rail.Infof("%s", msg)
 					}
 				}
 				if ops.logOnEnd && ops.logOutputs {
@@ -374,31 +384,15 @@ func extractTodoTasks(jsonStr string) []string {
 	return tasks
 }
 
-// logChatModelTokenContext logs input token count, model max tokens, and context occupation percentage.
-func logChatModelTokenContext(rail flow.Rail, graphName string, maxTokens int, in callbacks.CallbackInput) {
-	ci := model.ConvCallbackInput(in)
-	if ci == nil || len(ci.Messages) == 0 {
-		return
-	}
-	t := Tokenizer{}
-	inputTokens := t.CountMessagesTokens(ci.Messages)
-	if maxTokens > 0 {
-		pct := float64(inputTokens) * 100.0 / float64(maxTokens)
-		rail.Infof("[%v] ChatModel ctx — input_tokens: %v, max_tokens: %v, ctx_usage: %.1f%%", graphName, inputTokens, maxTokens, pct)
-	} else {
-		rail.Infof("[%v] ChatModel ctx — input_tokens: %v, max_tokens: unknown", graphName, inputTokens)
-	}
-}
-
 // agentTokenUsage extracts token usage from a callback output.
-func agentTokenUsage(in callbacks.CallbackOutput) (_in int, _out int, ok bool) {
+func agentTokenUsage(in callbacks.CallbackOutput) (_in int, _out int, _cached int, ok bool) {
 	switch m := in.(type) {
 	case *model.CallbackOutput:
 		if m.TokenUsage != nil {
-			return m.TokenUsage.PromptTokens, m.TokenUsage.CompletionTokens, true
+			return m.TokenUsage.PromptTokens, m.TokenUsage.CompletionTokens, m.TokenUsage.PromptTokenDetails.CachedTokens, true
 		}
 	}
-	return 0, 0, false
+	return 0, 0, 0, false
 }
 
 // agentExtractMessage extracts a schema.Message from a callback output.

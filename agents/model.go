@@ -44,6 +44,9 @@ var (
 	}
 )
 
+// OpenAIChatModelOpt is a functional option for [NewOpenAIChatModel].
+type OpenAIChatModelOpt = func(o *openAiModelConfig)
+
 type openAiModelConfig struct {
 	maxToken          int
 	temperature       float32
@@ -128,10 +131,11 @@ func (m *OpenAIChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCalling
 //	)
 func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConfig)) (*OpenAIChatModel, error) {
 	o := &openAiModelConfig{
-		maxToken:    0,
-		temperature: 0.7,
-		baseURL:     AliBailianIntlBaseURL,
-		retry:       5,
+		maxToken:          0,
+		temperature:       0.7,
+		baseURL:           AliBailianIntlBaseURL,
+		retry:             5,
+		streamingToolCall: true,
 	}
 	for _, op := range ops {
 		op(o)

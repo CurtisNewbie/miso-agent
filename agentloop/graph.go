@@ -39,7 +39,7 @@ func resolveBranchTarget(shouldContinue bool) string {
 type TokenUsage struct {
 	PromptTokens     int // Total input tokens consumed across all LLM calls
 	CompletionTokens int // Total output tokens generated across all LLM calls
-	TotalTokens      int // PromptTokens + CompletionTokens
+	CachedTokens     int // Total prompt tokens served from cache across all LLM calls
 }
 
 // Artifact represents a discovered or created artifact during agent execution
