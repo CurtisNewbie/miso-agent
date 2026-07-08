@@ -178,6 +178,9 @@ type AgentConfig struct {
 // loaded by setting [AgentConfig.Skills] to either the skill directory name
 // (e.g. "humanizer") or a parent directory (e.g. "/") — see [AgentConfig.Skills].
 func BuildPreloadedSkills(efs embed.FS, baseDirs ...string) map[string]string {
+	if len(baseDirs) == 0 {
+		baseDirs = []string{"."}
+	}
 	result := make(map[string]string)
 
 	for _, baseDir := range baseDirs {
@@ -238,6 +241,9 @@ func BuildPreloadedSkills(efs embed.FS, baseDirs ...string) map[string]string {
 //	    return strings.HasSuffix(path, "SKILL.md")
 //	}, "skills", "templates")
 func BuildPreloadedSkillsWithFilter(efs embed.FS, filter func(path string) bool, baseDirs ...string) map[string]string {
+	if len(baseDirs) == 0 {
+		baseDirs = []string{"."}
+	}
 	result := make(map[string]string)
 
 	for _, baseDir := range baseDirs {
