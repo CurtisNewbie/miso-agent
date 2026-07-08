@@ -221,6 +221,7 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 // Accessible from tool and middleware callbacks via the context.
 type AgentContext struct {
 	SessionId string
+	UserInput string
 	Store     FileStore
 	Todos     *TodoManager
 	Artifacts *ArtifactManager
@@ -310,6 +311,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 
 	agentCtxVal := AgentContext{
 		SessionId: req.SessionId,
+		UserInput: req.UserInput,
 		Store:     backend,
 		Todos:     todoManager,
 		Artifacts: artifactManager,
@@ -319,7 +321,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 
 	// Call BeforeAgent on each middleware. Any error aborts execution.
 	for _, m := range a.middleware {
-		if err := m.BeforeAgent(agentCtxVal, &req); err != nil {
+		if err := m.BeforeAgent(agentCtxVal); err != nil {
 			return TaskOutput{}, errs.Wrapf(err, "middleware %q BeforeAgent failed", m.Name())
 		}
 	}

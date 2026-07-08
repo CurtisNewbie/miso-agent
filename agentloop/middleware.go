@@ -16,7 +16,7 @@ type Middleware interface {
 
 	// BeforeAgent is called once at the start of Agent.Execute(),
 	// before the graph begins running. Returning a non-nil error aborts execution.
-	BeforeAgent(agentCtx AgentContext, req *AgentRequest) error
+	BeforeAgent(agentCtx AgentContext) error
 
 	// WrapModelCall is called on every LLM invocation in the loop.
 	// Use it to inject prompt fragments, filter messages, or observe the model response.
@@ -78,7 +78,7 @@ type BaseMiddleware struct{}
 func (BaseMiddleware) Name() string { return "" }
 
 // BeforeAgent is a no-op. Override to add pre-execution logic.
-func (BaseMiddleware) BeforeAgent(_ AgentContext, _ *AgentRequest) error { return nil }
+func (BaseMiddleware) BeforeAgent(_ AgentContext) error { return nil }
 
 // WrapModelCall passes through to the next handler unchanged.
 func (BaseMiddleware) WrapModelCall(ctx context.Context, req *ModelCallRequest, next ModelCallHandler) (*ModelCallResponse, error) {
