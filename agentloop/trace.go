@@ -90,8 +90,8 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 					return context.WithValue(ctx, toolArgsCtxKey, args)
 				}
 			} else if ri.Component == "ChatModel" {
-				if ri.Name != "" {
-					// skip graph node-level callback; inner component-level carries *model.CallbackOutput with TokenUsage
+				if ri.Name == "" {
+					// skip inner component-level callback; node-level fires separately
 					return ctx
 				}
 				if ops.logInputs {
@@ -121,8 +121,8 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 				})
 			}
 			if ri.Component == "ChatModel" {
-				if ri.Name != "" {
-					// skip graph node-level callback; inner component-level carries *model.CallbackOutput with TokenUsage
+				if ri.Name == "" {
+					// skip inner component-level callback; node-level fires separately
 					return ctx
 				}
 				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
@@ -419,6 +419,11 @@ func agentTokenUsage(in callbacks.CallbackOutput) (_in int, _out int, _cached in
 	case *model.CallbackOutput:
 		if m.TokenUsage != nil {
 			return m.TokenUsage.PromptTokens, m.TokenUsage.CompletionTokens, m.TokenUsage.PromptTokenDetails.CachedTokens, true
+		}
+	case *schema.Message:
+		if m.ResponseMeta != nil && m.ResponseMeta.Usage != nil {
+			u := m.ResponseMeta.Usage
+			return u.PromptTokens, u.CompletionTokens, u.PromptTokenDetails.CachedTokens, true
 		}
 	}
 	return 0, 0, 0, false
