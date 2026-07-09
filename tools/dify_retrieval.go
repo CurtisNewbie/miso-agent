@@ -261,9 +261,9 @@ func formatRetrieveRespDedup(resp dify.RetrieveRes, meta *agentloop.MetadataStor
 				seen[segKey] = struct{}{}
 			}
 			fmt.Fprintf(&sb, "[%d] %s (position: %d, score: %.4f)\n", i+1, seg.Document.Name, seg.Position, rec.Score)
-			// if seg.CreatedAt != nil {
-			// 	fmt.Fprintf(&sb, "Created: %s\n", seg.CreatedAt)
-			// }
+			if seg.CreatedAt != nil {
+				fmt.Fprintf(&sb, "Created: %s\n", seg.CreatedAt)
+			}
 			if seg.Content != "" {
 				sb.WriteString(strings.TrimSpace(seg.Content))
 				sb.WriteString("\n")
