@@ -3,6 +3,7 @@ package agentloop
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/cloudwego/eino/compose"
@@ -11,6 +12,7 @@ import (
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/idutil"
 	"github.com/curtisnewbie/miso/util/slutil"
+	"github.com/curtisnewbie/miso/util/strutil"
 )
 
 // agentOps holds the resolved operational configuration for the agent loop.
@@ -195,11 +197,11 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		}
 	}
 
-	names := make([]string, 0, len(toolRegistry.List()))
+	var toolLog string
 	for _, t := range toolRegistry.List() {
-		names = append(names, t.Name())
+		toolLog += fmt.Sprintf("\n  - %s: %s", t.Name(), strutil.SAddFollowLineIndent(strings.TrimSpace(t.Description()), "  "))
 	}
-	rail.Infof("NewAgent %q tools: %v", config.Name, names)
+	rail.Infof("NewAgent %q tools:%s", config.Name, toolLog)
 
 	agent := &Agent{
 		config:     config,
