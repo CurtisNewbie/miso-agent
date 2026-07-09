@@ -77,6 +77,9 @@ func NewTavilySearchTool(apiKey string, maxResults int, opts ...TavilySearchOpti
 	for _, opt := range opts {
 		opt(&cfg)
 	}
+	if cfg.name != "tavily_search" {
+		agentloop.RegisterToolAlias(cfg.name, "tavily_search")
+	}
 	return agentloop.NewTypedToolFunc(
 		cfg.name,
 		cfg.description,

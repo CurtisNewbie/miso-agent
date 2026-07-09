@@ -96,6 +96,7 @@ func NewSubAgentTool(specs ...*AgentSpec) Tool {
 			// does not fire again for nodes inside the subagent's graph.
 			cleanCtx := callbacks.InitCallbacks(ctx, nil)
 			out, err := agent.Execute(flow.NewRail(cleanCtx).NextSpanId(), AgentRequest{
+				SessionId: agentCtx.SessionId,
 				UserInput: args.Task,
 			})
 			if err != nil {

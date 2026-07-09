@@ -155,6 +155,9 @@ func NewDifyRetrievalTool(cfg DifyRetrievalConfig, opts ...DifyRetrievalOption) 
 	for _, opt := range opts {
 		opt(&o)
 	}
+	if o.name != "dify_retrieval" {
+		agentloop.RegisterToolAlias(o.name, "dify_retrieval")
+	}
 
 	retrievalModel := cloneRetrievalModel(cfg.RetrievalModel)
 	if o.docNameFilter != nil {

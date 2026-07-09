@@ -13,6 +13,7 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/util/hash"
 )
 
 // ToolEventKind identifies the kind of tool event emitted during agent execution.
@@ -57,6 +58,15 @@ type ToolEvent struct {
 	Kind ToolEventKind
 	Name string // tool name
 	Args string // raw JSON args string
+}
+
+var toolAliasMap = hash.NewStrRWMap[string]()
+
+// RegisterToolAlias registers alias as an alternative name for the canonical built-in tool name.
+// logToolStart uses this map to log tool args even when the tool was created with a custom name.
+// Tool constructors that support custom names call this automatically when a non-default name is used.
+func RegisterToolAlias(alias, canonical string) {
+	toolAliasMap.Put(alias, canonical)
 }
 
 // withAgentTraceCallback builds a trace callback for the AgentLoop graph.
@@ -222,7 +232,12 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 	}
 	argsJSON := ci.ArgumentsInJSON
 
-	switch ri.Name {
+	name := ri.Name
+	if canonical, ok := toolAliasMap.Get(name); ok {
+		name = canonical
+	}
+
+	switch name {
 	case "read_file":
 		path := extractJSONStringField(argsJSON, "path")
 		offset := extractJSONIntField(argsJSON, "offset")
@@ -291,6 +306,10 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 		} else {
 			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, script: \n%v\n", graphName, inputPath, script)
 		}
+
+	case "dify_retrieval":
+		query := extractJSONStringField(argsJSON, "query")
+		rail.Infof("[%v] Tool/%v — query: %v", graphName, ri.Name, query)
 
 	case "tavily_search":
 		query := extractJSONStringField(argsJSON, "query")
