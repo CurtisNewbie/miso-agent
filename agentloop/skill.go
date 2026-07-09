@@ -1,7 +1,6 @@
 package agentloop
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -122,27 +121,17 @@ func (s *Skill) FormatForPrompt() string {
 // This is used in the system prompt to show available skills without loading full content.
 func (s *Skill) FormatMetadataOnly() string {
 	sb := strutil.NewBuilder()
-
-	annotations := []string{}
+	sb.Println("  <skill>")
+	sb.Printlnf("    <name>%s</name>", s.Metadata.Name)
+	sb.Printlnf("    <description>%s</description>", s.Metadata.Description)
+	sb.Printlnf("    <location>%s</location>", s.Path)
 	if s.Metadata.License != "" {
-		annotations = append(annotations, fmt.Sprintf("License: %s", s.Metadata.License))
+		sb.Printlnf("    <license>%s</license>", s.Metadata.License)
 	}
 	if s.Metadata.Compatible != "" {
-		annotations = append(annotations, fmt.Sprintf("Compatibility: %s", s.Metadata.Compatible))
+		sb.Printlnf("    <compatibility>%s</compatibility>", s.Metadata.Compatible)
 	}
-
-	desc := strings.Join(strings.Fields(s.Metadata.Description), " ")
-	descLine := fmt.Sprintf("- **%s**: %s", s.Metadata.Name, desc)
-	if len(annotations) > 0 {
-		descLine += fmt.Sprintf(" (%s)", strings.Join(annotations, ", "))
-	}
-	sb.Println(descLine)
-
-	if len(s.Metadata.AllowedTools) > 0 {
-		sb.Printlnf("  -> Allowed tools: %s", strings.Join(s.Metadata.AllowedTools, ", "))
-	}
-	sb.Printlnf("  -> Read `%s` for full instructions", s.Path)
-
+	sb.Println("  </skill>")
 	return sb.String()
 }
 
@@ -176,10 +165,11 @@ func (sm SkillsMap) FormatMetadata() string {
 	}
 
 	sb := strutil.NewBuilder()
+	sb.Println("<available_skills>")
 	for _, skill := range sm.List() {
 		sb.WriteString(skill.FormatMetadataOnly())
-		sb.WriteRune('\n')
 	}
+	sb.Println("</available_skills>")
 
 	return sb.String()
 }

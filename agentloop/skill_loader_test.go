@@ -362,14 +362,11 @@ func TestSkillLoader_FormatMetadataOnly(t *testing.T) {
 		if !strings.Contains(result, "Web research skill") {
 			t.Error("result should contain skill description")
 		}
-		if !strings.Contains(result, "License: MIT") {
+		if !strings.Contains(result, "<license>MIT</license>") {
 			t.Error("result should contain license")
 		}
-		if !strings.Contains(result, "Compatibility: v1.0+") {
+		if !strings.Contains(result, "<compatibility>v1.0+</compatibility>") {
 			t.Error("result should contain compatibility")
-		}
-		if !strings.Contains(result, "Allowed tools: search, read") {
-			t.Error("result should contain allowed tools")
 		}
 		if !strings.Contains(result, "/skills/web-research/SKILL.md") {
 			t.Error("result should contain skill path")

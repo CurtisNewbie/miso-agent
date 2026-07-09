@@ -108,20 +108,6 @@ func (pb *PromptBuilder) WithFileOps(enabled bool) *PromptBuilder {
 func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 	sb := strutil.NewBuilder()
 
-	// Add middleware system prompt fragments
-	for _, f := range pb.middlewareFragments {
-		if f != "" {
-			sb.WriteString(wrapTag("instruction", f))
-			sb.WriteString("\n\n")
-		}
-	}
-
-	// Add task prompt if provided
-	if pb.taskPrompt != "" {
-		sb.WriteString(wrapTag("task", pb.taskPrompt))
-		sb.WriteString("\n\n")
-	}
-
 	// Add base prompt
 	sb.WriteString(pb.basePrompt)
 
@@ -150,21 +136,26 @@ func (pb *PromptBuilder) Build(ctx context.Context) (*schema.Message, error) {
 	if pb.skills != nil {
 		skillsMetadata := pb.skills.GetSkills().FormatMetadata()
 		if skillsMetadata != "" {
-			sb.WriteString("\n\n<skills_system>\n\n")
-			sb.WriteString("You have access to a skills library that provides specialized capabilities and domain knowledge.\n\n")
-			sb.WriteString("**Available Skills:**\n\n")
+			sb.WriteString("\n\n<skills_system>\n")
+			sb.WriteString("Skills provide specialized instructions and workflows for specific tasks.\n")
+			sb.WriteString("Use the `read_file` tool to load a skill's full instructions when a task matches its description.\n\n")
 			sb.WriteString(skillsMetadata)
-			sb.WriteString("\n**How to Use Skills (Progressive Disclosure):**\n\n")
-			sb.WriteString("Skills follow a **progressive disclosure** pattern - you see their name and description above, but only read full instructions when needed:\n\n")
-			sb.WriteString("1. **Recognize when a skill applies**: Check if the user's task matches a skill's description\n")
-			sb.WriteString("2. **Read the skill's full instructions**: Use the `read_file` tool with the path shown in the skill list\n")
-			sb.WriteString("3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples\n\n")
-			sb.WriteString("**When to Use Skills:**\n")
-			sb.WriteString("- User's request matches a skill's domain (e.g., \"research X\" -> web-research skill)\n")
-			sb.WriteString("- You need specialized knowledge or structured workflows\n")
-			sb.WriteString("- A skill provides proven patterns for complex tasks\n\n")
-			sb.WriteString("</skills_system>")
+			sb.WriteString("\n</skills_system>")
 		}
+	}
+
+	// Add middleware system prompt fragments
+	for _, f := range pb.middlewareFragments {
+		if f != "" {
+			sb.WriteString("\n\n")
+			sb.WriteString(wrapTag("instruction", f))
+		}
+	}
+
+	// Add task prompt if provided
+	if pb.taskPrompt != "" {
+		sb.WriteString("\n\n")
+		sb.WriteString(strings.TrimSpace(pb.taskPrompt))
 	}
 
 	return schema.SystemMessage(sb.String()), nil
