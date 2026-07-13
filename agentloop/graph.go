@@ -310,6 +310,8 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 					return "", err
 				}
 				if !ok {
+					rail := flow.NewRail(ctx)
+					rail.Infof("[%v] OutputCheck attempt %d rejected, inserting hint: %q", agent.config.Name, attempt, hint)
 					_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
 						state.messages = append(state.messages, schema.UserMessage("Output check failed: "+hint))
 						return nil
