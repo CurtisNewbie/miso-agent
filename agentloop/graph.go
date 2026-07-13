@@ -14,10 +14,11 @@ import (
 )
 
 type agentLoopState struct {
-	taskInput         taskInput
-	messages          []*schema.Message
-	cycleCount        int
-	compactionSummary string
+	taskInput           taskInput
+	messages            []*schema.Message
+	cycleCount          int
+	compactionSummary   string
+	outputCheckAttempts int
 }
 
 // shouldContinueLoop reports whether the agent loop should continue after the given assistant message.
@@ -269,13 +270,23 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		}, nil
 	}), compose.WithNodeName("Final Output"))
 
-	// Branch: continue loop or finish
-	if len(toolInfos) > 0 {
+	// Branch: continue loop, run output check, or finish.
+	// A branch is needed when tools are registered (loop back via "tools") or when
+	// OutputCheck is set (loop back via "chat_model"). Otherwise a plain edge suffices.
+	if len(toolInfos) > 0 || agent.config.OutputCheck != nil {
+		targets := map[string]bool{"final_output": true}
+		if len(toolInfos) > 0 {
+			targets["tools"] = true
+		}
+		if agent.config.OutputCheck != nil {
+			targets["chat_model"] = true
+		}
 		_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
 			shouldContinue := false
+			var lastMsg *schema.Message
 			err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
 				if len(state.messages) > 0 {
-					lastMsg := state.messages[len(state.messages)-1]
+					lastMsg = state.messages[len(state.messages)-1]
 					shouldContinue = shouldContinueLoop(lastMsg)
 				}
 				return nil
@@ -283,11 +294,31 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			if err != nil {
 				return "", err
 			}
-			return resolveBranchTarget(shouldContinue), nil
-		}, map[string]bool{
-			"tools":        true,
-			"final_output": true,
-		}))
+			if shouldContinue {
+				return "tools", nil
+			}
+			if agent.config.OutputCheck != nil && lastMsg != nil {
+				var attempt int
+				_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+					state.outputCheckAttempts++
+					attempt = state.outputCheckAttempts
+					return nil
+				})
+				agentCtx, _ := ctx.Value(agentCtxKey).(AgentContext)
+				hint, ok, err := agent.config.OutputCheck(ctx, agentCtx, attempt, lastMsg.Content)
+				if err != nil {
+					return "", err
+				}
+				if !ok {
+					_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+						state.messages = append(state.messages, schema.UserMessage("Output check failed: "+hint))
+						return nil
+					})
+					return "chat_model", nil
+				}
+			}
+			return "final_output", nil
+		}, targets))
 	} else {
 		_ = g.AddEdge("update_state", "final_output")
 	}

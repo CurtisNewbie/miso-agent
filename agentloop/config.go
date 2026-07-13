@@ -1,12 +1,31 @@
 package agentloop
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"strings"
 
 	"github.com/cloudwego/eino/components/model"
 )
+
+// OutputCheckFunc is a callback invoked on each final assistant response before the agent
+// accepts it as the output.
+//
+// agentCtx provides access to the current execution context (session ID, user input, file store,
+// todos, artifacts, metadata), enabling checks that inspect or update agent state.
+//
+// attempt is the 1-based invocation count for the current execution, so the callback can
+// apply different logic on the first check versus subsequent retries (e.g. give up after N attempts).
+//
+// Return values:
+//   - ok=true: output is accepted; agent proceeds to final_output.
+//   - ok=false: output is rejected; hint is inserted as a user message and the agent retries.
+//   - err!=nil: unexpected failure (e.g. network error); the agent aborts immediately.
+//
+// OutputCheckFunc may be used for any per-response validation: output format compliance,
+// quality assessment, security screening, and so on.
+type OutputCheckFunc func(ctx context.Context, agentCtx AgentContext, attempt int, output string) (hint string, ok bool, err error)
 
 // AgentConfig is the configuration for creating an agent.
 type AgentConfig struct {
@@ -149,6 +168,15 @@ type AgentConfig struct {
 	// SystemPromptFragment, and Tools; and composed into chains for WrapModelCall
 	// and WrapToolCall. Middleware cannot be registered after NewAgent() returns.
 	Middleware []Middleware
+
+	// OutputCheck is an optional callback invoked on each plain-text (non-tool-call) assistant
+	// response before the agent accepts it as the final output. If OutputCheck returns a non-nil
+	// error, its message is inserted into the conversation as a user message and the chat model
+	// is called again so it can self-correct.
+	//
+	// OutputCheck can be used for output format validation, quality checks, security screening,
+	// or any other per-response review. If nil, no check is performed.
+	OutputCheck OutputCheckFunc
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.
