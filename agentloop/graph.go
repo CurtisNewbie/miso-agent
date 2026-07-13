@@ -231,6 +231,16 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		_ = g.AddEdge("tools", "chat_model")
 	}
 
+	// output_check_retry bridges update_state (*schema.Message) back to chat_model ([]*schema.Message)
+	// after an OutputCheck rejection. The hint is already in state.messages via ProcessState;
+	// returning an empty slice causes modelPreHandle to pass the full history unchanged.
+	if agent.config.OutputCheck != nil {
+		_ = g.AddLambdaNode("output_check_retry", compose.InvokableLambda(func(ctx context.Context, _ *schema.Message) ([]*schema.Message, error) {
+			return []*schema.Message{}, nil
+		}), compose.WithNodeName("Output Check Retry"))
+		_ = g.AddEdge("output_check_retry", "chat_model")
+	}
+
 	// Final output node
 	_ = g.AddLambdaNode("final_output", compose.InvokableLambda(func(ctx context.Context, input any) (taskOutput, error) {
 		var lastMessage *schema.Message
@@ -279,7 +289,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			targets["tools"] = true
 		}
 		if agent.config.OutputCheck != nil {
-			targets["chat_model"] = true
+			targets["output_check_retry"] = true
 		}
 		_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
 			shouldContinue := false
@@ -311,12 +321,12 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 				}
 				if !ok {
 					rail := flow.NewRail(ctx)
-					rail.Infof("[%v] OutputCheck attempt %d rejected, inserting hint: %q", agent.config.Name, attempt, hint)
+					rail.Infof("[%v] OutputCheck attempt %d rejected, inserting hint: %v", agent.config.Name, attempt, hint)
 					_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
 						state.messages = append(state.messages, schema.UserMessage("Output check failed: "+hint))
 						return nil
 					})
-					return "chat_model", nil
+					return "output_check_retry", nil
 				}
 			}
 			return "final_output", nil

@@ -90,8 +90,9 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 	}
 
 	// Convert MaxRunSteps (rounds) to Eino graph steps.
-	// Each round ≈ 4 graph steps; multiply by 5 to include a safety margin.
-	maxGraphSteps := config.MaxRunSteps * 5
+	// The graph has at most 6 nodes: prepare_messages, chat_model, update_state,
+	// tools, output_check_retry, final_output; multiply by 6 to derive the budget.
+	maxGraphSteps := config.MaxRunSteps * 6
 
 	// Build ops from individual config fields
 	ops := agentOps{

@@ -42,8 +42,8 @@ type AgentConfig struct {
 	Model model.ToolCallingChatModel
 
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
-	// Each round corresponds to one tool-calling iteration; the value is multiplied by 5 internally
-	// to derive the actual Eino graph step budget (1 round ≈ 4 graph steps, ×5 includes a safety margin).
+	// Internally it is multiplied by the number of nodes in the compiled graph to derive the Eino
+	// step budget (each node may execute at most MaxRunSteps times).
 	// If 0 or negative, defaults to 5.
 	MaxRunSteps int
 
