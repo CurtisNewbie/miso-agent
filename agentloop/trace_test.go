@@ -60,7 +60,7 @@ func TestBuildTraceHandler_ToolEventCallback(t *testing.T) {
 				},
 			}
 
-			handler := buildTraceHandler("test-agent", ops, nil)
+			handler := buildTraceHandler("test-agent", ops, nil, nil)
 			handler.OnStart(context.Background(), tt.runInfo, tt.input)
 
 			if len(received) != tt.wantEventCount {
@@ -97,7 +97,7 @@ func TestBuildTraceHandler_ToolResultEvent(t *testing.T) {
 				received = append(received, event)
 			},
 		}
-		handler := buildTraceHandler("test-agent", ops, nil)
+		handler := buildTraceHandler("test-agent", ops, nil, nil)
 
 		// simulate OnStart storing args in ctx
 		ctx := handler.OnStart(context.Background(), toolRunInfo, &einotool.CallbackInput{ArgumentsInJSON: `{"path":"/foo.txt"}`})
@@ -129,7 +129,7 @@ func TestBuildTraceHandler_ToolResultEvent(t *testing.T) {
 				received = append(received, event)
 			},
 		}
-		handler := buildTraceHandler("test-agent", ops, nil)
+		handler := buildTraceHandler("test-agent", ops, nil, nil)
 		handler.OnEnd(context.Background(), toolRunInfo, nil)
 
 		if len(received) != 1 {

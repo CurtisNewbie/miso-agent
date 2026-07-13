@@ -331,20 +331,22 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		}
 	}
 
-	// Execute graph with agent-specific trace callback (always registered to collect token usage)
+	// Execute graph with agent-specific trace callback (always registered to collect token usage and trace)
 	acc := &tokenAccumulator{}
+	traceAcc := &traceAccumulator{}
 	rail = rail.WithCtxVal(tokenAccCtxKey, acc)
-	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc)}
+	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc, traceAcc)}
 	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
+	result.TokenUsage = acc.snapshot()
+	result.TraceLogs = traceAcc.snapshot()
 	if err != nil {
 		for _, m := range a.middleware {
 			if afterErr := m.AfterAgent(agentCtxVal, nil, err); afterErr != nil {
 				rail.Errorf("middleware %q AfterAgent error: %v", m.Name(), afterErr)
 			}
 		}
-		return TaskOutput{}, errs.Wrapf(err, "failed to execute graph")
+		return result, errs.Wrapf(err, "failed to execute graph")
 	}
-	result.TokenUsage = acc.snapshot()
 	tu := result.TokenUsage
 	if tu.PromptTokens > 0 {
 		msg := fmt.Sprintf("[%v] total — in: %v tokens, out: %v tokens", a.config.Name, tu.PromptTokens, tu.CompletionTokens)

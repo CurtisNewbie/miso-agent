@@ -52,6 +52,53 @@ func (a *tokenAccumulator) snapshot() TokenUsage {
 	}
 }
 
+// TraceEntry records the input and output of a single node execution in the agent graph.
+type TraceEntry struct {
+	Node      string          `json:"node"`
+	Component string          `json:"component"`
+	Input     json.RawMessage `json:"input,omitempty"`
+	Output    json.RawMessage `json:"output,omitempty"`
+}
+
+// traceAccumulator collects TraceEntry records across all node executions in one agent run.
+type traceAccumulator struct {
+	mu      sync.Mutex
+	entries []TraceEntry
+}
+
+func (a *traceAccumulator) appendEntry(entry TraceEntry) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	idx := len(a.entries)
+	a.entries = append(a.entries, entry)
+	return idx
+}
+
+func (a *traceAccumulator) setOutput(idx int, output json.RawMessage) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if idx >= 0 && idx < len(a.entries) {
+		a.entries[idx].Output = output
+	}
+}
+
+func (a *traceAccumulator) snapshot() []TraceEntry {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.entries) == 0 {
+		return nil
+	}
+	cp := make([]TraceEntry, len(a.entries))
+	copy(cp, a.entries)
+	return cp
+}
+
+// traceEntryIdxCtxKeyType is the context key type used to pass the pending TraceEntry
+// index from OnStartFn to OnEndFn within the same Eino callback invocation chain.
+type traceEntryIdxCtxKeyType struct{}
+
+var traceEntryIdxCtxKey = traceEntryIdxCtxKeyType{}
+
 // ToolEvent is emitted during agent execution for each tool invocation.
 // If ToolEventCallback is set in AgentConfig, it is called synchronously for each event.
 type ToolEvent struct {
@@ -73,14 +120,18 @@ func RegisterToolAlias(alias, canonical string) {
 // It extends the generic graph.WithTraceCallback with tool-specific logging:
 // file paths for read/write/edit/list_directory/add_artifact, glob patterns,
 // and todo item details for add_todo/update_todo/delete_todo.
-func withAgentTraceCallback(name string, ops agentOps, acc *tokenAccumulator) compose.Option {
-	return compose.WithCallbacks(buildTraceHandler(name, ops, acc))
+func withAgentTraceCallback(name string, ops agentOps, acc *tokenAccumulator, traceAcc *traceAccumulator) compose.Option {
+	return compose.WithCallbacks(buildTraceHandler(name, ops, acc, traceAcc))
 }
 
-func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbacks.Handler {
+func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAcc *traceAccumulator) callbacks.Handler {
 	b := callbacks.NewHandlerBuilder()
-	if ops.logOnStart || ops.toolEventCallback != nil {
+	if ops.logOnStart || ops.toolEventCallback != nil || traceAcc != nil {
 		b = b.OnStartFn(func(ctx context.Context, ri *callbacks.RunInfo, in callbacks.CallbackInput) context.Context {
+			// Skip inner component-level ChatModel callbacks; node-level fires separately.
+			if ri.Component == "ChatModel" && ri.Name == "" {
+				return ctx
+			}
 			rail := flow.NewRail(ctx)
 			if ri.Component == "Tool" {
 				if ops.logOnStart {
@@ -97,31 +148,40 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 						Name: ri.Name,
 						Args: args,
 					})
-					return context.WithValue(ctx, toolArgsCtxKey, args)
+					ctx = context.WithValue(ctx, toolArgsCtxKey, args)
 				}
 			} else if ri.Component == "ChatModel" {
-				if ri.Name == "" {
-					// skip inner component-level callback; node-level fires separately
-					return ctx
+				if ops.logOnStart {
+					if ops.logInputs {
+						logChatModelInput(rail, name, ri, in)
+					} else {
+						rail.Infof("[%v] %v/%v start", name, ri.Component, ri.Name)
+					}
 				}
-				if ops.logInputs {
-					logChatModelInput(rail, name, ri, in)
-				} else {
-					rail.Infof("[%v] %v/%v start", name, ri.Component, ri.Name)
-				}
-
-			} else {
+			} else if ops.logOnStart {
 				if ops.logInputs {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
 				} else {
 					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v", name, ri.Name, ri.Type, ri.Component)
 				}
 			}
+			if traceAcc != nil {
+				idx := traceAcc.appendEntry(TraceEntry{
+					Node:      ri.Name,
+					Component: string(ri.Component),
+					Input:     marshalCallbackInput(in),
+				})
+				ctx = context.WithValue(ctx, traceEntryIdxCtxKey, idx)
+			}
 			return ctx
 		})
 	}
-	if ops.toolEventCallback != nil || ops.logOnEnd || acc != nil {
+	if ops.toolEventCallback != nil || ops.logOnEnd || acc != nil || traceAcc != nil {
 		b = b.OnEndFn(func(ctx context.Context, ri *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
+			// Skip inner component-level ChatModel callbacks; node-level fires separately.
+			if ri.Component == "ChatModel" && ri.Name == "" {
+				return ctx
+			}
 			if ops.toolEventCallback != nil && ri.Component == "Tool" {
 				args, _ := ctx.Value(toolArgsCtxKey).(string)
 				ops.toolEventCallback(ToolEvent{
@@ -131,10 +191,6 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 				})
 			}
 			if ri.Component == "ChatModel" {
-				if ri.Name == "" {
-					// skip inner component-level callback; node-level fires separately
-					return ctx
-				}
 				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
 				if ok && acc != nil {
 					acc.add(inToken, outToken, cachedToken)
@@ -166,6 +222,11 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator) callbac
 							rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, msg.ReasoningContent)
 						}
 					}
+				}
+			}
+			if traceAcc != nil {
+				if idx, ok := ctx.Value(traceEntryIdxCtxKey).(int); ok {
+					traceAcc.setOutput(idx, marshalCallbackOutput(output))
 				}
 			}
 			return ctx
@@ -460,4 +521,24 @@ func agentExtractMessage(in callbacks.CallbackOutput) *schema.Message {
 		return m
 	}
 	return nil
+}
+
+// marshalCallbackInput marshals a callback input to JSON for trace recording.
+// Returns json.RawMessage("null") on marshal failure.
+func marshalCallbackInput(in callbacks.CallbackInput) json.RawMessage {
+	b, err := json.Marshal(in)
+	if err != nil {
+		return json.RawMessage("null")
+	}
+	return json.RawMessage(b)
+}
+
+// marshalCallbackOutput marshals a callback output to JSON for trace recording.
+// Returns json.RawMessage("null") on marshal failure.
+func marshalCallbackOutput(out callbacks.CallbackOutput) json.RawMessage {
+	b, err := json.Marshal(out)
+	if err != nil {
+		return json.RawMessage("null")
+	}
+	return json.RawMessage(b)
 }

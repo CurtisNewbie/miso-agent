@@ -56,6 +56,7 @@ type TaskOutput struct {
 	Artifacts  []Artifact     // Artifacts collected during execution
 	Metadata   map[string]any // Snapshot of MetadataStore at end of execution
 	TokenUsage TokenUsage     // Aggregate token usage across all LLM calls
+	TraceLogs  []TraceEntry   // Per-node execution trace (input/output for each graph node); populated even on error. ChatModel entries include the full message history per call, so size grows with each ReAct cycle.
 }
 
 // taskOutput is the internal output type used by the graph
