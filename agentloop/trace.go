@@ -200,7 +200,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 					rail.Infof("Graph exec %v [%v] start, name: %v, type: %v, component: %v", name, step, ri.Name, ri.Type, ri.Component)
 				}
 			}
-			if traceAcc != nil {
+			if traceAcc != nil && ri.Name != "prepare_messages" && ri.Name != "update_state" && ri.Name != "final_output" {
 				idx := traceAcc.appendEntry(TraceEntry{
 					Node:      ri.Name,
 					Component: string(ri.Component),
