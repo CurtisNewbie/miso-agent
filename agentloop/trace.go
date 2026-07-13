@@ -32,6 +32,7 @@ type tokenAccumulator struct {
 	promptTokens     int
 	completionTokens int
 	cachedTokens     int
+	step             int
 }
 
 func (a *tokenAccumulator) add(prompt, completion, cached int) {
@@ -42,6 +43,19 @@ func (a *tokenAccumulator) add(prompt, completion, cached int) {
 	a.mu.Unlock()
 }
 
+func (a *tokenAccumulator) incStep() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.step++
+	return a.step
+}
+
+func (a *tokenAccumulator) getStep() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.step
+}
+
 func (a *tokenAccumulator) snapshot() TokenUsage {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -50,6 +64,22 @@ func (a *tokenAccumulator) snapshot() TokenUsage {
 		CompletionTokens: a.completionTokens,
 		CachedTokens:     a.cachedTokens,
 	}
+}
+
+// accStep returns the current step from acc, or 0 if acc is nil.
+func accStep(acc *tokenAccumulator) int {
+	if acc == nil {
+		return 0
+	}
+	return acc.getStep()
+}
+
+// accIncStep increments and returns the step from acc, or 0 if acc is nil.
+func accIncStep(acc *tokenAccumulator) int {
+	if acc == nil {
+		return 0
+	}
+	return acc.incStep()
 }
 
 // TraceEntry records the input and output of a single node execution in the agent graph.
@@ -135,7 +165,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 			rail := flow.NewRail(ctx)
 			if ri.Component == "Tool" {
 				if ops.logOnStart {
-					logToolStart(rail, name, ri, in)
+					logToolStart(rail, name, ri, in, accStep(acc))
 				}
 				if ops.toolEventCallback != nil {
 					ci := einotool.ConvCallbackInput(in)
@@ -152,17 +182,22 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 				}
 			} else if ri.Component == "ChatModel" {
 				if ops.logOnStart {
+					step := accIncStep(acc)
 					if ops.logInputs {
-						logChatModelInput(rail, name, ri, in)
+						logChatModelInput(rail, name, ri, in, step)
 					} else {
-						rail.Infof("[%v] %v/%v start", name, ri.Component, ri.Name)
+						rail.Infof("[%v] [%v] %v/%v start", name, step, ri.Component, ri.Name)
 					}
+				} else {
+					// Increment even when not logging so OnEndFn and tool logs see the correct step number.
+					accIncStep(acc)
 				}
 			} else if ops.logOnStart {
+				step := accStep(acc)
 				if ops.logInputs {
-					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v, input: %v", name, ri.Name, ri.Type, ri.Component, in)
+					rail.Infof("Graph exec %v [%v] start, name: %v, type: %v, component: %v, input: %v", name, step, ri.Name, ri.Type, ri.Component, in)
 				} else {
-					rail.Infof("Graph exec %v start, name: %v, type: %v, component: %v", name, ri.Name, ri.Type, ri.Component)
+					rail.Infof("Graph exec %v [%v] start, name: %v, type: %v, component: %v", name, step, ri.Name, ri.Type, ri.Component)
 				}
 			}
 			if traceAcc != nil {
@@ -198,7 +233,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 				{
 					rail := flow.NewRail(ctx)
 					if ok {
-						msg := fmt.Sprintf("[%v] %v/%v — in: %v tokens", name, ri.Component, ri.Name, inToken)
+						msg := fmt.Sprintf("[%v] [%v] %v/%v — in: %v tokens", name, accStep(acc), ri.Component, ri.Name, inToken)
 						if ops.maxTokens > 0 {
 							msg += fmt.Sprintf(" (ctx: %.1f%%, max: %v)", float64(inToken)*100.0/float64(ops.maxTokens), ops.maxTokens)
 						}
@@ -208,7 +243,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 						}
 						rail.Infof("%s", msg)
 					} else {
-						rail.Infof("[%v] %v/%v done", name, ri.Component, ri.Name)
+						rail.Infof("[%v] [%v] %v/%v done", name, accStep(acc), ri.Component, ri.Name)
 					}
 				}
 				if ops.logOnEnd && ops.logOutputs {
@@ -216,10 +251,10 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 					if msg != nil {
 						rail := flow.NewRail(ctx)
 						if msg.Content != "" {
-							rail.Infof("[%v] %v/%v output: %v", name, ri.Component, ri.Name, msg.Content)
+							rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, msg.Content)
 						}
 						if msg.ReasoningContent != "" {
-							rail.Infof("[%v] %v/%v reasoning:\n%v", name, ri.Component, ri.Name, msg.ReasoningContent)
+							rail.Infof("[%v] [%v] %v/%v reasoning:\n%v", name, accStep(acc), ri.Component, ri.Name, msg.ReasoningContent)
 						}
 					}
 				}
@@ -238,14 +273,14 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 // logChatModelInput logs each input message sent to the ChatModel.
 // Tool-call-only messages (empty content) are summarized as "<tool_calls: name1, name2>".
 // Tool result messages (role=tool) are trimmed to first/last 30 runes with total length.
-func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in callbacks.CallbackInput) {
+func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in callbacks.CallbackInput, step int) {
 	ci := model.ConvCallbackInput(in)
 	if ci == nil {
-		rail.Infof("[%v] %v/%v start", graphName, ri.Component, ri.Name)
+		rail.Infof("[%v] [%v] %v/%v start", graphName, step, ri.Component, ri.Name)
 		return
 	}
 	if len(ci.Messages) == 0 {
-		rail.Infof("[%v] %v/%v start (no messages)", graphName, ri.Component, ri.Name)
+		rail.Infof("[%v] [%v] %v/%v start (no messages)", graphName, step, ri.Component, ri.Name)
 		return
 	}
 	parts := make([]string, 0, len(ci.Messages))
@@ -268,7 +303,7 @@ func logChatModelInput(rail flow.Rail, graphName string, ri *callbacks.RunInfo, 
 		}
 		parts = append(parts, fmt.Sprintf("<%v>\n%v\n</%v>", msg.Role, content, msg.Role))
 	}
-	rail.Infof("[%v] %v/%v inputs:\n%v", graphName, ri.Component, ri.Name, strings.Join(parts, "\n"))
+	rail.Infof("[%v] [%v] %v/%v inputs:\n%v", graphName, step, ri.Component, ri.Name, strings.Join(parts, "\n"))
 }
 
 // trimLogContent trims s to at most head+tail runes, inserting a middle summary.
@@ -285,10 +320,10 @@ func trimLogContent(s string, n int) string {
 }
 
 // logToolStart logs tool-specific details for known builtin tools.
-func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in callbacks.CallbackInput) {
+func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in callbacks.CallbackInput, step int) {
 	ci := einotool.ConvCallbackInput(in)
 	if ci == nil {
-		rail.Infof("[%v] Tool/%v called", graphName, ri.Name)
+		rail.Infof("[%v] [%v] Tool/%v called", graphName, step, ri.Name)
 		return
 	}
 	argsJSON := ci.ArgumentsInJSON
@@ -305,78 +340,78 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 		limit := extractJSONIntField(argsJSON, "limit")
 		switch {
 		case offset > 0 && limit > 0:
-			rail.Infof("[%v] Tool/read_file — path: %v, offset: %v, limit: %v", graphName, path, offset, limit)
+			rail.Infof("[%v] [%v] Tool/read_file — path: %v, offset: %v, limit: %v", graphName, step, path, offset, limit)
 		case offset > 0:
-			rail.Infof("[%v] Tool/read_file — path: %v, offset: %v", graphName, path, offset)
+			rail.Infof("[%v] [%v] Tool/read_file — path: %v, offset: %v", graphName, step, path, offset)
 		case limit > 0:
-			rail.Infof("[%v] Tool/read_file — path: %v, limit: %v", graphName, path, limit)
+			rail.Infof("[%v] [%v] Tool/read_file — path: %v, limit: %v", graphName, step, path, limit)
 		default:
-			rail.Infof("[%v] Tool/read_file — path: %v", graphName, path)
+			rail.Infof("[%v] [%v] Tool/read_file — path: %v", graphName, step, path)
 		}
 
 	case "write_file":
 		path := extractJSONStringField(argsJSON, "path")
 		contentLen := extractJSONStringLen(argsJSON, "content")
-		rail.Infof("[%v] Tool/write_file — path: %v, content_len: %v", graphName, path, contentLen)
+		rail.Infof("[%v] [%v] Tool/write_file — path: %v, content_len: %v", graphName, step, path, contentLen)
 
 	case "edit_file":
 		path := extractJSONStringField(argsJSON, "path")
 		replaceAll := extractJSONBoolField(argsJSON, "replace_all")
 		if replaceAll {
-			rail.Infof("[%v] Tool/edit_file — path: %v, replace_all: true", graphName, path)
+			rail.Infof("[%v] [%v] Tool/edit_file — path: %v, replace_all: true", graphName, step, path)
 		} else {
-			rail.Infof("[%v] Tool/edit_file — path: %v", graphName, path)
+			rail.Infof("[%v] [%v] Tool/edit_file — path: %v", graphName, step, path)
 		}
 
 	case "list_directory", "add_artifact":
 		path := extractJSONStringField(argsJSON, "path")
-		rail.Infof("[%v] Tool/%v — path: %v", graphName, ri.Name, path)
+		rail.Infof("[%v] [%v] Tool/%v — path: %v", graphName, step, ri.Name, path)
 
 	case "glob":
 		pattern := extractJSONStringField(argsJSON, "pattern")
-		rail.Infof("[%v] Tool/glob — pattern: %v", graphName, pattern)
+		rail.Infof("[%v] [%v] Tool/glob — pattern: %v", graphName, step, pattern)
 
 	case "add_todo":
 		tasks := extractTodoTasks(argsJSON)
-		rail.Infof("[%v] Tool/add_todo — todos: [%v]", graphName, strings.Join(tasks, ", "))
+		rail.Infof("[%v] [%v] Tool/add_todo — todos: [%v]", graphName, step, strings.Join(tasks, ", "))
 
 	case "update_todo":
 		id := extractJSONStringField(argsJSON, "id")
 		status := extractJSONStringField(argsJSON, "status")
-		rail.Infof("[%v] Tool/update_todo — id: %v, status: %v", graphName, id, status)
+		rail.Infof("[%v] [%v] Tool/update_todo — id: %v, status: %v", graphName, step, id, status)
 
 	case "delete_todo":
 		ids := extractJSONStringSliceField(argsJSON, "ids")
-		rail.Infof("[%v] Tool/delete_todo — ids: [%v]", graphName, strings.Join(ids, ", "))
+		rail.Infof("[%v] [%v] Tool/delete_todo — ids: [%v]", graphName, step, strings.Join(ids, ", "))
 
 	case "task":
 		agentName := extractJSONStringField(argsJSON, "agent_name")
 		task := trimLogContent(extractJSONStringField(argsJSON, "task"), 80)
-		rail.Infof("[%v] Tool/task — agent: %v, task: %v", graphName, agentName, task)
+		rail.Infof("[%v] [%v] Tool/task — agent: %v, task: %v", graphName, step, agentName, task)
 
 	case "think_tool":
 		reflection := extractJSONStringField(argsJSON, "reflection")
-		rail.Infof("[%v] Tool/think_tool — reflection: %v", graphName, reflection)
+		rail.Infof("[%v] [%v] Tool/think_tool — reflection: %v", graphName, step, reflection)
 
 	case "transform_csv_lua":
 		inputPath := extractJSONStringField(argsJSON, "input_path")
 		script := extractJSONStringField(argsJSON, "script")
 		outputPath := extractJSONStringField(argsJSON, "output_path")
 		if outputPath != "" {
-			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, output_path: %v, script: \n%v\n", graphName, inputPath, outputPath, script)
+			rail.Infof("[%v] [%v] Tool/transform_csv_lua — input_path: %v, output_path: %v, script: \n%v\n", graphName, step, inputPath, outputPath, script)
 		} else {
-			rail.Infof("[%v] Tool/transform_csv_lua — input_path: %v, script: \n%v\n", graphName, inputPath, script)
+			rail.Infof("[%v] [%v] Tool/transform_csv_lua — input_path: %v, script: \n%v\n", graphName, step, inputPath, script)
 		}
 
 	case "dify_retrieval":
 		query := extractJSONStringField(argsJSON, "query")
-		rail.Infof("[%v] Tool/%v — query: %v", graphName, ri.Name, query)
+		rail.Infof("[%v] [%v] Tool/%v — query: %v", graphName, step, ri.Name, query)
 
 	case "tavily_search":
 		query := extractJSONStringField(argsJSON, "query")
 		timeRange := extractJSONStringField(argsJSON, "time_range")
 		topic := extractJSONStringField(argsJSON, "topic")
-		msg := fmt.Sprintf("[%v] Tool/tavily_search — query: %v", graphName, query)
+		msg := fmt.Sprintf("[%v] [%v] Tool/tavily_search — query: %v", graphName, step, query)
 		if timeRange != "" {
 			msg += fmt.Sprintf(", time_range: %v", timeRange)
 		}
@@ -388,14 +423,14 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 	case "tavily_extract":
 		urls := extractJSONStringSliceField(argsJSON, "urls")
 		query := extractJSONStringField(argsJSON, "query")
-		msg := fmt.Sprintf("[%v] Tool/tavily_extract — urls: [%v]", graphName, strings.Join(urls, ", "))
+		msg := fmt.Sprintf("[%v] [%v] Tool/tavily_extract — urls: [%v]", graphName, step, strings.Join(urls, ", "))
 		if query != "" {
 			msg += fmt.Sprintf(", query: %v", query)
 		}
 		rail.Infof("%s", msg)
 
 	default:
-		rail.Infof("[%v] Tool/%v called", graphName, ri.Name)
+		rail.Infof("[%v] [%v] Tool/%v called", graphName, step, ri.Name)
 	}
 }
 
