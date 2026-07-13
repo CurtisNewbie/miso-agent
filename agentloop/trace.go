@@ -146,6 +146,16 @@ func RegisterToolAlias(alias, canonical string) {
 	toolAliasMap.Put(alias, canonical)
 }
 
+// Graph node display names as set by compose.WithNodeName in buildGraph.
+// These match the ri.Name values seen in Eino callbacks.
+const (
+	nodeNamePrepareMessages  = "Prepare Messages"
+	nodeNameChatModel        = "Chat Model"
+	nodeNameUpdateState      = "Update State"
+	nodeNameOutputCheckRetry = "Output Check Retry"
+	nodeNameFinalOutput      = "Final Output"
+)
+
 // withAgentTraceCallback builds a trace callback for the AgentLoop graph.
 // It extends the generic graph.WithTraceCallback with tool-specific logging:
 // file paths for read/write/edit/list_directory/add_artifact, glob patterns,
@@ -200,7 +210,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 					rail.Infof("Graph exec %v [%v] start, name: %v, type: %v, component: %v", name, step, ri.Name, ri.Type, ri.Component)
 				}
 			}
-			if traceAcc != nil && ri.Component != "Graph" && ri.Name != "prepare_messages" && ri.Name != "update_state" && ri.Name != "final_output" {
+			if traceAcc != nil && ri.Component != "Graph" && ri.Name != nodeNamePrepareMessages && ri.Name != nodeNameUpdateState && ri.Name != nodeNameFinalOutput {
 				idx := traceAcc.appendEntry(TraceEntry{
 					Node:      ri.Name,
 					Component: string(ri.Component),

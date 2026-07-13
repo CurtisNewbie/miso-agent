@@ -118,7 +118,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		})
 
 		return []*schema.Message{systemMsg, userMsg}, nil
-	}), compose.WithNodeName("Prepare Messages"))
+	}), compose.WithNodeName(nodeNamePrepareMessages))
 
 	// Chat model node - uses StatePreHandler to manage message accumulation
 	toolInfos := agent.tools.ToEinoToolsWithChain(agent.middleware)
@@ -206,7 +206,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 	_ = g.AddChatModelNode("chat_model", chatModel,
 		compose.WithStatePreHandler(modelPreHandle),
-		compose.WithNodeName("Chat Model"))
+		compose.WithNodeName(nodeNameChatModel))
 
 	// Update state node - append assistant message from chat_model to state
 	_ = g.AddLambdaNode("update_state", compose.InvokableLambda(func(ctx context.Context, input *schema.Message) (*schema.Message, error) {
@@ -218,7 +218,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			return nil, err
 		}
 		return input, nil
-	}), compose.WithNodeName("Update State"))
+	}), compose.WithNodeName(nodeNameUpdateState))
 
 	if len(toolInfos) > 0 {
 		toolNode, err := compose.NewToolNode(context.Background(), &compose.ToolsNodeConfig{
@@ -238,7 +238,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	if agent.config.OutputCheck != nil {
 		_ = g.AddLambdaNode("output_check_retry", compose.InvokableLambda(func(ctx context.Context, _ *schema.Message) ([]*schema.Message, error) {
 			return []*schema.Message{}, nil
-		}), compose.WithNodeName("Output Check Retry"))
+		}), compose.WithNodeName(nodeNameOutputCheckRetry))
 		_ = g.AddEdge("output_check_retry", "chat_model")
 	}
 
@@ -279,7 +279,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			Artifacts: artifacts,
 			Metadata:  metadata,
 		}, nil
-	}), compose.WithNodeName("Final Output"))
+	}), compose.WithNodeName(nodeNameFinalOutput))
 
 	// Branch: continue loop, run output check, or finish.
 	// A branch is needed when tools are registered (loop back via "tools") or when
