@@ -177,6 +177,12 @@ type AgentConfig struct {
 	// OutputCheck can be used for output format validation, quality checks, security screening,
 	// or any other per-response review. If nil, no check is performed.
 	OutputCheck OutputCheckFunc
+
+	// EnableTrace enables per-node execution tracing. When true, each graph node's input and
+	// output are JSON-marshaled and collected in TaskOutput.TraceLogs. ChatModel entries include
+	// the full message history per call, so TraceLogs can grow large on long multi-turn runs.
+	// If nil, defaults to false.
+	EnableTrace *bool
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.

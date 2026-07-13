@@ -35,6 +35,7 @@ type agentOps struct {
 	enableFileTool               bool
 	enableTodoTool               bool
 	enableToolOffload            bool
+	enableTrace                  bool
 }
 
 type ctxKey int
@@ -105,6 +106,7 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		toolEventCallback:           config.ToolEventCallback,
 		compaction:                  boolOrDefault(config.Compaction, false),
 		compactPreserveRecentTokens: config.CompactPreserveRecentTokens,
+		enableTrace:                 boolOrDefault(config.EnableTrace, false),
 	}
 
 	// Auto-detect MaxTokens from model name if not explicitly set.
@@ -331,14 +333,19 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		}
 	}
 
-	// Execute graph with agent-specific trace callback (always registered to collect token usage and trace)
+	// Execute graph with agent-specific trace callback (always registered to collect token usage)
 	acc := &tokenAccumulator{}
-	traceAcc := &traceAccumulator{}
+	var traceAcc *traceAccumulator
+	if a.ops.enableTrace {
+		traceAcc = &traceAccumulator{}
+	}
 	rail = rail.WithCtxVal(tokenAccCtxKey, acc)
 	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc, traceAcc)}
 	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
 	result.TokenUsage = acc.snapshot()
-	result.TraceLogs = traceAcc.snapshot()
+	if traceAcc != nil {
+		result.TraceLogs = traceAcc.snapshot()
+	}
 	if err != nil {
 		for _, m := range a.middleware {
 			if afterErr := m.AfterAgent(agentCtxVal, nil, err); afterErr != nil {
