@@ -131,6 +131,21 @@ func NewTavilySearchTool(apiKey string, maxResults int, opts ...TavilySearchOpti
 	)
 }
 
+// NewTavilySocialMediaSearchTool creates an agentloop Tool that searches Facebook and X (Twitter)
+// via Tavily with IncludeDomains pre-set to ["facebook.com", "x.com"].
+// The tool is exposed to the LLM as "search_social_media".
+// Additional opts (e.g., WithSearchOption for date ranges) are applied after the domain restriction.
+func NewTavilySocialMediaSearchTool(apiKey string, maxResults int, opts ...TavilySearchOption) agentloop.Tool {
+	base := []TavilySearchOption{
+		WithToolName("search_social_media"),
+		WithToolDescription("Search social media platforms (TikTok, Facebook, Instagram, Reddit, LinkedIn, X/Twitter) for posts, announcements, and discussions related to the query."),
+		WithSearchOption(func(sr *search.SearchReq) {
+			sr.IncludeDomains = []string{"tiktok.com", "facebook.com", "instagram.com", "reddit.com", "linkedin.com", "x.com"}
+		}),
+	}
+	return NewTavilySearchTool(apiKey, maxResults, append(base, opts...)...)
+}
+
 // formatSearchResp formats a SearchResp into a plain-text string suitable for
 // consumption by an LLM.
 func formatSearchResp(resp search.SearchResp) string {
