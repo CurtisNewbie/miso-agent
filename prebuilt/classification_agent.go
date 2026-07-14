@@ -106,6 +106,7 @@ func NewClassificationAgent(chatModel model.ToolCallingChatModel, opts ...Classi
 		MaxRunSteps:  30,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,
+		OutputCheck:  agentloop.JsonOutputCheck[ClassificationOutput](2),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create ClassificationAgent")
