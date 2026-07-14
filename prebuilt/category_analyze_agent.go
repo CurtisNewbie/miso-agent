@@ -89,6 +89,7 @@ func NewCategoryAnalyzeAgent(chatModel model.ToolCallingChatModel, opts ...Categ
 		MaxRunSteps:  30,
 		Language:     cfg.Language,
 		SystemPrompt: categoryAnalyzeSystemPrompt,
+		OutputCheck:  agentloop.JsonOutputCheck[CategoryAnalysisResult](2),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create CategoryAnalyzeAgent")
