@@ -252,7 +252,7 @@ func (b *TmpFileStore) DeleteFile(ctx context.Context, path string) error {
 // normalizeMemPath normalizes a path to use forward slashes and remove leading/trailing slashes.
 func normalizeMemPath(path string) string {
 	path = filepath.ToSlash(path)
-	path = strings.Trim(path, "/")
+	path = strings.TrimRight(path, "/")
 	if path == "" {
 		return "."
 	}

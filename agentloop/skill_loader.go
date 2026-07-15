@@ -99,10 +99,11 @@ func (l *SkillLoader) LoadSkillFile(ctx context.Context, path string) (*Skill, e
 	return skill, nil
 }
 
-// normalizePath normalizes a path to use forward slashes and remove leading/trailing slashes.
+// normalizePath normalizes a path to use forward slashes and remove trailing slashes.
+// Leading slashes are preserved so callers can pass absolute store paths (e.g. "/skills/foo").
 func normalizePath(path string) string {
 	path = filepath.ToSlash(path)
-	path = strings.Trim(path, "/")
+	path = strings.TrimRight(path, "/")
 	if path == "" {
 		return "."
 	}
