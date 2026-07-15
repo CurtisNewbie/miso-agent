@@ -274,37 +274,11 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		}()
 	}
 
-	// Preload backend files if callback provided (runs after session start, before skills are loaded)
+	// Preload backend files if callback provided (runs after session start)
 	if req.PreloadBackendFiles != nil {
 		if err := req.PreloadBackendFiles(backend); err != nil {
 			return TaskOutput{}, errs.Wrapf(err, "failed to preload backend files")
 		}
-	}
-
-	// Write preloaded skills into the backend
-	if len(a.config.PreloadedSkills) > 0 {
-		ctx := context.Background()
-		for path, content := range a.config.PreloadedSkills {
-			if err := backend.WriteFile(ctx, path, []byte(content)); err != nil {
-				return TaskOutput{}, errs.Wrapf(err, "failed to write preloaded skill %s", path)
-			}
-		}
-	}
-
-	// Initialize skills middleware with fresh backend; auto-discover from /skills/
-	skills := NewSkills(backend)
-	{
-		ctx := context.Background()
-		if err := skills.Load(ctx, []string{"/skills"}); err != nil {
-			return TaskOutput{}, errs.Wrapf(err, "failed to load skills")
-		}
-	}
-
-	// Prepare input with backend and skills
-	taskInput := taskInput{
-		task:   req.UserInput,
-		skills: skills,
-		store:  backend,
 	}
 
 	// Initialize todo manager (fresh on each execution)
@@ -327,10 +301,27 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	rail = rail.WithCtxVal(agentCtxKey, agentCtxVal)
 
 	// Call BeforeAgent on each middleware. Any error aborts execution.
+	// Middlewares may write files to Store here (e.g., skill files via BuildPreloadedSkills).
 	for _, m := range a.middleware {
-		if err := m.BeforeAgent(agentCtxVal); err != nil {
+		if err := m.BeforeAgent(rail, agentCtxVal); err != nil {
 			return TaskOutput{}, errs.Wrapf(err, "middleware %q BeforeAgent failed", m.Name())
 		}
+	}
+
+	// Load skills after BeforeAgent so middlewares can contribute skill files to /skills/
+	skills := NewSkills(backend)
+	{
+		ctx := context.Background()
+		if err := skills.Load(ctx, []string{"/skills"}); err != nil {
+			return TaskOutput{}, errs.Wrapf(err, "failed to load skills")
+		}
+	}
+
+	// Prepare input with backend and skills
+	taskInput := taskInput{
+		task:   req.UserInput,
+		skills: skills,
+		store:  backend,
 	}
 
 	// Execute graph with agent-specific trace callback (always registered to collect token usage)
@@ -348,7 +339,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	}
 	if err != nil {
 		for _, m := range a.middleware {
-			if afterErr := m.AfterAgent(agentCtxVal, nil, err); afterErr != nil {
+			if afterErr := m.AfterAgent(rail, agentCtxVal, nil, err); afterErr != nil {
 				rail.Errorf("middleware %q AfterAgent error: %v", m.Name(), afterErr)
 			}
 		}
@@ -365,7 +356,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 
 	// Call AfterAgent on each middleware.
 	for _, m := range a.middleware {
-		if afterErr := m.AfterAgent(agentCtxVal, &result, nil); afterErr != nil {
+		if afterErr := m.AfterAgent(rail, agentCtxVal, &result, nil); afterErr != nil {
 			rail.Errorf("middleware %q AfterAgent error: %v", m.Name(), afterErr)
 		}
 	}

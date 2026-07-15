@@ -16,7 +16,7 @@ type Middleware interface {
 
 	// BeforeAgent is called once at the start of Agent.Execute(),
 	// before the graph begins running. Returning a non-nil error aborts execution.
-	BeforeAgent(agentCtx AgentContext) error
+	BeforeAgent(ctx context.Context, agentCtx AgentContext) error
 
 	// WrapModelCall is called on every LLM invocation in the loop.
 	// Use it to inject prompt fragments, filter messages, or observe the model response.
@@ -28,7 +28,7 @@ type Middleware interface {
 
 	// AfterAgent is called once after Agent.Execute() finishes (success or error).
 	// Errors from AfterAgent are logged but do not suppress the result.
-	AfterAgent(agentCtx AgentContext, res *TaskOutput, err error) error
+	AfterAgent(ctx context.Context, agentCtx AgentContext, res *TaskOutput, err error) error
 
 	// Tools returns additional tools this middleware contributes to the agent.
 	// Called once at NewAgent() time; tools are merged into the shared ToolRegistry.
@@ -78,7 +78,7 @@ type BaseMiddleware struct{}
 func (BaseMiddleware) Name() string { return "" }
 
 // BeforeAgent is a no-op. Override to add pre-execution logic.
-func (BaseMiddleware) BeforeAgent(_ AgentContext) error { return nil }
+func (BaseMiddleware) BeforeAgent(_ context.Context, _ AgentContext) error { return nil }
 
 // WrapModelCall passes through to the next handler unchanged.
 func (BaseMiddleware) WrapModelCall(ctx context.Context, req *ModelCallRequest, next ModelCallHandler) (*ModelCallResponse, error) {
@@ -91,7 +91,9 @@ func (BaseMiddleware) WrapToolCall(ctx context.Context, req *ToolCallRequest, ne
 }
 
 // AfterAgent is a no-op. Override to add post-execution logic.
-func (BaseMiddleware) AfterAgent(_ AgentContext, _ *TaskOutput, _ error) error { return nil }
+func (BaseMiddleware) AfterAgent(_ context.Context, _ AgentContext, _ *TaskOutput, _ error) error {
+	return nil
+}
 
 // Tools returns nil. Override to contribute tools to the agent.
 func (BaseMiddleware) Tools() []Tool { return nil }

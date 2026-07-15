@@ -6,6 +6,7 @@ import (
 	"io/fs"
 
 	"github.com/cloudwego/eino/components/model"
+	"github.com/curtisnewbie/miso/errs"
 )
 
 // OutputCheckFunc is a callback invoked on each final assistant response before the agent
@@ -65,14 +66,6 @@ type AgentConfig struct {
 	// LogOutputs controls whether the agent logs model output content.
 	// If nil, defaults to true.
 	LogOutputs *bool
-
-	// PreloadedSkills is a map of file paths to content that will be written to the backend
-	// before loading skills. This is useful for predefining skills when using TmpFileStore.
-	// All skill paths must be under /skills/, e.g. {"/skills/web-research/SKILL.md": "# Web Research\n\n..."}.
-	// Skills are automatically discovered from the /skills/ directory on each execution.
-	//
-	// See [BuildPreloadedSkills]
-	PreloadedSkills map[string]string
 
 	// Tools is a list of custom tools to add to the built-in tools.
 	// Built-in tools are always registered; this field adds additional tools.
@@ -178,11 +171,30 @@ type AgentConfig struct {
 	EnableTrace *bool
 }
 
-// BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.
+// skillsMiddleware is a Middleware that writes pre-embedded skill files into the
+// agent's FileStore during BeforeAgent, so they are discoverable from /skills/.
+type skillsMiddleware struct {
+	BaseMiddleware
+	files map[string]string // virtualPath -> content
+}
+
+func (m *skillsMiddleware) Name() string { return "skills" }
+
+func (m *skillsMiddleware) BeforeAgent(ctx context.Context, agentCtx AgentContext) error {
+	for path, content := range m.files {
+		if err := agentCtx.Store.WriteFile(ctx, path, []byte(content)); err != nil {
+			return errs.Wrapf(err, "failed to write skill %s", path)
+		}
+	}
+	return nil
+}
+
+// BuildPreloadedSkills builds a skills Middleware from an embedded filesystem.
 // The efs root must contain skill directories directly (each with a SKILL.md file).
 // If skillNames are provided, only skills with matching directory names are included;
 // if no skillNames are given, all top-level skill directories are included.
-// Resulting paths are prefixed with /skills/ to satisfy the store convention.
+// The Middleware writes skill files into the agent's store during BeforeAgent so
+// they are discoverable from the /skills/ directory on each execution.
 //
 // Example:
 //
@@ -190,31 +202,25 @@ type AgentConfig struct {
 //	var skillsFS embed.FS
 //
 //	// Load all skills
-//	preloaded := BuildPreloadedSkills(skillsFS)
-//	// Returns: map[string]string{
-//	//   "/skills/humanizer/SKILL.md": "...",
-//	//   "/skills/web-research/SKILL.md": "...",
-//	// }
+//	agent, _ := agentloop.NewAgent(agentloop.AgentConfig{
+//	    Middleware: []agentloop.Middleware{agentloop.BuildPreloadedSkills(skillsFS)},
+//	})
 //
 //	// Load only specific skills
-//	preloaded := BuildPreloadedSkills(skillsFS, "humanizer")
-//	// Returns: map[string]string{
-//	//   "/skills/humanizer/SKILL.md": "...",
-//	// }
-//
-// The returned map is passed to [AgentConfig.PreloadedSkills]. Skills are
-// automatically discovered from the /skills/ directory on each execution.
-func BuildPreloadedSkills(efs embed.FS, skills ...string) map[string]string {
-	result := make(map[string]string)
-
-	nameSet := make(map[string]bool, len(skills))
-	for _, n := range skills {
+//	agent, _ := agentloop.NewAgent(agentloop.AgentConfig{
+//	    Middleware: []agentloop.Middleware{agentloop.BuildPreloadedSkills(skillsFS, "humanizer", "web-research")},
+//	})
+func BuildPreloadedSkills(efs embed.FS, skillNames ...string) Middleware {
+	nameSet := make(map[string]bool, len(skillNames))
+	for _, n := range skillNames {
 		nameSet[n] = true
 	}
 
+	files := make(map[string]string)
+
 	entries, err := fs.ReadDir(efs, ".")
 	if err != nil {
-		return result
+		return &skillsMiddleware{files: files}
 	}
 
 	for _, entry := range entries {
@@ -234,10 +240,10 @@ func BuildPreloadedSkills(efs embed.FS, skills ...string) map[string]string {
 			if err != nil {
 				return nil
 			}
-			result["/skills/"+path] = string(content)
+			files["/skills/"+path] = string(content)
 			return nil
 		})
 	}
 
-	return result
+	return &skillsMiddleware{files: files}
 }
