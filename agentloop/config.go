@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"io/fs"
-	"strings"
 
 	"github.com/cloudwego/eino/components/model"
 )
@@ -67,18 +66,12 @@ type AgentConfig struct {
 	// If nil, defaults to true.
 	LogOutputs *bool
 
-	// Skills is a list of paths to load skills from.
-	// Each path may be:
-	//   - A skill directory that directly contains a SKILL.md file (e.g., "humanizer").
-	//   - A parent directory containing skill subdirectories with SKILL.md files (e.g., "/", "skills/").
-	// Skills are loaded from the backend and injected into the system prompt.
-	Skills []string
-
 	// PreloadedSkills is a map of file paths to content that will be written to the backend
 	// before loading skills. This is useful for predefining skills when using TmpFileStore.
-	// Example: {"/skills/web-research/SKILL.md": "# Web Research\n\n..."}
+	// All skill paths must be under /skills/, e.g. {"/skills/web-research/SKILL.md": "# Web Research\n\n..."}.
+	// Skills are automatically discovered from the /skills/ directory on each execution.
 	//
-	// See [BuildPreloadedSkills], [BuildPreloadedSkillsWithFilter]
+	// See [BuildPreloadedSkills]
 	PreloadedSkills map[string]string
 
 	// Tools is a list of custom tools to add to the built-in tools.
@@ -186,137 +179,64 @@ type AgentConfig struct {
 }
 
 // BuildPreloadedSkills builds a PreloadedSkills map from an embedded filesystem.
-// The baseDirs are the root directories within the embedded FS to start from.
-// File paths in the returned map will be relative to the baseDir and prefixed with '/'.
+// The efs root must contain skill directories directly (each with a SKILL.md file).
+// If skillNames are provided, only skills with matching directory names are included;
+// if no skillNames are given, all top-level skill directories are included.
+// Resulting paths are prefixed with /skills/ to satisfy the store convention.
 //
-// Pass "." to embed everything from the package root — the idiomatic pattern when
-// all skills live alongside an embed.go file in the same package:
+// Example:
 //
 //	//go:embed all:*
 //	var skillsFS embed.FS
 //
-//	preloaded := BuildPreloadedSkills(skillsFS, ".")
+//	// Load all skills
+//	preloaded := BuildPreloadedSkills(skillsFS)
 //	// Returns: map[string]string{
-//	//   "/humanizer/SKILL.md": "...",
-//	//   "/web-research/SKILL.md": "...",
+//	//   "/skills/humanizer/SKILL.md": "...",
+//	//   "/skills/web-research/SKILL.md": "...",
 //	// }
 //
-// Pass a specific directory name to embed only that skill or subtree:
-//
+//	// Load only specific skills
 //	preloaded := BuildPreloadedSkills(skillsFS, "humanizer")
 //	// Returns: map[string]string{
-//	//   "/humanizer/SKILL.md": "...",
+//	//   "/skills/humanizer/SKILL.md": "...",
 //	// }
 //
-// The returned map is passed to [AgentConfig.PreloadedSkills]. Skills are then
-// loaded by setting [AgentConfig.Skills] to either the skill directory name
-// (e.g. "humanizer") or a parent directory (e.g. "/") — see [AgentConfig.Skills].
-func BuildPreloadedSkills(efs embed.FS, baseDirs ...string) map[string]string {
-	if len(baseDirs) == 0 {
-		baseDirs = []string{"."}
-	}
+// The returned map is passed to [AgentConfig.PreloadedSkills]. Skills are
+// automatically discovered from the /skills/ directory on each execution.
+func BuildPreloadedSkills(efs embed.FS, skills ...string) map[string]string {
 	result := make(map[string]string)
 
-	for _, baseDir := range baseDirs {
-		// Ensure baseDir doesn't have trailing slash
-		baseDir = strings.TrimSuffix(baseDir, "/")
-
-		// Walk through the embedded filesystem
-		err := fs.WalkDir(efs, baseDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil // Skip files that can't be accessed
-			}
-
-			// Skip directories
-			if d.IsDir() {
-				return nil
-			}
-
-			// Read file content
-			content, err := efs.ReadFile(path)
-			if err != nil {
-				return nil // Skip files that can't be read
-			}
-
-			// Build the virtual path (key for PreloadedSkills)
-			// Convert "skills/web-research/SKILL.md" to "/skills/web-research/SKILL.md"
-			virtualPath := "/" + path
-			result[virtualPath] = string(content)
-
-			return nil
-		})
-
-		if err != nil {
-			// If walk fails, return whatever we've collected
-			return result
-		}
+	nameSet := make(map[string]bool, len(skills))
+	for _, n := range skills {
+		nameSet[n] = true
 	}
 
-	return result
-}
-
-// BuildPreloadedSkillsWithFilter builds a PreloadedSkills map from an embedded filesystem
-// with a custom filter function. The filter function receives the file path and should return
-// true if the file should be included in the result.
-//
-// Example:
-//
-//	//go:embed skills/*
-//	var skillsFS embed.FS
-//
-//	// Only include SKILL.md files
-//	preloaded := BuildPreloadedSkillsWithFilter(skillsFS, func(path string) bool {
-//	    return strings.HasSuffix(path, "SKILL.md")
-//	}, "skills")
-//
-// Multiple base dirs:
-//
-//	preloaded := BuildPreloadedSkillsWithFilter(skillsFS, func(path string) bool {
-//	    return strings.HasSuffix(path, "SKILL.md")
-//	}, "skills", "templates")
-func BuildPreloadedSkillsWithFilter(efs embed.FS, filter func(path string) bool, baseDirs ...string) map[string]string {
-	if len(baseDirs) == 0 {
-		baseDirs = []string{"."}
+	entries, err := fs.ReadDir(efs, ".")
+	if err != nil {
+		return result
 	}
-	result := make(map[string]string)
 
-	for _, baseDir := range baseDirs {
-		// Ensure baseDir doesn't have trailing slash
-		baseDir = strings.TrimSuffix(baseDir, "/")
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if len(nameSet) > 0 && !nameSet[name] {
+			continue
+		}
 
-		// Walk through the embedded filesystem
-		err := fs.WalkDir(efs, baseDir, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil // Skip files that can't be accessed
-			}
-
-			// Skip directories
-			if d.IsDir() {
+		_ = fs.WalkDir(efs, name, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
 				return nil
 			}
-
-			// Apply filter
-			if filter != nil && !filter(path) {
-				return nil
-			}
-
-			// Read file content
 			content, err := efs.ReadFile(path)
 			if err != nil {
-				return nil // Skip files that can't be read
+				return nil
 			}
-
-			// Build the virtual path (key for PreloadedSkills)
-			virtualPath := "/" + path
-			result[virtualPath] = string(content)
-
+			result["/skills/"+path] = string(content)
 			return nil
 		})
-
-		if err != nil {
-			// If walk fails, return whatever we've collected
-			return result
-		}
 	}
 
 	return result

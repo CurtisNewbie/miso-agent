@@ -291,11 +291,11 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		}
 	}
 
-	// Initialize skills middleware with fresh backend
+	// Initialize skills middleware with fresh backend; auto-discover from /skills/
 	skills := NewSkills(backend)
-	if len(a.config.Skills) > 0 {
+	{
 		ctx := context.Background()
-		if err := skills.Load(ctx, a.config.Skills); err != nil {
+		if err := skills.Load(ctx, []string{"/skills"}); err != nil {
 			return TaskOutput{}, errs.Wrapf(err, "failed to load skills")
 		}
 	}
