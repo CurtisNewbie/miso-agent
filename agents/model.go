@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/ptr"
 	"github.com/curtisnewbie/miso/util/retry"
 )
@@ -189,25 +189,30 @@ type retryChatModel struct {
 func (r *retryChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
 	return retry.GetOneDyn(func() (*schema.Message, error) {
 		return r.c.Generate(ctx, input, opts...)
-	}, r.gapFunc)
+	}, func(i int, err error) (wait time.Duration, doRetry bool) {
+		return r.gapFunc(ctx, i, err)
+	})
 }
 
 func (r *retryChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	return retry.GetOneDyn(func() (*schema.StreamReader[*schema.Message], error) {
 		return r.c.Stream(ctx, input, opts...)
-	}, r.gapFunc)
+	}, func(i int, err error) (wait time.Duration, doRetry bool) {
+		return r.gapFunc(ctx, i, err)
+	})
 }
 
-func (r *retryChatModel) gapFunc(i int, err error) (time.Duration, bool) {
-	if strings.Contains(err.Error(), "429") {
-		return 5 * time.Second, i <= r.retry
-	}
-	// exponential backoff: 1s, 2s, 4s, capped at 5s
+func (r *retryChatModel) gapFunc(ctx context.Context, i int, err error) (time.Duration, bool) {
+	// exponential backoff: 1s, 2s, 4s, 8s, capped at 10s
 	wait := time.Duration(1<<uint(i-1)) * time.Second
-	if wait > 5*time.Second {
-		wait = 5 * time.Second
+	if wait > 10*time.Second {
+		wait = 10 * time.Second
 	}
-	return wait, i <= r.retry
+	doRetry := i <= r.retry
+	if doRetry {
+		flow.NewRail(ctx).Warnf("Retry on ratelimit, i: %v, wait: %v, %v", i, wait, err)
+	}
+	return wait, doRetry
 }
 
 func (r *retryChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
