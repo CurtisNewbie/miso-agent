@@ -23,8 +23,9 @@ var (
 )
 
 const (
-	maxToken32k = 32768
-	maxToken64k = 65536
+	defModelRetry = 5
+	maxToken32k   = 32768
+	maxToken64k   = 65536
 )
 
 var (
@@ -134,7 +135,7 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 		maxToken:          0,
 		temperature:       0.7,
 		baseURL:           AliBailianIntlBaseURL,
-		retry:             5,
+		retry:             defModelRetry,
 		streamingToolCall: true,
 	}
 	for _, op := range ops {
@@ -223,7 +224,7 @@ func (r *retryChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingC
 func RetryChatModel(c model.ToolCallingChatModel) model.ToolCallingChatModel {
 	return &retryChatModel{
 		c:     c,
-		retry: 5,
+		retry: defModelRetry,
 	}
 }
 
