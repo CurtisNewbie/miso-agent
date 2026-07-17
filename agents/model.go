@@ -210,7 +210,7 @@ func (r *retryChatModel) gapFunc(ctx context.Context, i int, err error) (time.Du
 	}
 	doRetry := i <= r.retry
 	if doRetry {
-		flow.NewRail(ctx).Warnf("Retry on ratelimit, i: %v, wait: %v, %v", i, wait, err)
+		flow.NewRail(ctx).Warnf("Retrying, i: %v, wait: %v, %v", i, wait, err)
 	}
 	return wait, doRetry
 }
