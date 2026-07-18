@@ -3,6 +3,7 @@ package agentloop
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/curtisnewbie/miso/flow"
@@ -216,5 +217,34 @@ func TestTmpFileStore_LazyInit_WriteWithoutSessionStart(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("session dir %q should have been removed after OnSessionEnd", dir)
+	}
+}
+
+func TestTmpFileStore_WriteFile_RejectsPathTraversal(t *testing.T) {
+	be := newTestMemFileStore()
+	defer be.OnSessionEnd(flow.NewRail(context.Background()))
+	ctx := context.Background()
+
+	dir, err := be.RootDir()
+	if err != nil {
+		t.Fatalf("RootDir failed: %v", err)
+	}
+	outsidePath := filepath.Join(filepath.Dir(dir), "escaped.txt")
+
+	tests := []string{
+		"../escaped.txt",
+		"/../escaped.txt",
+		"/foo/../../escaped.txt",
+		"../../../../../../tmp/escaped.txt",
+	}
+	for _, p := range tests {
+		if err := be.WriteFile(ctx, p, []byte("pwned")); err == nil {
+			t.Errorf("WriteFile(%q) should have been rejected, got no error", p)
+		}
+	}
+
+	if _, err := os.Stat(outsidePath); !os.IsNotExist(err) {
+		t.Errorf("traversal must not have created a file outside the store root: %s", outsidePath)
+		os.Remove(outsidePath)
 	}
 }

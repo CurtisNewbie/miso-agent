@@ -110,6 +110,17 @@ type AgentConfig struct {
 	// If nil, defaults to false.
 	EnableTodoTool *bool
 
+	// EnableBashTool enables the built-in bash tool, which executes shell scripts in a
+	// sandboxed environment (github.com/mark3labs/go-bash). When the configured FileStore
+	// implements DirBackedFileStore, the sandbox shares that store's real directory, so
+	// bash can operate on files written via write_file/read_file. When false, the tool is
+	// not registered. If nil, defaults to false.
+	EnableBashTool *bool
+
+	// BashToolOptions configures the built-in bash tool (timeout, network access). Only
+	// used when EnableBashTool is true. See WithBashTimeout, WithBashNetwork.
+	BashToolOptions []BashToolOption
+
 	// ToolEventCallback is called synchronously for each tool invocation during execution.
 	// Receives a ToolEvent with the tool name and raw JSON args before the tool runs.
 	// Must not block for long — it runs within the agent graph execution.

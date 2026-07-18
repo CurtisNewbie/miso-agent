@@ -185,6 +185,10 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 	)
 	toolRegistry.Merge(builtinTools)
 
+	if boolOrDefault(config.EnableBashTool, false) {
+		toolRegistry.Register(NewBashTool(config.BashToolOptions...))
+	}
+
 	// Add custom tools
 	for _, t := range config.Tools {
 		toolRegistry.Register(t)
@@ -233,6 +237,11 @@ type AgentContext struct {
 	Todos     *TodoManager
 	Artifacts *ArtifactManager
 	Metadata  *MetadataStore
+
+	// bash lazily holds the per-session bash sandbox instance used by the built-in
+	// bash tool, shared across bash tool calls within the same Execute() call.
+	// Unexported: an internal detail of the bash tool, not part of the public API.
+	bash *bashSandboxHolder
 }
 
 // AgentRequest represents a request to execute an agent
@@ -261,6 +270,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	if backend == nil {
 		backend = NewTmpFileStore()
 	}
+	backend = newValidatingFileStore(backend)
 
 	// Session lifecycle: notify the backend that the session is starting.
 	if sa, ok := backend.(SessionAware); ok {
@@ -297,6 +307,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		Todos:     todoManager,
 		Artifacts: artifactManager,
 		Metadata:  metadataStore,
+		bash:      &bashSandboxHolder{},
 	}
 	rail = rail.WithCtxVal(agentCtxKey, agentCtxVal)
 

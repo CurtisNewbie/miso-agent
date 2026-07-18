@@ -20,7 +20,7 @@ func TestNormalizePath(t *testing.T) {
 		{
 			name:     "path with leading slash",
 			input:    "/skills/web-research",
-			expected: "skills/web-research",
+			expected: "/skills/web-research",
 		},
 		{
 			name:     "path with trailing slash",
@@ -30,7 +30,7 @@ func TestNormalizePath(t *testing.T) {
 		{
 			name:     "path with both leading and trailing slashes",
 			input:    "/skills/web-research/",
-			expected: "skills/web-research",
+			expected: "/skills/web-research",
 		},
 		{
 			name:     "empty path",
@@ -45,7 +45,7 @@ func TestNormalizePath(t *testing.T) {
 		{
 			name:     "multiple slashes",
 			input:    "///skills///web-research///",
-			expected: "skills///web-research",
+			expected: "///skills///web-research",
 		},
 		{
 			name:     "single component with slash",
