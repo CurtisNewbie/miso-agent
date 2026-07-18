@@ -48,8 +48,9 @@ type AgentConfig struct {
 	Temperature float32
 
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
-	// Internally it is multiplied by the number of nodes in the compiled graph to derive the Eino
-	// step budget (each node may execute at most MaxRunSteps times).
+	// Enforced directly by the agent loop's own round counter (not by Eino's internal step counter),
+	// so it maps 1:1 to actual chat-model calls regardless of graph topology (e.g. whether OutputCheck
+	// or tools are enabled).
 	// If 0 or negative, defaults to 5.
 	MaxRunSteps int
 

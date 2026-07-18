@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
+	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 )
 
@@ -295,17 +296,22 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
 			shouldContinue := false
 			var lastMsg *schema.Message
+			var cycleCount int
 			err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
 				if len(state.messages) > 0 {
 					lastMsg = state.messages[len(state.messages)-1]
 					shouldContinue = shouldContinueLoop(lastMsg)
 				}
+				cycleCount = state.cycleCount
 				return nil
 			})
 			if err != nil {
 				return "", err
 			}
 			if shouldContinue {
+				if cycleCount >= agent.config.MaxRunSteps {
+					return "", errs.NewErrf("agent %q exceeded max run steps (%d)", agent.config.Name, agent.config.MaxRunSteps)
+				}
 				return "tools", nil
 			}
 			if agent.config.OutputCheck != nil && lastMsg != nil {
@@ -321,6 +327,9 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 					return "", err
 				}
 				if !ok {
+					if cycleCount >= agent.config.MaxRunSteps {
+						return "", errs.NewErrf("agent %q exceeded max run steps (%d)", agent.config.Name, agent.config.MaxRunSteps)
+					}
 					rail := flow.NewRail(ctx)
 					rail.Infof("[%v] OutputCheck attempt %d rejected, inserting hint: %v", agent.config.Name, attempt, hint)
 					_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
@@ -342,9 +351,13 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	_ = g.AddEdge("chat_model", "update_state")
 	_ = g.AddEdge("final_output", compose.END)
 
-	compileOpts := []compose.GraphCompileOption{compose.WithGraphName("AgentLoop")}
-	if agent.ops.maxRunSteps > 0 {
-		compileOpts = append(compileOpts, compose.WithMaxRunSteps(agent.ops.maxRunSteps))
+	// einoStepSafetyCap is a generous backstop passed to Eino's own step counter, purely to
+	// prevent runaway execution from bugs; the actual MaxRunSteps enforcement happens in the
+	// branch function above via agentLoopState.cycleCount, which maps 1:1 to ReAct rounds.
+	const einoStepSafetyCap = 1_000_000
+	compileOpts := []compose.GraphCompileOption{
+		compose.WithGraphName("AgentLoop"),
+		compose.WithMaxRunSteps(einoStepSafetyCap),
 	}
 	return g.Compile(context.Background(), compileOpts...)
 }
