@@ -43,7 +43,8 @@ func compileGraph() error {
 
 	// Add agentloop agent
 	_, err = agentloop.NewAgent(agentloop.AgentConfig{
-		Model:     model,
+		ModelName: "mymodel",
+		ApiKey:    "mykey",
 		MaxTokens: 32000,
 	})
 	return err

@@ -8,7 +8,6 @@ import (
 
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/schema"
-	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/ptr"
@@ -130,11 +129,9 @@ Behavior:
 // NewExplorerAgentSpec creates an AgentSpec for a general-purpose research sub-agent.
 // Pass the returned spec to [NewSubAgentTool] to give a parent agent research capabilities.
 //
-// name identifies the sub-agent; model is the model name, host is the API base URL,
-// and apiKey are forwarded to [agents.NewOpenAIChatModel] with [agents.WithBaseURL].
+// name identifies the sub-agent; modelName is the model name, host is the API base URL,
+// and apiKey is the API key used to construct the sub-agent's chat model.
 // tools are the search/retrieval tools available to the explorer (e.g. TavilySearch).
-// modelOpts are additional optional model configuration overrides
-// (e.g. [agents.WithTemperature], [agents.WithMaxToken]).
 // File tools are disabled; the explorer is read-only by design.
 //
 // Example:
@@ -143,21 +140,18 @@ Behavior:
 //	    agentloop.NewExplorerAgentSpec("explorer",
 //	        "qwen3-max", agents.AliBailianCnBaseURL, apiKey,
 //	        []agentloop.Tool{tavilyTool},
-//	        agents.WithTemperature(0.3),
 //	    ),
 //	)
-func NewExplorerAgentSpec(name, model, host, apiKey string, tools []Tool, modelOpts ...agents.OpenAIChatModelOpt) *AgentSpec {
+func NewExplorerAgentSpec(name, modelName, host, apiKey string, tools []Tool) *AgentSpec {
 	return &AgentSpec{
 		Name:         name,
 		Capabilities: "General research and information gathering: web search, documentation lookup, fact-finding, and synthesis.",
 		Builder: func(_ AgentContext) (*Agent, error) {
-			chatModel, err := agents.NewOpenAIChatModel(model, apiKey, append(modelOpts, agents.WithBaseURL(host))...)
-			if err != nil {
-				return nil, errs.Wrapf(err, "failed to create explorer chat model")
-			}
 			return NewAgent(AgentConfig{
 				Name:           "Explorer",
-				Model:          chatModel,
+				ModelName:      modelName,
+				ApiKey:         apiKey,
+				ApiUrl:         host,
 				MaxRunSteps:    30,
 				SystemPrompt:   defaultExplorerSystemPrompt,
 				Tools:          tools,

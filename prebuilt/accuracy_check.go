@@ -1,7 +1,6 @@
 package prebuilt
 
 import (
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -22,6 +21,8 @@ type accuracyCheckConfig struct {
 	// RetryCount is the number of additional attempts when the response is missing Score or Reason.
 	// Defaults to 2 (up to 3 total attempts).
 	RetryCount int
+	// Temperature is the sampling temperature for the chat model.
+	Temperature float32
 }
 
 // WithAccuracyCheckSystemPrompt sets an optional system prompt for the accuracy-check agent.
@@ -43,6 +44,13 @@ func WithAccuracyCheckLanguage(lang string) AccuracyCheckOption {
 func WithAccuracyCheckRetry(n int) AccuracyCheckOption {
 	return func(o *accuracyCheckConfig) {
 		o.RetryCount = n
+	}
+}
+
+// WithAccuracyCheckTemperature sets the sampling temperature for the chat model.
+func WithAccuracyCheckTemperature(t float32) AccuracyCheckOption {
+	return func(o *accuracyCheckConfig) {
+		o.Temperature = t
 	}
 }
 
@@ -88,13 +96,13 @@ type AccuracyCheckAgent struct {
 //
 // Example:
 //
-//	agent, err := prebuilt.NewAccuracyCheckAgent(chatModel)
+//	agent, err := prebuilt.NewAccuracyCheckAgent(modelName, apiKey, apiUrl)
 //	result, err := agent.Check(rail, prebuilt.AccuracyCheckInput{
 //	    Question:        "What is the capital of France?",
 //	    Output:          "The capital of France is Paris.",
 //	    ReferenceAnswer: "Paris",
 //	})
-func NewAccuracyCheckAgent(chatModel model.ToolCallingChatModel, opts ...AccuracyCheckOption) (*AccuracyCheckAgent, error) {
+func NewAccuracyCheckAgent(modelName, apiKey, apiUrl string, opts ...AccuracyCheckOption) (*AccuracyCheckAgent, error) {
 	cfg := &accuracyCheckConfig{RetryCount: 2}
 	for _, o := range opts {
 		o(cfg)
@@ -107,7 +115,10 @@ func NewAccuracyCheckAgent(chatModel model.ToolCallingChatModel, opts ...Accurac
 
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "AccuracyCheckAgent",
-		Model:        chatModel,
+		ModelName:    modelName,
+		ApiKey:       apiKey,
+		ApiUrl:       apiUrl,
+		Temperature:  cfg.Temperature,
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,

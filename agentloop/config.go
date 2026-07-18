@@ -5,7 +5,6 @@ import (
 	"embed"
 	"io/fs"
 
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso/errs"
 )
 
@@ -33,13 +32,20 @@ type AgentConfig struct {
 	// If empty, defaults to "AgentLoop".
 	Name string
 
-	// Model is the LLM model to use.
-	//
-	// Retry behavior is controlled by the model wrapper, not the agent itself.
-	// Use [agents.NewOpenAIChatModel] with [agents.WithRetry] to configure retry count and
-	// backoff. The default model uses exponential backoff (1s, 2s, 4s, capped at 5s) with
-	// 5 retries; 429 (rate limit) errors skip directly to the 5s cap.
-	Model model.ToolCallingChatModel
+	// ModelName is the model identifier passed to the underlying OpenAI-compatible
+	// provider (e.g. "qwen3-max").
+	ModelName string
+
+	// ApiKey is the API key for the model provider.
+	ApiKey string
+
+	// ApiUrl is the base URL of the OpenAI-compatible API endpoint.
+	// If empty, defaults to agents.AliBailianIntlBaseURL (see [agents.NewOpenAIChatModel]).
+	ApiUrl string
+
+	// Temperature controls sampling randomness for the model.
+	// If 0, defaults to 0.7.
+	Temperature float32
 
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
 	// Internally it is multiplied by the number of nodes in the compiled graph to derive the Eino

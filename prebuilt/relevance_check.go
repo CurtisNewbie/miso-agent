@@ -1,7 +1,6 @@
 package prebuilt
 
 import (
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -22,6 +21,8 @@ type relevanceCheckConfig struct {
 	// RetryCount is the number of additional attempts when the response is missing Score or Reason.
 	// Defaults to 2 (up to 3 total attempts).
 	RetryCount int
+	// Temperature is the sampling temperature for the chat model.
+	Temperature float32
 }
 
 // WithRelevanceCheckSystemPrompt sets an optional system prompt for the relevance-check agent.
@@ -43,6 +44,13 @@ func WithRelevanceCheckLanguage(lang string) RelevanceCheckOption {
 func WithRelevanceCheckRetry(n int) RelevanceCheckOption {
 	return func(o *relevanceCheckConfig) {
 		o.RetryCount = n
+	}
+}
+
+// WithRelevanceCheckTemperature sets the sampling temperature for the chat model.
+func WithRelevanceCheckTemperature(t float32) RelevanceCheckOption {
+	return func(o *relevanceCheckConfig) {
+		o.Temperature = t
 	}
 }
 
@@ -84,13 +92,13 @@ type RelevanceCheckAgent struct {
 //
 // Example:
 //
-//	agent, err := prebuilt.NewRelevanceCheckAgent(chatModel)
+//	agent, err := prebuilt.NewRelevanceCheckAgent(modelName, apiKey, apiUrl)
 //	result, err := agent.Check(rail, prebuilt.RelevanceCheckInput{
 //	    Question: "What is the capital of France?",
 //	    Context:  "France is a country in Western Europe. Its capital is Paris.",
 //	    Output:   "The capital of France is Paris.",
 //	})
-func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...RelevanceCheckOption) (*RelevanceCheckAgent, error) {
+func NewRelevanceCheckAgent(modelName, apiKey, apiUrl string, opts ...RelevanceCheckOption) (*RelevanceCheckAgent, error) {
 	cfg := &relevanceCheckConfig{RetryCount: 2}
 	for _, o := range opts {
 		o(cfg)
@@ -103,7 +111,10 @@ func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...Releva
 
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "RelevanceCheckAgent",
-		Model:        chatModel,
+		ModelName:    modelName,
+		ApiKey:       apiKey,
+		ApiUrl:       apiUrl,
+		Temperature:  cfg.Temperature,
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,

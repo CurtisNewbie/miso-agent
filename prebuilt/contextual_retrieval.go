@@ -3,7 +3,6 @@ package prebuilt
 import (
 	"strings"
 
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -24,6 +23,8 @@ type contextualRetrievalConfig struct {
 	// RetryCount is the number of additional attempts when the model response is empty.
 	// Defaults to 2 (up to 3 total attempts).
 	RetryCount int
+	// Temperature is the sampling temperature for the chat model.
+	Temperature float32
 }
 
 // WithContextualRetrievalSystemPrompt sets an optional system prompt for the contextual retrieval agent.
@@ -38,6 +39,13 @@ func WithContextualRetrievalSystemPrompt(prompt string) ContextualRetrievalOptio
 func WithContextualRetrievalRetry(n int) ContextualRetrievalOption {
 	return func(o *contextualRetrievalConfig) {
 		o.RetryCount = n
+	}
+}
+
+// WithContextualRetrievalTemperature sets the sampling temperature for the chat model.
+func WithContextualRetrievalTemperature(t float32) ContextualRetrievalOption {
+	return func(o *contextualRetrievalConfig) {
+		o.Temperature = t
 	}
 }
 
@@ -86,12 +94,12 @@ type ContextualRetrievalAgent struct {
 //
 // Example:
 //
-//	agent, err := prebuilt.NewContextualRetrievalAgent(chatModel)
+//	agent, err := prebuilt.NewContextualRetrievalAgent(modelName, apiKey, apiUrl)
 //	result, err := agent.Retrieve(rail, prebuilt.ContextualRetrievalInput{
 //	    Content: "...full document text...",
 //	    Chunk:   "...a specific paragraph or section...",
 //	})
-func NewContextualRetrievalAgent(chatModel model.ToolCallingChatModel, opts ...ContextualRetrievalOption) (*ContextualRetrievalAgent, error) {
+func NewContextualRetrievalAgent(modelName, apiKey, apiUrl string, opts ...ContextualRetrievalOption) (*ContextualRetrievalAgent, error) {
 	cfg := &contextualRetrievalConfig{RetryCount: 2}
 	for _, o := range opts {
 		o(cfg)
@@ -99,7 +107,10 @@ func NewContextualRetrievalAgent(chatModel model.ToolCallingChatModel, opts ...C
 
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "ContextualRetrievalAgent",
-		Model:        chatModel,
+		ModelName:    modelName,
+		ApiKey:       apiKey,
+		ApiUrl:       apiUrl,
+		Temperature:  cfg.Temperature,
 		MaxRunSteps:  2,
 		SystemPrompt: cfg.SystemPrompt,
 	})

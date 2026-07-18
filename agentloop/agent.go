@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
@@ -58,6 +59,7 @@ type Agent struct {
 	ops           agentOps
 	tools         *ToolRegistry
 	tokenizer     Tokenizer
+	model         model.ToolCallingChatModel
 	graph         compose.Runnable[taskInput, taskOutput]
 	middleware    []Middleware
 	logPromptOnce sync.Once
@@ -90,6 +92,19 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		config.MaxRunSteps = 5
 	}
 
+	if config.Temperature <= 0 {
+		config.Temperature = 0.7
+	}
+
+	modelOpts := []agents.OpenAIChatModelOpt{agents.WithTemperature(config.Temperature)}
+	if config.ApiUrl != "" {
+		modelOpts = append(modelOpts, agents.WithBaseURL(config.ApiUrl))
+	}
+	chatModel, err := agents.NewOpenAIChatModel(config.ModelName, config.ApiKey, modelOpts...)
+	if err != nil {
+		return nil, errs.Wrapf(err, "failed to create chat model")
+	}
+
 	// Convert MaxRunSteps (rounds) to Eino graph steps.
 	// The graph has at most 6 nodes: prepare_messages, chat_model, update_state,
 	// tools, output_check_retry, final_output; multiply by 6 to derive the budget.
@@ -111,11 +126,9 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 
 	// Auto-detect MaxTokens from model name if not explicitly set.
 	if config.MaxTokens < 1 {
-		if namer, ok := config.Model.(agents.ModelNamer); ok {
-			if ctx, found := agents.LookupModelContextWindow(rail, namer.ModelName(), config.EnableModelsFetch); found {
-				config.MaxTokens = ctx
-				rail.Infof("Model %v max token detected: %v", namer.ModelName(), config.MaxTokens)
-			}
+		if ctxWindow, found := agents.LookupModelContextWindow(rail, config.ModelName, config.EnableModelsFetch); found {
+			config.MaxTokens = ctxWindow
+			rail.Infof("Model %v max token detected: %v", config.ModelName, config.MaxTokens)
 		}
 	}
 
@@ -215,6 +228,7 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		ops:        ops,
 		tools:      toolRegistry,
 		tokenizer:  tokenizer,
+		model:      chatModel,
 		middleware: config.Middleware,
 	}
 

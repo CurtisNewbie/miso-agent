@@ -1,7 +1,6 @@
 package prebuilt
 
 import (
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -22,6 +21,8 @@ type factCheckConfig struct {
 	// RetryCount is the number of additional attempts when the response is missing Score or Reason.
 	// Defaults to 2 (up to 3 total attempts).
 	RetryCount int
+	// Temperature is the sampling temperature for the chat model.
+	Temperature float32
 }
 
 // WithFactCheckSystemPrompt sets an optional system prompt for the fact-check agent.
@@ -43,6 +44,13 @@ func WithFactCheckLanguage(lang string) FactCheckOption {
 func WithFactCheckRetry(n int) FactCheckOption {
 	return func(o *factCheckConfig) {
 		o.RetryCount = n
+	}
+}
+
+// WithFactCheckTemperature sets the sampling temperature for the chat model.
+func WithFactCheckTemperature(t float32) FactCheckOption {
+	return func(o *factCheckConfig) {
+		o.Temperature = t
 	}
 }
 
@@ -88,13 +96,13 @@ type FactCheckAgent struct {
 //
 // Example:
 //
-//	agent, err := prebuilt.NewFactCheckAgent(chatModel)
+//	agent, err := prebuilt.NewFactCheckAgent(modelName, apiKey, apiUrl)
 //	result, err := agent.Check(rail, prebuilt.FactCheckInput{
 //	    Question: "What is the capital of France?",
 //	    Context:  "France is a country in Western Europe. Its capital is Paris.",
 //	    Output:   "The capital of France is Paris.",
 //	})
-func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOption) (*FactCheckAgent, error) {
+func NewFactCheckAgent(modelName, apiKey, apiUrl string, opts ...FactCheckOption) (*FactCheckAgent, error) {
 	cfg := &factCheckConfig{RetryCount: 2}
 	for _, o := range opts {
 		o(cfg)
@@ -107,7 +115,10 @@ func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOp
 
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "FactCheckAgent",
-		Model:        chatModel,
+		ModelName:    modelName,
+		ApiKey:       apiKey,
+		ApiUrl:       apiUrl,
+		Temperature:  cfg.Temperature,
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,

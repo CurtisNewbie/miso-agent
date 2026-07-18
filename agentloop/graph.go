@@ -134,12 +134,12 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	var chatModel model.ToolCallingChatModel
 	if len(toolInfoList) > 0 {
 		var err error
-		chatModel, err = agent.config.Model.WithTools(toolInfoList)
+		chatModel, err = agent.model.WithTools(toolInfoList)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		chatModel = agent.config.Model
+		chatModel = agent.model
 	}
 
 	// Wrap chatModel with middleware WrapModelCall chain, if any middleware registered.
@@ -175,7 +175,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			}
 			if len(toSummarize) > 0 {
 				rail.Infof("Compaction started: summarizing %d messages, keeping %d (target preserve_recent_tokens: %v)", len(toSummarize), len(toKeep), agent.ops.compactPreserveRecentTokens)
-				summary, err := runCompaction(ctx, agent.config.Model, state.compactionSummary, toSummarize)
+				summary, err := runCompaction(ctx, agent.model, state.compactionSummary, toSummarize)
 				if err == nil && summary != "" {
 					state.compactionSummary = summary
 					checkpoint := schema.UserMessage(fmt.Sprintf(
