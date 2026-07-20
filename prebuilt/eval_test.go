@@ -10,114 +10,93 @@ func TestParseScoreReason(t *testing.T) {
 		wantReason string
 		wantErr    bool
 	}{
-		// --- happy path: score before reason ---
+		// --- happy path ---
 		{
-			name:       "Score then Reason single line",
-			content:    "Score: 5\nReason: Perfect answer.",
+			name:       "Score and Reason",
+			content:    `{"score": 5, "reason": "Perfect answer."}`,
 			wantScore:  5,
 			wantReason: "Perfect answer.",
 		},
 		{
-			name:       "Score then Reason multi-line",
-			content:    "Score: 3\nReason: Partially correct.\nThe second sentence continues the reason.",
+			name:       "Reason with embedded newline",
+			content:    "{\"score\": 3, \"reason\": \"Partially correct.\\nThe second sentence continues the reason.\"}",
 			wantScore:  3,
 			wantReason: "Partially correct.\nThe second sentence continues the reason.",
 		},
-		// --- happy path: reason before score ---
+		// --- key order independence ---
 		{
-			name:       "Reason then Score",
-			content:    "Reason: Great response.\nScore: 5",
+			name:       "Reason before score in JSON",
+			content:    `{"reason": "Great response.", "score": 5}`,
 			wantScore:  5,
 			wantReason: "Great response.",
 		},
+		// --- whitespace / formatting tolerance ---
 		{
-			name:       "Reason multi-line then Score",
-			content:    "Reason: Line one.\nLine two.\nScore: 4",
-			wantScore:  4,
-			wantReason: "Line one.\nLine two.",
-		},
-		// --- case insensitivity ---
-		{
-			name:       "Uppercase SCORE and REASON",
-			content:    "SCORE: 2\nREASON: Major issues.",
-			wantScore:  2,
-			wantReason: "Major issues.",
-		},
-		{
-			name:       "Mixed case score:",
-			content:    "Score: 4\nreason: Minor issues.",
-			wantScore:  4,
-			wantReason: "Minor issues.",
-		},
-		// --- whitespace tolerance ---
-		{
-			name:       "Extra spaces around values",
-			content:    "  Score:  3  \n  Reason:  Somewhat relevant.  ",
+			name:       "Extra whitespace around JSON",
+			content:    "  \n" + `{"score": 3, "reason": "Somewhat relevant."}` + "\n  ",
 			wantScore:  3,
 			wantReason: "Somewhat relevant.",
 		},
 		{
-			name:       "Blank lines around entries",
-			content:    "\n\nScore: 4\n\nReason: Minor issues.\n\n",
+			name:       "Wrapped in markdown fence",
+			content:    "```json\n" + `{"score": 4, "reason": "Minor issues."}` + "\n```",
+			wantScore:  4,
+			wantReason: "Minor issues.",
+		},
+		{
+			name:       "Wrapped in think block",
+			content:    "<think>reasoning...</think>" + `{"score": 4, "reason": "Minor issues."}`,
 			wantScore:  4,
 			wantReason: "Minor issues.",
 		},
 		// --- boundary scores ---
 		{
 			name:      "Score = 1 (min)",
-			content:   "Score: 1\nReason: Completely wrong.",
+			content:   `{"score": 1, "reason": "Completely wrong."}`,
 			wantScore: 1,
 		},
 		{
 			name:      "Score = 5 (max)",
-			content:   "Score: 5\nReason: Fully correct.",
+			content:   `{"score": 5, "reason": "Fully correct."}`,
 			wantScore: 5,
 		},
 		// --- reason optional ---
 		{
-			name:       "Score only, no Reason line",
-			content:    "Score: 5",
+			name:       "Score only, no reason field",
+			content:    `{"score": 5}`,
 			wantScore:  5,
 			wantReason: "",
 		},
-		// --- Windows CRLF ---
-		{
-			name:       "CRLF line endings",
-			content:    "Score: 2\r\nReason: CRLF endings.",
-			wantScore:  2,
-			wantReason: "CRLF endings.",
-		},
-		// --- error: missing score ---
-		{
-			name:    "Missing Score line",
-			content: "Reason: No score provided.",
-			wantErr: true,
-		},
+		// --- error: invalid JSON ---
 		{
 			name:    "Empty content",
 			content: "",
 			wantErr: true,
 		},
-		// --- error: invalid score value ---
+		{
+			name:    "Not JSON at all",
+			content: "the score is excellent",
+			wantErr: true,
+		},
 		{
 			name:    "Score not a number",
-			content: "Score: excellent\nReason: non-numeric",
+			content: `{"score": "excellent", "reason": "non-numeric"}`,
 			wantErr: true,
 		},
 		// --- error: out of range ---
 		{
 			name:    "Score = 0 (below range)",
-			content: "Score: 0\nReason: below range",
+			content: `{"score": 0, "reason": "below range"}`,
 			wantErr: true,
 		},
 		{
 			name:    "Score = 6 (above range)",
-			content: "Score: 6\nReason: above range",
+			content: `{"score": 6, "reason": "above range"}`,
 			wantErr: true,
 		},
 		{
 			name:    "Score negative",
-			content: "Score: -1\nReason: negative",
+			content: `{"score": -1, "reason": "negative"}`,
 			wantErr: true,
 		},
 	}

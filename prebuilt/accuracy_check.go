@@ -111,6 +111,7 @@ func NewAccuracyCheckAgent(chatModel model.ToolCallingChatModel, opts ...Accurac
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,
+		OutputCheck:  agentloop.JsonOutputCheck[scoreReasonResponse](2),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create AccuracyCheckAgent")
@@ -202,63 +203,56 @@ Example 1:
 <user_question>What is the refund deadline for purchases?</user_question>
 <llm_response>Customers have 7 days from the date of purchase to request a refund. After 7 days, no refunds will be issued.</llm_response>
 <reference_answer>Refunds must be requested within 7 days of purchase.</reference_answer>
-Score: 5
-Reason: All key points match. The 7-day window is correctly stated. The additional detail about what happens after 7 days does not contradict the reference.
+Output: {"score": 5, "reason": "All key points match. The 7-day window is correctly stated. The additional detail about what happens after 7 days does not contradict the reference."}
 
 Example 2:
 <user_question>When was the product launched?</user_question>
 <llm_response>Product X was launched in Q3 2023.</llm_response>
 <reference_answer>February 2024</reference_answer>
-Score: 1
-Reason: The reference states the launch date was February 2024. The response states Q3 2023, which directly contradicts the reference answer.
+Output: {"score": 1, "reason": "The reference states the launch date was February 2024. The response states Q3 2023, which directly contradicts the reference answer."}
 
 Example 3:
 <user_question>What documents are required for cross-border transfers?</user_question>
 <llm_response>You need to provide a contract or invoice. Processing typically takes 1-3 business days.</llm_response>
 <reference_answer>First-time transfers require one of: contract, invoice, or logistics document. First-time service transfers additionally require pre-registration. Submissions before 17:30 on business days are processed the same day.</reference_answer>
-Score: 2
-Reason: Key points from reference — (1) logistics document as a third alternative: missing; (2) pre-registration for service transfers: missing; (3) same-day processing before 17:30: directly contradicted (response says 1-3 days). The direct contradiction on processing time, combined with missing requirements, brings this to 2.
+Output: {"score": 2, "reason": "Key points from reference — (1) logistics document as a third alternative: missing; (2) pre-registration for service transfers: missing; (3) same-day processing before 17:30: directly contradicted (response says 1-3 days). The direct contradiction on processing time, combined with missing requirements, brings this to 2."}
 
 Example 4:
 <user_question>How do I cancel my subscription?</user_question>
 <llm_response>I'm sorry, I don't have any information about cancelling subscriptions.</llm_response>
 <reference_answer>Go to Account Settings, click Subscription, then select Cancel Plan.</reference_answer>
-Score: 1
-Reason: The reference provides a clear 3-step cancellation process. The response claims no information is available, entirely failing to convey the reference content.
+Output: {"score": 1, "reason": "The reference provides a clear 3-step cancellation process. The response claims no information is available, entirely failing to convey the reference content."}
 
 Example 5:
 <user_question>What shipping options are available?</user_question>
 <llm_response>We offer standard shipping (5-7 business days) and express shipping (1-2 business days). Orders over $50 qualify for free standard shipping.</llm_response>
 <reference_answer>Standard shipping: 5-7 business days. Express shipping: 1-2 business days. Free standard shipping on orders over $50.</reference_answer>
-Score: 5
-Reason: All three key points — standard shipping timeframe, express shipping timeframe, free shipping threshold — are correctly stated.
+Output: {"score": 5, "reason": "All three key points — standard shipping timeframe, express shipping timeframe, free shipping threshold — are correctly stated."}
 
 Example 6:
 <user_question>What are the KYC requirements for individual accounts?</user_question>
 <llm_response>Individual accounts require a government-issued ID and proof of address.</llm_response>
 <reference_answer>Individual accounts require a government-issued ID, proof of address, and a selfie for identity verification.</reference_answer>
-Score: 3
-Reason: Key points from reference — (1) government-issued ID: correct; (2) proof of address: correct; (3) selfie for identity verification: missing. Response covers 2 of 3 requirements with no contradictions, scoring 3.
+Output: {"score": 3, "reason": "Key points from reference — (1) government-issued ID: correct; (2) proof of address: correct; (3) selfie for identity verification: missing. Response covers 2 of 3 requirements with no contradictions, scoring 3."}
 
 Example 7:
 <user_question>Does this product support Feature X?</user_question>
 <llm_response>I don't have specific information about Feature X support for this product.</llm_response>
 <reference_answer></reference_answer>
-Score: 3
-Reason: Reference answer was not provided. Accuracy cannot be evaluated.
+Output: {"score": 3, "reason": "Reference answer was not provided. Accuracy cannot be evaluated."}
 
 Example 8:
 <user_question>Why is my order in a pending state?</user_question>
 <llm_response>Orders can remain pending due to: (1) payment verification taking longer than usual; (2) the item being temporarily out of stock; (3) address validation checks. If none of these apply to your situation, please contact our support team for further assistance.</llm_response>
 <reference_answer>Please check the status details on the order page. If you cannot determine the cause, contact customer support for help.</reference_answer>
-Score: 4
-Reason: The reference answer contains no core factual claims — it is a pure routing/fallback instruction with no specific facts to match or contradict. The LLM response provides substantive specific reasons and retains the fallback guidance (contact support), covering the reference's core intent. Score 4.
+Output: {"score": 4, "reason": "The reference answer contains no core factual claims — it is a pure routing/fallback instruction with no specific facts to match or contradict. The LLM response provides substantive specific reasons and retains the fallback guidance (contact support), covering the reference's core intent. Score 4."}
 
 --- END EXAMPLES ---
 
-Respond in exactly this format:
-Score: <number from 1 to 5>
-Reason: <concise justification citing specific points from the reference answer that match, are missing, or are contradicted>`
+Output strictly valid JSON — no markdown, no prose, no trailing commas.
+
+Output schema:
+{"score": <number from 1 to 5>, "reason": "<concise justification citing specific points from the reference answer that match, are missing, or are contradicted>"}`
 
 // accuracyCheckUserPrompt is the per-call user message template containing only the dynamic inputs.
 // Placeholders ${Question}, ${Output}, ${ReferenceAnswer} are substituted at call time.

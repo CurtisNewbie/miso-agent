@@ -107,6 +107,7 @@ func NewRelevanceCheckAgent(chatModel model.ToolCallingChatModel, opts ...Releva
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,
+		OutputCheck:  agentloop.JsonOutputCheck[scoreReasonResponse](2),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create RelevanceCheckAgent")
@@ -186,56 +187,50 @@ Example 1:
 <user_question>How do I reset my password?</user_question>
 <knowledge_context>To reset your password, go to the login page and click "Forgot Password". Enter your registered email and follow the link sent to your inbox.</knowledge_context>
 <llm_response>Click "Forgot Password" on the login page, enter your email address, then follow the reset link in your inbox.</llm_response>
-Score: 5
-Reason: The response directly answers the question and accurately follows all steps described in the context without omission or addition.
+Output: {"score": 5, "reason": "The response directly answers the question and accurately follows all steps described in the context without omission or addition."}
 
 Example 2:
 <user_question>How do I reset my password?</user_question>
 <knowledge_context>To reset your password, go to the login page and click "Forgot Password".</knowledge_context>
 <llm_response>You can reach our support team by emailing help@example.com for any account issues.</llm_response>
-Score: 1
-Reason: The response redirects to customer support instead of answering the password reset question. It is completely off-topic relative to both the question and the context.
+Output: {"score": 1, "reason": "The response redirects to customer support instead of answering the password reset question. It is completely off-topic relative to both the question and the context."}
 
 Example 3:
 <user_question>What are the shipping options and their delivery times?</user_question>
 <knowledge_context>We offer standard shipping (5-7 business days) and express shipping (1-2 business days). Orders over $50 qualify for free standard shipping.</knowledge_context>
 <llm_response>We have fast and slow shipping options available.</llm_response>
-Score: 3
-Reason: The response acknowledges that multiple shipping speeds exist but omits the specific delivery timeframes and the free shipping threshold, which were directly asked about.
+Output: {"score": 3, "reason": "The response acknowledges that multiple shipping speeds exist but omits the specific delivery timeframes and the free shipping threshold, which were directly asked about."}
 
 Example 4:
 <user_question>Can customer invitation codes be changed?</user_question>
 <knowledge_context>This section covers payment information modification, permission settings, and member verification code updates.</knowledge_context>
 <llm_response>I'm sorry, there is currently no information available about whether customer invitation codes can be changed. If you have other questions, feel free to ask.</llm_response>
-Score: 3
-Reason: The response is on-topic — it directly acknowledges the question and honestly states no information is available. However, the question remains unanswered, which is a significant gap. This scores 3, not 1, because the response is not off-topic; it appropriately reflects the limits of available knowledge.
+Output: {"score": 3, "reason": "The response is on-topic — it directly acknowledges the question and honestly states no information is available. However, the question remains unanswered, which is a significant gap. This scores 3, not 1, because the response is not off-topic; it appropriately reflects the limits of available knowledge."}
 
 Example 5:
 <user_question>What is the deadline to request a refund?</user_question>
 <knowledge_context>Customers may request a refund within 7 days of purchase. After 7 days, no refunds will be issued.</knowledge_context>
 <llm_response>I'm sorry, I don't have any information about the refund deadline. Please contact customer support for details.</llm_response>
-Score: 2
-Reason: The response is on the right topic but falsely claims no information is available, ignoring the directly relevant context that explicitly states the 7-day deadline.
+Output: {"score": 2, "reason": "The response is on the right topic but falsely claims no information is available, ignoring the directly relevant context that explicitly states the 7-day deadline."}
 
 Example 6:
 <user_question>How do I cancel my subscription?</user_question>
 <knowledge_context>Our platform offers monthly and annual subscription plans. Annual plans come with a 20% discount compared to monthly billing.</knowledge_context>
 <llm_response>To cancel your subscription, go to Account Settings, click Subscription, then select Cancel Plan and choose a cancellation reason.</llm_response>
-Score: 5
-Reason: The response directly and completely answers the cancellation question. The specific steps are not found in the context — this is a factual accuracy concern, not a relevance concern. The response is fully relevant to the question regardless of whether the steps are correct.
+Output: {"score": 5, "reason": "The response directly and completely answers the cancellation question. The specific steps are not found in the context — this is a factual accuracy concern, not a relevance concern. The response is fully relevant to the question regardless of whether the steps are correct."}
 
 Example 7:
 <user_question>Is my account eligible for the special rate?</user_question>
 <knowledge_context>Special rates are assessed on a case-by-case basis depending on account history, transaction volume, and other factors. No universal eligibility criteria apply.</knowledge_context>
 <llm_response>Eligibility for the special rate depends on your specific account situation. Please reach out to your account manager who can review the details and advise you directly.</llm_response>
-Score: 5
-Reason: The question has no deterministic rule-based answer — eligibility requires human case-by-case judgment. Routing the user to a human agent is the correct and complete response to this type of question, making it fully on-topic.
+Output: {"score": 5, "reason": "The question has no deterministic rule-based answer — eligibility requires human case-by-case judgment. Routing the user to a human agent is the correct and complete response to this type of question, making it fully on-topic."}
 
 --- END EXAMPLES ---
 
-Respond in exactly this format:
-Score: <number from 1 to 5>
-Reason: <concise justification explaining why the response is or is not relevant>`
+Output strictly valid JSON — no markdown, no prose, no trailing commas.
+
+Output schema:
+{"score": <number from 1 to 5>, "reason": "<concise justification explaining why the response is or is not relevant>"}`
 
 // relevanceCheckUserPrompt is the per-call user message template containing only the dynamic inputs.
 // Placeholders ${Question}, ${Context}, ${Output} are substituted at call time.

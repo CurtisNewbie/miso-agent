@@ -111,6 +111,7 @@ func NewFactCheckAgent(chatModel model.ToolCallingChatModel, opts ...FactCheckOp
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,
+		OutputCheck:  agentloop.JsonOutputCheck[scoreReasonResponse](2),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create FactCheckAgent")
@@ -195,42 +196,38 @@ Example 1:
 <user_question>What is the refund policy for digital products?</user_question>
 <knowledge_context>All digital products are non-refundable once downloaded. Physical products can be returned within 30 days.</knowledge_context>
 <llm_response>Digital products cannot be refunded after download. Physical items are eligible for return within 30 days.</llm_response>
-Score: 5
-Reason: The response exactly matches the context. Both the no-refund rule for digital products and the 30-day return window for physical products are correctly stated.
+Output: {"score": 5, "reason": "The response exactly matches the context. Both the no-refund rule for digital products and the 30-day return window for physical products are correctly stated."}
 
 Example 2:
 <user_question>How many support tiers does the service offer?</user_question>
 <knowledge_context>The service provides two support plans: Standard (email only, 48h response) and Premium (24/7 phone and email, 4h response).</knowledge_context>
 <llm_response>The service offers three support tiers: Basic, Standard, and Premium, each with different response times.</llm_response>
-Score: 1
-Reason: The context describes exactly two support plans. The response invents a third "Basic" tier that does not exist in the context, which is a hallucination.
+Output: {"score": 1, "reason": "The context describes exactly two support plans. The response invents a third \"Basic\" tier that does not exist in the context, which is a hallucination."}
 
 Example 3:
 <user_question>Can customer invitation codes be changed?</user_question>
 <knowledge_context>This section covers payment information modification, permission settings, and member verification code updates.</knowledge_context>
 <llm_response>I'm sorry, there is currently no information available about whether customer invitation codes can be changed. If you have other questions, feel free to ask.</llm_response>
-Score: 5
-Reason: The context contains no information about customer invitation codes. The response correctly abstains by acknowledging the knowledge gap rather than fabricating an answer. Correct abstention when context lacks relevant information is accurate behavior.
+Output: {"score": 5, "reason": "The context contains no information about customer invitation codes. The response correctly abstains by acknowledging the knowledge gap rather than fabricating an answer. Correct abstention when context lacks relevant information is accurate behavior."}
 
 Example 4:
 <user_question>What is the deadline to request a refund?</user_question>
 <knowledge_context>Customers may request a refund within 7 days of purchase. After 7 days, no refunds will be issued.</knowledge_context>
 <llm_response>I'm sorry, I don't have any information about the refund deadline. Please contact customer support for details.</llm_response>
-Score: 1
-Reason: The context explicitly states that refunds must be requested within 7 days of purchase. The response falsely claims no information is available, which directly contradicts the context and misleads the user.
+Output: {"score": 1, "reason": "The context explicitly states that refunds must be requested within 7 days of purchase. The response falsely claims no information is available, which directly contradicts the context and misleads the user."}
 
 Example 5:
 <user_question>Are sports drinks allowed in carry-on luggage?</user_question>
 <knowledge_context>Liquids restricted in carry-on luggage include: alcoholic beverages over 70% ABV, aerosols, and gels. Beverages under 100ml are permitted.</knowledge_context>
 <llm_response>No, all drinks including sports drinks are prohibited in carry-on luggage. You may speak to a security officer at the checkpoint to request an exemption.</llm_response>
-Score: 1
-Reason: The context restricts specific liquid types (high-ABV alcohol, aerosols, gels) and permits beverages under 100ml. The response overgeneralizes to "all drinks", which contradicts the context. It also fabricates an exemption process via a security officer that is not mentioned anywhere in the context. Both distorting the scope of a rule and inventing exception paths not present in the context are hallucinations.
+Output: {"score": 1, "reason": "The context restricts specific liquid types (high-ABV alcohol, aerosols, gels) and permits beverages under 100ml. The response overgeneralizes to \"all drinks\", which contradicts the context. It also fabricates an exemption process via a security officer that is not mentioned anywhere in the context. Both distorting the scope of a rule and inventing exception paths not present in the context are hallucinations."}
 
 --- END EXAMPLES ---
 
-Respond in exactly this format:
-Score: <number from 1 to 5>
-Reason: <concise justification referencing specific evidence from the context>`
+Output strictly valid JSON — no markdown, no prose, no trailing commas.
+
+Output schema:
+{"score": <number from 1 to 5>, "reason": "<concise justification referencing specific evidence from the context>"}`
 
 // factCheckUserPrompt is the per-call user message template containing only the dynamic inputs.
 // Placeholders ${Question}, ${Context}, ${Output} are substituted at call time.
