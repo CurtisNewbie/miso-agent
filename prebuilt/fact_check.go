@@ -135,7 +135,7 @@ type FactCheckInput struct {
 // Check evaluates the factual accuracy of an LLM response and returns a [FactCheckResult].
 //
 // The prompt template is substituted with the provided inputs using strutil.NamedSprintfv.
-// The model response is parsed for "Score:" and "Reason:" fields. If either field is missing
+// The model response is parsed as JSON with "score" and "reason" fields. If either field is missing
 // the call is retried up to [factCheckConfig.RetryCount] additional times.
 func (a *FactCheckAgent) Check(rail flow.Rail, input FactCheckInput) (FactCheckResult, error) {
 	userPrompt := strutil.NamedSprintfv(factCheckUserPrompt, factCheckPromptInput{

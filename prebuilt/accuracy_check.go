@@ -137,7 +137,7 @@ type AccuracyCheckInput struct {
 // an [AccuracyCheckResult].
 //
 // The prompt template is substituted with the provided inputs using strutil.NamedSprintfv.
-// The model response is parsed for "Score:" and "Reason:" fields. If either field is missing
+// The model response is parsed as JSON with "score" and "reason" fields. If either field is missing
 // the call is retried up to [accuracyCheckConfig.RetryCount] additional times.
 func (a *AccuracyCheckAgent) Check(rail flow.Rail, input AccuracyCheckInput) (AccuracyCheckResult, error) {
 	userPrompt := strutil.NamedSprintfv(accuracyCheckUserPrompt, accuracyCheckPromptInput{

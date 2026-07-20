@@ -131,7 +131,7 @@ type RelevanceCheckInput struct {
 // Check evaluates the relevance of an LLM response and returns a [RelevanceCheckResult].
 //
 // The prompt template is substituted with the provided inputs using strutil.NamedSprintfv.
-// The model response is parsed for "Score:" and "Reason:" fields. If either field is missing
+// The model response is parsed as JSON with "score" and "reason" fields. If either field is missing
 // the call is retried up to [relevanceCheckConfig.RetryCount] additional times.
 func (a *RelevanceCheckAgent) Check(rail flow.Rail, input RelevanceCheckInput) (RelevanceCheckResult, error) {
 	userPrompt := strutil.NamedSprintfv(relevanceCheckUserPrompt, relevanceCheckPromptInput{
