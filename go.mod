@@ -2,8 +2,6 @@ module github.com/curtisnewbie/miso-agent
 
 go 1.25.0
 
-toolchain go1.25.4
-
 require (
 	github.com/cloudwego/eino v0.7.18
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.10
