@@ -439,6 +439,10 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 		}
 		rail.Infof("%s", msg)
 
+	case "bash":
+		script := extractJSONStringField(argsJSON, "script")
+		rail.Infof("[%v] [%v] Tool/bash — script: \n%v\n", graphName, step, script)
+
 	default:
 		rail.Infof("[%v] [%v] Tool/%v called", graphName, step, ri.Name)
 	}
