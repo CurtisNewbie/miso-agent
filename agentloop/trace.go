@@ -263,7 +263,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 					if msg != nil {
 						rail := flow.NewRail(ctx)
 						if msg.Content != "" {
-							rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, msg.Content)
+							rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, trimMiddle(msg.Content, 250))
 						}
 						if msg.ReasoningContent != "" {
 							rail.Infof("[%v] [%v] %v/%v reasoning:\n%v", name, accStep(acc), ri.Component, ri.Name, msg.ReasoningContent)
@@ -592,4 +592,14 @@ func marshalCallbackOutput(out callbacks.CallbackOutput) json.RawMessage {
 		return json.RawMessage("null")
 	}
 	return json.RawMessage(b)
+}
+
+// trimMiddle truncates s to at most keep+keep runes, replacing the middle with " ... ".
+// If len(s) <= keep*2, s is returned unchanged.
+func trimMiddle(s string, keep int) string {
+	runes := []rune(s)
+	if len(runes) <= keep*2 {
+		return s
+	}
+	return string(runes[:keep]) + " ... " + string(runes[len(runes)-keep:])
 }
