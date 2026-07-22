@@ -9,9 +9,9 @@ import (
 	"github.com/curtisnewbie/miso/flow"
 )
 
-// newTestMemFileStore creates a TmpFileStore with OnSessionStart already called.
+// newTestTmpFileStore creates a TmpFileStore with OnSessionStart already called.
 // Suitable for use in unit tests; panics if session start fails.
-func newTestMemFileStore() *TmpFileStore {
+func newTestTmpFileStore() *TmpFileStore {
 	be := NewTmpFileStore()
 	rail := flow.NewRail(context.Background())
 	if err := be.OnSessionStart(rail); err != nil {
@@ -67,7 +67,7 @@ func TestTmpFileStore_SessionLifecycle(t *testing.T) {
 }
 
 func TestTmpFileStore_WriteRead_TmpFile(t *testing.T) {
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 	defer be.OnSessionEnd(flow.NewRail(context.Background()))
 
 	ctx := context.Background()
@@ -110,7 +110,7 @@ func TestTmpFileStore_WriteRead_TmpFile(t *testing.T) {
 }
 
 func TestTmpFileStore_Overwrite_TmpFile(t *testing.T) {
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 	defer be.OnSessionEnd(flow.NewRail(context.Background()))
 
 	ctx := context.Background()
@@ -141,7 +141,7 @@ func TestTmpFileStore_Overwrite_TmpFile(t *testing.T) {
 }
 
 func TestTmpFileStore_DeleteFile_RemovesTmpFile(t *testing.T) {
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 	defer be.OnSessionEnd(flow.NewRail(context.Background()))
 
 	ctx := context.Background()
@@ -221,7 +221,7 @@ func TestTmpFileStore_LazyInit_WriteWithoutSessionStart(t *testing.T) {
 }
 
 func TestTmpFileStore_WriteFile_RejectsPathTraversal(t *testing.T) {
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 	defer be.OnSessionEnd(flow.NewRail(context.Background()))
 	ctx := context.Background()
 

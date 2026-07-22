@@ -75,16 +75,11 @@ func WithBashCustomCommands(cmds ...BashCommand) BashToolOption {
 
 const bashToolDescription = `Execute a bash script in a sandboxed environment.
 
-When the agent's file store backs a real directory (i.e. it implements
-DirBackedFileStore), the sandbox shares that directory's filesystem, so files
-written via write_file are visible to bash (e.g. "cat /foo/bar.txt"), and files
-created by bash scripts are visible to read_file/list_directory. Otherwise the
-sandbox uses an isolated in-memory filesystem.
-
-Network access is disabled by default; commands like curl will fail unless the
-tool has been explicitly configured with allowed network destinations.
-
-Each call runs with a bounded timeout; scripts that run too long are aborted.`
+- Output contains stdout, stderr, and exit_code. Always check exit_code: non-zero means failure.
+- Files are shared with other file tools.
+- Always quote paths that contain spaces.
+- Avoid find, grep, cat, head, tail, sed, awk, and echo unless shell-native behavior is truly required.
+- Use bash only when shell execution itself is needed. Use dedicated tools if possible.`
 
 // NewBashTool creates the built-in "bash" tool, which executes a bash script inside a
 // sandboxed environment (github.com/mark3labs/go-bash). By default the sandbox has no

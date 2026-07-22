@@ -52,7 +52,7 @@ func TestBashTool_NonZeroExit(t *testing.T) {
 
 func TestBashTool_SharedFileStore(t *testing.T) {
 	ctx := context.Background()
-	store := newTestMemFileStore()
+	store := newTestTmpFileStore()
 	defer store.OnSessionEnd(flow.NewRail(ctx))
 
 	if err := store.WriteFile(ctx, "/greeting.txt", []byte("hi there")); err != nil {
@@ -164,9 +164,50 @@ func TestBashTool_CustomCommand(t *testing.T) {
 	}
 }
 
+func TestBashTool_FSRootConfinement(t *testing.T) {
+	ctx := context.Background()
+	store := newTestTmpFileStore()
+	defer store.OnSessionEnd(flow.NewRail(ctx))
+
+	dir, err := store.RootDir()
+	if err != nil {
+		t.Fatalf("RootDir failed: %v", err)
+	}
+
+	// Write sentinel outside the sandbox root on the host fs.
+	sentinelPath := filepath.Join(filepath.Dir(dir), "sentinel_escape_test.txt")
+	if err := os.WriteFile(sentinelPath, []byte("escaped"), 0o644); err != nil {
+		t.Fatalf("failed to write sentinel: %v", err)
+	}
+	defer os.Remove(sentinelPath)
+
+	tool := NewBashTool()
+	agentCtx := AgentContext{Store: store, Metadata: NewMetadataStore(), bash: &bashSandboxHolder{}}
+	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)
+
+	sentinelName := filepath.Base(sentinelPath)
+	for _, script := range []string{
+		"cat /../" + sentinelName,
+		"cat ../" + sentinelName,
+	} {
+		args, _ := json.Marshal(map[string]interface{}{"script": script})
+		result, err := tool.(SelfInvokeTool).ExecuteJson(ctx, string(args))
+		if err != nil {
+			t.Fatalf("script=%q: bash execution failed: %v", script, err)
+		}
+		t.Logf("result: %v", result)
+		if strings.Contains(result, "escaped") {
+			t.Errorf("script=%q: sandbox escaped root, sentinel content visible: %q", script, result)
+		}
+		if strings.Contains(result, "exit_code: 0") {
+			t.Errorf("script=%q: expected non-zero exit for path-traversal attempt, got: %q", script, result)
+		}
+	}
+}
+
 func TestTmpFileStore_PathMirroring(t *testing.T) {
 	ctx := context.Background()
-	store := newTestMemFileStore()
+	store := newTestTmpFileStore()
 	defer store.OnSessionEnd(flow.NewRail(ctx))
 
 	if err := store.WriteFile(ctx, "/a/b.txt", []byte("data")); err != nil {

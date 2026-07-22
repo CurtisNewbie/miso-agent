@@ -164,7 +164,7 @@ func TestRunLuaScript_RequireBlocked(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_Success(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	if err := be.WriteFile(ctx, "/input/data.csv", []byte("name,age\nAlice,30\nBob,25")); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -192,7 +192,7 @@ func TestNewTransformCsvLuaTool_Success(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_FileNotFound(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	agentCtx := AgentContext{
 		Store: be,
@@ -213,7 +213,7 @@ func TestNewTransformCsvLuaTool_FileNotFound(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_TraversalRejected(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	agentCtx := AgentContext{
 		Store: be,
@@ -237,7 +237,7 @@ func TestNewTransformCsvLuaTool_TraversalRejected(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_EmptyInputPath(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	agentCtx := AgentContext{
 		Store: be,
@@ -258,7 +258,7 @@ func TestNewTransformCsvLuaTool_EmptyInputPath(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_EmptyScript(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	be.WriteFile(ctx, "/input/data.csv", []byte("a,b"))
 
@@ -281,7 +281,7 @@ func TestNewTransformCsvLuaTool_EmptyScript(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_ScriptError(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	be.WriteFile(ctx, "/input/data.csv", []byte("a,b"))
 
@@ -346,7 +346,7 @@ func TestRunLuaScript_RowsAndInputBothAvailable(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_RowsTransform(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	csv := "name,dept\nAlice,Eng\nBob,Product"
 	if err := be.WriteFile(ctx, "/input/data.csv", []byte(csv)); err != nil {
@@ -388,7 +388,7 @@ return table.concat(out, "\n\n")
 
 func TestNewTransformCsvLuaTool_OutputPath(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	if err := be.WriteFile(ctx, "/input/data.csv", []byte("a,b\n1,2")); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
@@ -425,7 +425,7 @@ func TestNewTransformCsvLuaTool_OutputPath(t *testing.T) {
 
 func TestNewTransformCsvLuaTool_OutputPathTraversalRejected(t *testing.T) {
 	ctx := context.Background()
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 
 	be.WriteFile(ctx, "/input/data.csv", []byte("a,b"))
 

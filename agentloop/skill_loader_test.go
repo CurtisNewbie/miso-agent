@@ -66,7 +66,7 @@ func TestNormalizePath(t *testing.T) {
 
 func TestSkillLoader_LoadSkillFile(t *testing.T) {
 	ctx := context.Background()
-	backend := newTestMemFileStore()
+	backend := newTestTmpFileStore()
 	loader := NewSkillLoader(backend)
 
 	// Write a valid skill file
@@ -165,7 +165,7 @@ description: A skill with invalid name
 
 func TestSkillLoader_LoadFromSource(t *testing.T) {
 	ctx := context.Background()
-	backend := newTestMemFileStore()
+	backend := newTestTmpFileStore()
 	loader := NewSkillLoader(backend)
 
 	// Create skill files in the source directory
@@ -246,7 +246,7 @@ description: Data analysis skill
 
 func TestSkillLoader_LoadFromSources(t *testing.T) {
 	ctx := context.Background()
-	backend := newTestMemFileStore()
+	backend := newTestTmpFileStore()
 	loader := NewSkillLoader(backend)
 
 	// Create skills in source1
