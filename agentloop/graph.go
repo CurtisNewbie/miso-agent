@@ -266,13 +266,6 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 				return []*schema.Message{}, nil
 			}), compose.WithNodeName(nodeNameHitlGate))
 			_ = g.AddEdge("tools", "hitl_gate")
-			_ = g.AddBranch("hitl_gate", compose.NewGraphBranch(func(ctx context.Context, _ []*schema.Message) (string, error) {
-				agentCtx, _ := ctx.Value(agentCtxKey).(AgentContext)
-				if agentCtx.hitl.get() != nil {
-					return "hitl_output", nil
-				}
-				return "chat_model", nil
-			}, map[string]bool{"chat_model": true, "hitl_output": true}))
 
 			// hitl_output: persist state to HitlStore and return an interrupted TaskOutput.
 			_ = g.AddLambdaNode("hitl_output", compose.InvokableLambda(func(ctx context.Context, _ []*schema.Message) (taskOutput, error) {
@@ -323,6 +316,13 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 				}, nil
 			}), compose.WithNodeName(nodeNameHitlOutput))
 			_ = g.AddEdge("hitl_output", compose.END)
+			_ = g.AddBranch("hitl_gate", compose.NewGraphBranch(func(ctx context.Context, _ []*schema.Message) (string, error) {
+				agentCtx, _ := ctx.Value(agentCtxKey).(AgentContext)
+				if agentCtx.hitl.get() != nil {
+					return "hitl_output", nil
+				}
+				return "chat_model", nil
+			}, map[string]bool{"chat_model": true, "hitl_output": true}))
 		} else {
 			_ = g.AddEdge("tools", "chat_model")
 		}
