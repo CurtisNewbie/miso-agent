@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -197,6 +198,10 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		toolRegistry.Register(NewBashTool(config.BashToolOptions...))
 	}
 
+	if config.HitlStore != nil && config.EnableHitlInterruptTool {
+		toolRegistry.Register(NewInterruptForHumanTool())
+	}
+
 	// Add custom tools
 	for _, t := range config.Tools {
 		toolRegistry.Register(t)
@@ -251,6 +256,10 @@ type AgentContext struct {
 	// bash tool, shared across bash tool calls within the same Execute() call.
 	// Unexported: an internal detail of the bash tool, not part of the public API.
 	bash *bashSandboxHolder
+
+	// hitl holds the pending HITL interrupt signal for this execution.
+	// Always non-nil. Use [RequestHitlInterrupt] from tools.
+	hitl *hitlHolder
 }
 
 // AgentRequest represents a request to execute an agent
@@ -270,7 +279,51 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		req.SessionId = idutil.Id("sess_")
 	}
 	rail.Infof("Execute agent %q, SessionId: %q, UserInput: %q", a.config.Name, req.SessionId, req.UserInput)
+	return a.run(rail, req, nil)
+}
 
+// Resume resumes an interrupted agent session.
+// The session must have been previously interrupted (TaskOutput.Interrupted == true).
+// req.SessionId must match the SessionId from the interrupted Execute or Resume call.
+// req.UserInput is the human's response, appended to the restored conversation before
+// the loop continues. All other AgentRequest fields work the same as Execute.
+//
+// The persisted HITL state is deleted from HitlStore only on a clean finish (no error
+// and not re-interrupted). On error the state is left untouched so the caller can retry.
+// On re-interrupt, hitl_output overwrites the state with the new checkpoint.
+func (a *Agent) Resume(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
+
+	if a.config.HitlStore == nil {
+		return TaskOutput{}, errs.NewErrf("HitlStore is not configured for agent %q", a.config.Name)
+	}
+	if req.SessionId == "" {
+		return TaskOutput{}, errs.NewErrf("SessionId is required for Resume")
+	}
+
+	rail = rail.NextSpanId()
+	hitlState, found, err := a.config.HitlStore.Load(rail, req.SessionId)
+	if err != nil {
+		return TaskOutput{}, errs.Wrapf(err, "failed to load HITL state for session %q", req.SessionId)
+	}
+	if !found {
+		return TaskOutput{}, errs.NewErrf("no interrupted session found for SessionId %q", req.SessionId)
+	}
+
+	rail.Infof("Resume agent %q, SessionId: %q, UserInput: %q, restoring %d messages",
+		a.config.Name, req.SessionId, req.UserInput, len(hitlState.Messages))
+	result, err := a.run(rail, req, &hitlState)
+	if err == nil && !result.Interrupted {
+		if delErr := a.config.HitlStore.Delete(rail, req.SessionId); delErr != nil {
+			rail.Errorf("[%v] Resume: failed to delete HITL state for session %q: %v", a.config.Name, req.SessionId, delErr)
+		}
+	}
+	return result, err
+}
+
+// run is the shared execution body for Execute and Resume.
+// hitlState is nil for a fresh Execute; non-nil for a Resume, in which case the
+// persisted message history and agent counters are restored before the loop continues.
+func (a *Agent) run(rail flow.Rail, req AgentRequest, hitlState *HitlState) (TaskOutput, error) {
 	// Initialize backend (fresh on each execution)
 	var backend FileStore
 	if a.config.BackendFactory != nil {
@@ -317,6 +370,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		Artifacts: artifactManager,
 		Metadata:  metadataStore,
 		bash:      &bashSandboxHolder{},
+		hitl:      &hitlHolder{},
 	}
 	rail = rail.WithCtxVal(agentCtxKey, agentCtxVal)
 
@@ -337,11 +391,29 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		}
 	}
 
-	// Prepare input with backend and skills
-	taskInput := taskInput{
-		task:   req.UserInput,
-		skills: skills,
-		store:  backend,
+	// Prepare input with backend and skills.
+	// On resume, inject the restored message history and agent counters.
+	var ti taskInput
+	if hitlState != nil {
+		msgs := make([]*schema.Message, len(hitlState.Messages), len(hitlState.Messages)+1)
+		copy(msgs, hitlState.Messages)
+		if req.UserInput != "" {
+			msgs = append(msgs, schema.UserMessage(req.UserInput))
+		}
+		ti = taskInput{
+			task:                      req.UserInput,
+			skills:                    skills,
+			store:                     backend,
+			resumeMessages:            msgs,
+			resumeCompactionSummary:   hitlState.CompactionSummary,
+			resumeOutputCheckAttempts: hitlState.OutputCheckAttempts,
+		}
+	} else {
+		ti = taskInput{
+			task:   req.UserInput,
+			skills: skills,
+			store:  backend,
+		}
 	}
 
 	// Execute graph with agent-specific trace callback (always registered to collect token usage)
@@ -352,7 +424,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	}
 	rail = rail.WithCtxVal(tokenAccCtxKey, acc)
 	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc, traceAcc)}
-	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
+	result, err := a.graph.Invoke(rail, ti, invokeOpts...)
 	result.TokenUsage = acc.snapshot()
 	if traceAcc != nil {
 		result.TraceLogs = traceAcc.snapshot()

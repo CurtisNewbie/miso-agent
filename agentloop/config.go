@@ -187,6 +187,16 @@ type AgentConfig struct {
 	// the full message history per call, so TraceLogs can grow large on long multi-turn runs.
 	// If nil, defaults to false.
 	EnableTrace *bool
+
+	// EnableHitlInterruptTool registers the built-in interrupt_for_human tool, allowing
+	// the LLM to pause execution by calling it directly. Only takes effect when HitlStore
+	// is also set. When false, tools can still trigger HITL via [RequestHitlInterrupt].
+	EnableHitlInterruptTool bool
+
+	// HitlStore persists interrupted session state for later resumption via [Agent.Resume].
+	// When set, HITL is automatically enabled: tools may call [RequestHitlInterrupt] to
+	// pause execution; the agent persists its state and returns TaskOutput.Interrupted = true.
+	HitlStore HitlStore
 }
 
 // skillsMiddleware is a Middleware that writes pre-embedded skill files into the

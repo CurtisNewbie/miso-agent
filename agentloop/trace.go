@@ -154,6 +154,8 @@ const (
 	nodeNameUpdateState      = "Update State"
 	nodeNameOutputCheckRetry = "Output Check Retry"
 	nodeNameFinalOutput      = "Final Output"
+	nodeNameHitlOutput       = "HITL Output"
+	nodeNameHitlGate         = "HITL Gate"
 )
 
 // withAgentTraceCallback builds a trace callback for the AgentLoop graph.
