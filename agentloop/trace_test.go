@@ -140,3 +140,35 @@ func TestBuildTraceHandler_ToolResultEvent(t *testing.T) {
 		}
 	})
 }
+
+func TestAgentExtractToolResponse(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  callbacks.CallbackOutput
+		wanted string
+	}{
+		{
+			name:   "string output",
+			input:  "tool result",
+			wanted: "tool result",
+		},
+		{
+			name:   "callback output",
+			input:  &einotool.CallbackOutput{Response: "tool result"},
+			wanted: "tool result",
+		},
+		{
+			name:   "nil output",
+			input:  nil,
+			wanted: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := agentExtractToolResponse(tt.input); got != tt.wanted {
+				t.Fatalf("agentExtractToolResponse() = %q, want %q", got, tt.wanted)
+			}
+		})
+	}
+}

@@ -239,10 +239,9 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 					})
 				}
 				if ops.logOnEnd && ops.logOutputs {
-					msg := agentExtractMessage(output)
-					if msg != nil && msg.Content != "" {
+					if resp := agentExtractToolResponse(output); resp != "" {
 						rail := flow.NewRail(ctx)
-						rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, trimMiddle(msg.Content, 250))
+						rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, trimMiddle(resp, 250))
 					}
 				}
 			}
@@ -581,6 +580,15 @@ func agentExtractMessage(in callbacks.CallbackOutput) *schema.Message {
 		return m
 	}
 	return nil
+}
+
+// agentExtractToolResponse extracts tool callback response text from a callback output.
+func agentExtractToolResponse(in callbacks.CallbackOutput) string {
+	co := einotool.ConvCallbackOutput(in)
+	if co == nil {
+		return ""
+	}
+	return co.Response
 }
 
 // marshalCallbackInput marshals a callback input to JSON for trace recording.
