@@ -70,7 +70,7 @@ type AgentConfig struct {
 	// If nil, defaults to false.
 	LogInputs *bool
 
-	// LogOutputs controls whether the agent logs model output content.
+	// LogOutputs controls whether the agent logs model and tool output content.
 	// If nil, defaults to true.
 	LogOutputs *bool
 

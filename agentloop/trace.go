@@ -229,13 +229,22 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 			if ri.Component == "ChatModel" && ri.Name == "" {
 				return ctx
 			}
-			if ops.toolEventCallback != nil && ri.Component == "Tool" {
-				args, _ := ctx.Value(toolArgsCtxKey).(string)
-				ops.toolEventCallback(ToolEvent{
-					Kind: ToolEventKindResult,
-					Name: ri.Name,
-					Args: args,
-				})
+			if ri.Component == "Tool" {
+				if ops.toolEventCallback != nil {
+					args, _ := ctx.Value(toolArgsCtxKey).(string)
+					ops.toolEventCallback(ToolEvent{
+						Kind: ToolEventKindResult,
+						Name: ri.Name,
+						Args: args,
+					})
+				}
+				if ops.logOnEnd && ops.logOutputs {
+					msg := agentExtractMessage(output)
+					if msg != nil && msg.Content != "" {
+						rail := flow.NewRail(ctx)
+						rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, trimMiddle(msg.Content, 250))
+					}
+				}
 			}
 			if ri.Component == "ChatModel" {
 				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
@@ -263,7 +272,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 					if msg != nil {
 						rail := flow.NewRail(ctx)
 						if msg.Content != "" {
-							rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, trimMiddle(msg.Content, 250))
+							rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, msg.Content)
 						}
 						if msg.ReasoningContent != "" {
 							rail.Infof("[%v] [%v] %v/%v reasoning:\n%v", name, accStep(acc), ri.Component, ri.Name, msg.ReasoningContent)
