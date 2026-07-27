@@ -36,7 +36,7 @@ type bashToolConfig struct {
 	timeout         time.Duration
 	networkPrefixes []string
 	customCommands  []BashCommand
-	outputSanitize  func(stdout, stderr string) (string, string)
+	outputSanitize  func(command, stdout, stderr string) (string, string)
 }
 
 // BashToolOption configures the built-in bash tool. See [WithBashTimeout],
@@ -76,7 +76,7 @@ func WithBashCustomCommands(cmds ...BashCommand) BashToolOption {
 
 // WithBashOutputSanitize rewrites stdout and stderr returned by configured
 // custom bash commands before the sandbox returns their command.Result.
-func WithBashOutputSanitize(sanitize func(stdout, stderr string) (string, string)) BashToolOption {
+func WithBashOutputSanitize(sanitize func(command, stdout, stderr string) (string, string)) BashToolOption {
 	return func(cfg *bashToolConfig) {
 		cfg.outputSanitize = sanitize
 	}
@@ -182,7 +182,7 @@ func getOrCreateBashSandbox(agentCtx AgentContext, cfg bashToolConfig) (*gobash.
 	return sandbox, nil
 }
 
-func wrapBashCustomCommands(cmds []BashCommand, sanitize func(stdout, stderr string) (string, string)) []BashCommand {
+func wrapBashCustomCommands(cmds []BashCommand, sanitize func(command, stdout, stderr string) (string, string)) []BashCommand {
 	if len(cmds) == 0 || sanitize == nil {
 		return cmds
 	}
@@ -196,7 +196,7 @@ func wrapBashCustomCommands(cmds []BashCommand, sanitize func(stdout, stderr str
 
 type bashOutputSanitizedCommand struct {
 	delegate BashCommand
-	sanitize func(stdout, stderr string) (string, string)
+	sanitize func(commad, stdout, stderr string) (string, string)
 }
 
 func (c bashOutputSanitizedCommand) Name() command.Name {
@@ -205,7 +205,7 @@ func (c bashOutputSanitizedCommand) Name() command.Name {
 
 func (c bashOutputSanitizedCommand) Execute(ctx context.Context, args []string, cmdCtx *command.Context) command.Result {
 	result := c.delegate.Execute(ctx, args, cmdCtx)
-	result.Stdout, result.Stderr = c.sanitize(result.Stdout, result.Stderr)
+	result.Stdout, result.Stderr = c.sanitize(string(c.Name()), result.Stdout, result.Stderr)
 	return result
 }
 
