@@ -36,10 +36,11 @@ type bashToolConfig struct {
 	timeout         time.Duration
 	networkPrefixes []string
 	customCommands  []BashCommand
+	outputSanitize  func(stdout, stderr string) (string, string)
 }
 
-// BashToolOption configures the built-in bash tool. See [WithBashTimeout] and
-// [WithBashNetwork].
+// BashToolOption configures the built-in bash tool. See [WithBashTimeout],
+// [WithBashNetwork], and [WithBashOutputSanitize].
 type BashToolOption func(*bashToolConfig)
 
 // WithBashTimeout sets the maximum duration a single bash tool call may run before
@@ -73,6 +74,14 @@ func WithBashCustomCommands(cmds ...BashCommand) BashToolOption {
 	}
 }
 
+// WithBashOutputSanitize rewrites stdout and stderr returned by configured
+// custom bash commands before the sandbox returns their command.Result.
+func WithBashOutputSanitize(sanitize func(stdout, stderr string) (string, string)) BashToolOption {
+	return func(cfg *bashToolConfig) {
+		cfg.outputSanitize = sanitize
+	}
+}
+
 const bashToolDescription = `Execute a bash script in a sandboxed environment.
 
 - Output contains stdout, stderr, and exit_code. Always check exit_code: non-zero means failure.
@@ -84,7 +93,8 @@ const bashToolDescription = `Execute a bash script in a sandboxed environment.
 // NewBashTool creates the built-in "bash" tool, which executes a bash script inside a
 // sandboxed environment (github.com/mark3labs/go-bash). By default the sandbox has no
 // network access and a 30 second execution timeout; use [WithBashTimeout],
-// [WithBashNetwork], and [WithBashCustomCommands] to change these defaults.
+// [WithBashNetwork], [WithBashCustomCommands], and [WithBashOutputSanitize] to
+// change these defaults.
 func NewBashTool(opts ...BashToolOption) Tool {
 	cfg := bashToolConfig{
 		timeout: 30 * time.Second,
@@ -161,7 +171,7 @@ func getOrCreateBashSandbox(agentCtx AgentContext, cfg bashToolConfig) (*gobash.
 		}
 	}
 
-	bashOpts.CustomCommands = cfg.customCommands
+	bashOpts.CustomCommands = wrapBashCustomCommands(cfg.customCommands, cfg.outputSanitize)
 
 	sandbox, err := gobash.New(bashOpts)
 	if err != nil {
@@ -170,4 +180,35 @@ func getOrCreateBashSandbox(agentCtx AgentContext, cfg bashToolConfig) (*gobash.
 
 	holder.sandbox = sandbox
 	return sandbox, nil
+}
+
+func wrapBashCustomCommands(cmds []BashCommand, sanitize func(stdout, stderr string) (string, string)) []BashCommand {
+	if len(cmds) == 0 || sanitize == nil {
+		return cmds
+	}
+
+	wrapped := make([]BashCommand, 0, len(cmds))
+	for _, cmd := range cmds {
+		wrapped = append(wrapped, bashOutputSanitizedCommand{delegate: cmd, sanitize: sanitize})
+	}
+	return wrapped
+}
+
+type bashOutputSanitizedCommand struct {
+	delegate BashCommand
+	sanitize func(stdout, stderr string) (string, string)
+}
+
+func (c bashOutputSanitizedCommand) Name() command.Name {
+	return c.delegate.Name()
+}
+
+func (c bashOutputSanitizedCommand) Execute(ctx context.Context, args []string, cmdCtx *command.Context) command.Result {
+	result := c.delegate.Execute(ctx, args, cmdCtx)
+	result.Stdout, result.Stderr = c.sanitize(result.Stdout, result.Stderr)
+	return result
+}
+
+func (c bashOutputSanitizedCommand) Trusted() bool {
+	return c.delegate.Trusted()
 }
