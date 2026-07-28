@@ -171,6 +171,9 @@ func (a *AccuracyCheckAgent) Check(rail flow.Rail, input AccuracyCheckInput) (Ac
 			return AccuracyCheckResult{}, errs.NewErrf("missing Reason field in AccuracyCheckAgent response")
 		}
 		return AccuracyCheckResult{Score: score, Reason: reason}, nil
+	}, func(err error) bool {
+		rail.Warnf("AccuracyCheckAgent.Check failed, %v, retry", err)
+		return true
 	})
 }
 

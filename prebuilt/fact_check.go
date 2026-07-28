@@ -169,6 +169,9 @@ func (a *FactCheckAgent) Check(rail flow.Rail, input FactCheckInput) (FactCheckR
 			return FactCheckResult{}, errs.NewErrf("missing Reason field in FactCheckAgent response")
 		}
 		return result, nil
+	}, func(err error) bool {
+		rail.Warnf("FactCheckAgent.Check failed, %v, retry", err)
+		return true
 	})
 }
 

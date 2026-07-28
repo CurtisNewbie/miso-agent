@@ -165,6 +165,9 @@ func (a *RelevanceCheckAgent) Check(rail flow.Rail, input RelevanceCheckInput) (
 			return RelevanceCheckResult{}, errs.NewErrf("missing Reason field in RelevanceCheckAgent response")
 		}
 		return RelevanceCheckResult{Score: score, Reason: reason}, nil
+	}, func(err error) bool {
+		rail.Warnf("RelevanceCheckAgent.Check failed, %v, retry", err)
+		return true
 	})
 }
 
