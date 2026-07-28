@@ -143,10 +143,9 @@ func TestBashTool_TimeoutEnforcement(t *testing.T) {
 
 func TestBashTool_CustomCommand(t *testing.T) {
 	ctx := context.Background()
-	greet := command.Define("greet", func(ctx context.Context, args []string, c *command.Context) command.Result {
+	tool := NewBashTool(WithBashCommand("greet", func(ctx context.Context, args []string, c *command.Context) command.Result {
 		return command.Result{Stdout: "hi from custom command\n", ExitCode: 0}
-	})
-	tool := NewBashTool(WithBashCustomCommands(greet))
+	}))
 
 	agentCtx := AgentContext{Metadata: NewMetadataStore(), bash: &bashSandboxHolder{}}
 	ctx = context.WithValue(ctx, agentCtxKey, agentCtx)

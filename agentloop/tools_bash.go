@@ -16,7 +16,8 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 )
 
-type BashCommand = command.Command
+type CommandContext = command.Context
+type CommandResult = command.Result
 
 // bashSandboxHolder lazily holds the per-session *gobash.Bash sandbox instance used
 // by the bash tool, created on first use and reused for subsequent bash tool calls
@@ -36,7 +37,7 @@ type BashArgs struct {
 type bashToolConfig struct {
 	timeout         time.Duration
 	networkPrefixes []string
-	customCommands  []BashCommand
+	customCommands  []command.Command
 	outputSanitize  func(command, stdout, stderr string) (string, string)
 }
 
@@ -61,22 +62,23 @@ func WithBashNetwork(urlPrefixes ...string) BashToolOption {
 	}
 }
 
-// WithBashCustomCommands registers additional commands available to bash scripts,
+// WithBashCommand registers an additional command available to bash scripts,
 // on top of go-bash's built-in command set. A custom command overrides a built-in
-// of the same name. Use [github.com/mark3labs/go-bash/command.Define] to build a
-// Command:
+// of the same name. Call multiple times to register more than one command:
 //
-//	cmd := command.Define("mytool", func(ctx context.Context, args []string, c *command.Context) command.Result {
-//	    return command.Result{Stdout: "...", ExitCode: 0}
+//	WithBashCommand("mytool", func(ctx context.Context, args []string, c *CommandContext) CommandResult {
+//	    return CommandResult{Stdout: "...", ExitCode: 0}
 //	})
-func WithBashCustomCommands(cmds ...BashCommand) BashToolOption {
+func WithBashCommand(name string, invoke func(ctx context.Context, args []string, c *CommandContext) CommandResult) BashToolOption {
 	return func(cfg *bashToolConfig) {
-		cfg.customCommands = cmds
+		cfg.customCommands = append(cfg.customCommands, command.Define(name, invoke))
 	}
 }
 
 // WithBashOutputSanitize rewrites stdout and stderr returned by configured
 // custom bash commands before the sandbox returns their command.Result.
+// When a sanitizer is set, the built-in "history" command is also overridden
+// so that its output is sanitized before being displayed to the agent.
 func WithBashOutputSanitize(sanitize func(command, stdout, stderr string) (string, string)) BashToolOption {
 	return func(cfg *bashToolConfig) {
 		cfg.outputSanitize = sanitize
@@ -94,7 +96,7 @@ const bashToolDescription = `Execute a bash script in a sandboxed environment.
 // NewBashTool creates the built-in "bash" tool, which executes a bash script inside a
 // sandboxed environment (github.com/mark3labs/go-bash). By default the sandbox has no
 // network access and a 30 second execution timeout; use [WithBashTimeout],
-// [WithBashNetwork], [WithBashCustomCommands], and [WithBashOutputSanitize] to
+// [WithBashNetwork], [WithBashCommand], and [WithBashOutputSanitize] to
 // change these defaults.
 func NewBashTool(opts ...BashToolOption) Tool {
 	cfg := bashToolConfig{
@@ -183,7 +185,7 @@ func getOrCreateBashSandbox(agentCtx AgentContext, cfg bashToolConfig) (*gobash.
 	return sandbox, nil
 }
 
-func wrapBashCustomCommands(cmds []BashCommand, sanitize func(command, stdout, stderr string) (string, string)) []BashCommand {
+func wrapBashCustomCommands(cmds []command.Command, sanitize func(command, stdout, stderr string) (string, string)) []command.Command {
 	if len(cmds) == 0 || sanitize == nil {
 		return cmds
 	}
@@ -194,7 +196,7 @@ func wrapBashCustomCommands(cmds []BashCommand, sanitize func(command, stdout, s
 		return history.Execute(ctx, args, c)
 	}))
 
-	wrapped := make([]BashCommand, 0, len(cmds))
+	wrapped := make([]command.Command, 0, len(cmds))
 	for _, cmd := range cmds {
 		wrapped = append(wrapped, bashOutputSanitizedCommand{delegate: cmd, sanitize: sanitize})
 	}
@@ -203,7 +205,7 @@ func wrapBashCustomCommands(cmds []BashCommand, sanitize func(command, stdout, s
 }
 
 type bashOutputSanitizedCommand struct {
-	delegate BashCommand
+	delegate command.Command
 	sanitize func(commad, stdout, stderr string) (string, string)
 }
 
