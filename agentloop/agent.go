@@ -36,6 +36,7 @@ type agentOps struct {
 	enableTodoTool               bool
 	enableToolOffload            bool
 	enableTrace                  bool
+	logQuery                     bool
 }
 
 type ctxKey int
@@ -107,6 +108,7 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		compaction:                  boolOrDefault(config.Compaction, false),
 		compactPreserveRecentTokens: config.CompactPreserveRecentTokens,
 		enableTrace:                 boolOrDefault(config.EnableTrace, false),
+		logQuery:                    boolOrDefault(config.LogQuery, true),
 	}
 
 	// Auto-detect MaxTokens from model name if not explicitly set.
@@ -251,7 +253,11 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	if req.SessionId == "" {
 		req.SessionId = idutil.Id("sess_")
 	}
-	rail.Infof("Execute agent %q, SessionId: %q, UserInput: %q", a.config.Name, req.SessionId, req.UserInput)
+	if a.ops.logQuery {
+		rail.Infof("Execute agent %q, SessionId: %q, UserInput: %q", a.config.Name, req.SessionId, req.UserInput)
+	} else {
+		rail.Infof("Execute agent %q, SessionId: %q", a.config.Name, req.SessionId)
+	}
 
 	// Initialize backend (fresh on each execution)
 	var backend FileStore

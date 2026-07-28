@@ -169,6 +169,9 @@ type AgentConfig struct {
 	// the full message history per call, so TraceLogs can grow large on long multi-turn runs.
 	// If nil, defaults to false.
 	EnableTrace *bool
+
+	// Log user query, default true
+	LogQuery *bool
 }
 
 // skillsMiddleware is a Middleware that writes pre-embedded skill files into the

@@ -8,6 +8,7 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/llm"
+	"github.com/curtisnewbie/miso/util/ptr"
 	"github.com/curtisnewbie/miso/util/retry"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
@@ -102,6 +103,7 @@ func NewContextualRetrievalAgent(chatModel model.ToolCallingChatModel, opts ...C
 		Model:        chatModel,
 		MaxRunSteps:  2,
 		SystemPrompt: cfg.SystemPrompt,
+		LogQuery:     ptr.ValPtr(false),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create ContextualRetrievalAgent")
