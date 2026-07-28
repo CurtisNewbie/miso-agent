@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudwego/eino/schema"
 	gobash "github.com/mark3labs/go-bash"
+	"github.com/mark3labs/go-bash/builtins/history"
 	"github.com/mark3labs/go-bash/command"
 	"github.com/mark3labs/go-bash/fs/rwfs"
 	"github.com/mark3labs/go-bash/network"
@@ -187,10 +188,17 @@ func wrapBashCustomCommands(cmds []BashCommand, sanitize func(command, stdout, s
 		return cmds
 	}
 
+	// override history command to prevent leaking sensitive data
+	history := history.New()
+	cmds = append(cmds, command.Define("history", func(ctx context.Context, args []string, c *command.Context) command.Result {
+		return history.Execute(ctx, args, c)
+	}))
+
 	wrapped := make([]BashCommand, 0, len(cmds))
 	for _, cmd := range cmds {
 		wrapped = append(wrapped, bashOutputSanitizedCommand{delegate: cmd, sanitize: sanitize})
 	}
+
 	return wrapped
 }
 
