@@ -6,7 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-agent/agents"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -59,6 +61,7 @@ type Agent struct {
 	ops           agentOps
 	tools         *ToolRegistry
 	tokenizer     Tokenizer
+	model         model.ToolCallingChatModel
 	graph         compose.Runnable[taskInput, taskOutput]
 	middleware    []Middleware
 	logPromptOnce sync.Once
@@ -91,14 +94,22 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		config.MaxRunSteps = 5
 	}
 
-	// Convert MaxRunSteps (rounds) to Eino graph steps.
-	// The graph has at most 6 nodes: prepare_messages, chat_model, update_state,
-	// tools, output_check_retry, final_output; multiply by 6 to derive the budget.
-	maxGraphSteps := config.MaxRunSteps * 6
+	if config.Temperature <= 0 {
+		config.Temperature = 0.7
+	}
+
+	modelOpts := []agents.OpenAIChatModelOpt{agents.WithTemperature(config.Temperature)}
+	if config.ApiUrl != "" {
+		modelOpts = append(modelOpts, agents.WithBaseURL(config.ApiUrl))
+	}
+	chatModel, err := agents.NewOpenAIChatModel(config.ModelName, config.ApiKey, modelOpts...)
+	if err != nil {
+		return nil, errs.Wrapf(err, "failed to create chat model")
+	}
 
 	// Build ops from individual config fields
 	ops := agentOps{
-		maxRunSteps:                 maxGraphSteps,
+		maxRunSteps:                 config.MaxRunSteps,
 		language:                    config.Language,
 		logOnStart:                  boolOrDefault(config.LogOnStart, true),
 		logOnEnd:                    boolOrDefault(config.LogOnEnd, true),
@@ -113,11 +124,9 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 
 	// Auto-detect MaxTokens from model name if not explicitly set.
 	if config.MaxTokens < 1 {
-		if namer, ok := config.Model.(agents.ModelNamer); ok {
-			if ctx, found := agents.LookupModelContextWindow(rail, namer.ModelName(), config.EnableModelsFetch); found {
-				config.MaxTokens = ctx
-				rail.Infof("Model %v max token detected: %v", namer.ModelName(), config.MaxTokens)
-			}
+		if ctxWindow, found := agents.LookupModelContextWindow(rail, config.ModelName, config.EnableModelsFetch); found {
+			config.MaxTokens = ctxWindow
+			rail.Infof("Model %v max token detected: %v", config.ModelName, config.MaxTokens)
 		}
 	}
 
@@ -187,6 +196,14 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 	)
 	toolRegistry.Merge(builtinTools)
 
+	if boolOrDefault(config.EnableBashTool, false) {
+		toolRegistry.Register(NewBashTool(config.BashToolOptions...))
+	}
+
+	if config.HitlStore != nil && config.EnableHitlInterruptTool {
+		toolRegistry.Register(NewInterruptForHumanTool())
+	}
+
 	// Add custom tools
 	for _, t := range config.Tools {
 		toolRegistry.Register(t)
@@ -213,6 +230,7 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 		ops:        ops,
 		tools:      toolRegistry,
 		tokenizer:  tokenizer,
+		model:      chatModel,
 		middleware: config.Middleware,
 	}
 
@@ -235,6 +253,15 @@ type AgentContext struct {
 	Todos     *TodoManager
 	Artifacts *ArtifactManager
 	Metadata  *MetadataStore
+
+	// bash lazily holds the per-session bash sandbox instance used by the built-in
+	// bash tool, shared across bash tool calls within the same Execute() call.
+	// Unexported: an internal detail of the bash tool, not part of the public API.
+	bash *bashSandboxHolder
+
+	// hitl holds the pending HITL interrupt signal for this execution.
+	// Always non-nil. Use [RequestHitlInterrupt] from tools.
+	hitl *hitlHolder
 }
 
 // AgentRequest represents a request to execute an agent
@@ -258,7 +285,51 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	} else {
 		rail.Infof("Execute agent %q, SessionId: %q", a.config.Name, req.SessionId)
 	}
+	return a.run(rail, req, nil)
+}
 
+// Resume resumes an interrupted agent session.
+// The session must have been previously interrupted (TaskOutput.Interrupted == true).
+// req.SessionId must match the SessionId from the interrupted Execute or Resume call.
+// req.UserInput is the human's response, appended to the restored conversation before
+// the loop continues. All other AgentRequest fields work the same as Execute.
+//
+// The persisted HITL state is deleted from HitlStore only on a clean finish (no error
+// and not re-interrupted). On error the state is left untouched so the caller can retry.
+// On re-interrupt, hitl_output overwrites the state with the new checkpoint.
+func (a *Agent) Resume(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
+
+	if a.config.HitlStore == nil {
+		return TaskOutput{}, errs.NewErrf("HitlStore is not configured for agent %q", a.config.Name)
+	}
+	if req.SessionId == "" {
+		return TaskOutput{}, errs.NewErrf("SessionId is required for Resume")
+	}
+
+	rail = rail.NextSpanId()
+	hitlState, found, err := a.config.HitlStore.Load(rail, req.SessionId)
+	if err != nil {
+		return TaskOutput{}, errs.Wrapf(err, "failed to load HITL state for session %q", req.SessionId)
+	}
+	if !found {
+		return TaskOutput{}, errs.NewErrf("no interrupted session found for SessionId %q", req.SessionId)
+	}
+
+	rail.Infof("Resume agent %q, SessionId: %q, UserInput: %q, restoring %d messages",
+		a.config.Name, req.SessionId, req.UserInput, len(hitlState.Messages))
+	result, err := a.run(rail, req, &hitlState)
+	if err == nil && !result.Interrupted {
+		if delErr := a.config.HitlStore.Delete(rail, req.SessionId); delErr != nil {
+			rail.Errorf("[%v] Resume: failed to delete HITL state for session %q: %v", a.config.Name, req.SessionId, delErr)
+		}
+	}
+	return result, err
+}
+
+// run is the shared execution body for Execute and Resume.
+// hitlState is nil for a fresh Execute; non-nil for a Resume, in which case the
+// persisted message history and agent counters are restored before the loop continues.
+func (a *Agent) run(rail flow.Rail, req AgentRequest, hitlState *HitlState) (TaskOutput, error) {
 	// Initialize backend (fresh on each execution)
 	var backend FileStore
 	if a.config.BackendFactory != nil {
@@ -267,6 +338,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	if backend == nil {
 		backend = NewTmpFileStore()
 	}
+	backend = newValidatingFileStore(backend)
 
 	// Session lifecycle: notify the backend that the session is starting.
 	if sa, ok := backend.(SessionAware); ok {
@@ -303,6 +375,8 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		Todos:     todoManager,
 		Artifacts: artifactManager,
 		Metadata:  metadataStore,
+		bash:      &bashSandboxHolder{},
+		hitl:      &hitlHolder{},
 	}
 	rail = rail.WithCtxVal(agentCtxKey, agentCtxVal)
 
@@ -323,11 +397,29 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		}
 	}
 
-	// Prepare input with backend and skills
-	taskInput := taskInput{
-		task:   req.UserInput,
-		skills: skills,
-		store:  backend,
+	// Prepare input with backend and skills.
+	// On resume, inject the restored message history and agent counters.
+	var ti taskInput
+	if hitlState != nil {
+		msgs := make([]*schema.Message, len(hitlState.Messages), len(hitlState.Messages)+1)
+		copy(msgs, hitlState.Messages)
+		if req.UserInput != "" {
+			msgs = append(msgs, schema.UserMessage(req.UserInput))
+		}
+		ti = taskInput{
+			task:                      req.UserInput,
+			skills:                    skills,
+			store:                     backend,
+			resumeMessages:            msgs,
+			resumeCompactionSummary:   hitlState.CompactionSummary,
+			resumeOutputCheckAttempts: hitlState.OutputCheckAttempts,
+		}
+	} else {
+		ti = taskInput{
+			task:   req.UserInput,
+			skills: skills,
+			store:  backend,
+		}
 	}
 
 	// Execute graph with agent-specific trace callback (always registered to collect token usage)
@@ -338,7 +430,7 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	}
 	rail = rail.WithCtxVal(tokenAccCtxKey, acc)
 	invokeOpts := []compose.Option{withAgentTraceCallback(a.config.Name, a.ops, acc, traceAcc)}
-	result, err := a.graph.Invoke(rail, taskInput, invokeOpts...)
+	result, err := a.graph.Invoke(rail, ti, invokeOpts...)
 	result.TokenUsage = acc.snapshot()
 	if traceAcc != nil {
 		result.TraceLogs = traceAcc.snapshot()

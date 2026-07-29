@@ -154,6 +154,8 @@ const (
 	nodeNameUpdateState      = "Update State"
 	nodeNameOutputCheckRetry = "Output Check Retry"
 	nodeNameFinalOutput      = "Final Output"
+	nodeNameHitlOutput       = "HITL Output"
+	nodeNameHitlGate         = "HITL Gate"
 )
 
 // withAgentTraceCallback builds a trace callback for the AgentLoop graph.
@@ -227,13 +229,21 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 			if ri.Component == "ChatModel" && ri.Name == "" {
 				return ctx
 			}
-			if ops.toolEventCallback != nil && ri.Component == "Tool" {
-				args, _ := ctx.Value(toolArgsCtxKey).(string)
-				ops.toolEventCallback(ToolEvent{
-					Kind: ToolEventKindResult,
-					Name: ri.Name,
-					Args: args,
-				})
+			if ri.Component == "Tool" {
+				if ops.toolEventCallback != nil {
+					args, _ := ctx.Value(toolArgsCtxKey).(string)
+					ops.toolEventCallback(ToolEvent{
+						Kind: ToolEventKindResult,
+						Name: ri.Name,
+						Args: args,
+					})
+				}
+				if ops.logOnEnd && ops.logOutputs {
+					if resp := agentExtractToolResponse(output); resp != "" {
+						rail := flow.NewRail(ctx)
+						rail.Infof("[%v] [%v] %v/%v output: %v", name, accStep(acc), ri.Component, ri.Name, trimMiddle(resp, 250))
+					}
+				}
 			}
 			if ri.Component == "ChatModel" {
 				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
@@ -439,6 +449,10 @@ func logToolStart(rail flow.Rail, graphName string, ri *callbacks.RunInfo, in ca
 		}
 		rail.Infof("%s", msg)
 
+	case "bash":
+		script := extractJSONStringField(argsJSON, "script")
+		rail.Infof("[%v] [%v] Tool/bash — script: \n%v\n", graphName, step, script)
+
 	default:
 		rail.Infof("[%v] [%v] Tool/%v called", graphName, step, ri.Name)
 	}
@@ -568,6 +582,15 @@ func agentExtractMessage(in callbacks.CallbackOutput) *schema.Message {
 	return nil
 }
 
+// agentExtractToolResponse extracts tool callback response text from a callback output.
+func agentExtractToolResponse(in callbacks.CallbackOutput) string {
+	co := einotool.ConvCallbackOutput(in)
+	if co == nil {
+		return ""
+	}
+	return co.Response
+}
+
 // marshalCallbackInput marshals a callback input to JSON for trace recording.
 // Returns json.RawMessage("null") on marshal failure.
 func marshalCallbackInput(in callbacks.CallbackInput) json.RawMessage {
@@ -586,4 +609,14 @@ func marshalCallbackOutput(out callbacks.CallbackOutput) json.RawMessage {
 		return json.RawMessage("null")
 	}
 	return json.RawMessage(b)
+}
+
+// trimMiddle truncates s to at most keep+keep runes, replacing the middle with " ... ".
+// If len(s) <= keep*2, s is returned unchanged.
+func trimMiddle(s string, keep int) string {
+	runes := []rune(s)
+	if len(runes) <= keep*2 {
+		return s
+	}
+	return string(runes[:keep]) + " ... " + string(runes[len(runes)-keep:])
 }

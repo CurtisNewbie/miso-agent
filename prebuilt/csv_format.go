@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -19,6 +18,7 @@ type csvFormatConfig struct {
 	Name        string
 	Language    string
 	MaxRunSteps int
+	Temperature float32
 }
 
 // WithCsvFormatLanguage sets the language for agent responses and selects the matching task prompt.
@@ -37,6 +37,13 @@ func WithCsvFormatMaxRunSteps(n int) CsvFormatOption {
 	}
 }
 
+// WithCsvFormatTemperature sets the sampling temperature for the chat model.
+func WithCsvFormatTemperature(t float32) CsvFormatOption {
+	return func(o *csvFormatConfig) {
+		o.Temperature = t
+	}
+}
+
 // CsvFormatAgent formats a CSV file into a RAG-optimised plain-text representation.
 // Each row (or logical group of rows) is rewritten as an independent, self-contained
 // paragraph suitable for semantic chunking and vector retrieval.
@@ -51,11 +58,11 @@ type CsvFormatAgent struct {
 //
 // Example:
 //
-//	agent, err := prebuilt.NewCsvFormatAgent(chatModel,
+//	agent, err := prebuilt.NewCsvFormatAgent(modelName, apiKey, apiUrl,
 //	    prebuilt.WithCsvFormatMaxRunSteps(30),
 //	    prebuilt.WithCsvFormatLanguage("Chinese"),
 //	)
-func NewCsvFormatAgent(chatModel model.ToolCallingChatModel, opts ...CsvFormatOption) (*CsvFormatAgent, error) {
+func NewCsvFormatAgent(modelName, apiKey, apiUrl string, opts ...CsvFormatOption) (*CsvFormatAgent, error) {
 	cfg := &csvFormatConfig{
 		Name:        "CsvFormatAgent",
 		Language:    "English",
@@ -74,7 +81,10 @@ func NewCsvFormatAgent(chatModel model.ToolCallingChatModel, opts ...CsvFormatOp
 		Name:           cfg.Name,
 		MaxRunSteps:    cfg.MaxRunSteps,
 		Language:       cfg.Language,
-		Model:          chatModel,
+		ModelName:      modelName,
+		ApiKey:         apiKey,
+		ApiUrl:         apiUrl,
+		Temperature:    cfg.Temperature,
 		EnableFileTool: ptr.BoolPtr(true),
 		EnableTodoTool: ptr.BoolPtr(true),
 		SystemPrompt:   taskPrompt,

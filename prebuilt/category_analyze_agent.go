@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -18,12 +17,21 @@ type CategoryAnalyzeOption func(o *categoryAnalyzeConfig)
 type categoryAnalyzeConfig struct {
 	// Language specifies the response language. If empty, defaults to "English".
 	Language string
+	// Temperature is the sampling temperature for the chat model.
+	Temperature float32
 }
 
 // WithCategoryAnalyzeLanguage sets the response language for the category analysis agent.
 func WithCategoryAnalyzeLanguage(lang string) CategoryAnalyzeOption {
 	return func(o *categoryAnalyzeConfig) {
 		o.Language = lang
+	}
+}
+
+// WithCategoryAnalyzeTemperature sets the sampling temperature for the chat model.
+func WithCategoryAnalyzeTemperature(t float32) CategoryAnalyzeOption {
+	return func(o *categoryAnalyzeConfig) {
+		o.Temperature = t
 	}
 }
 
@@ -71,13 +79,13 @@ type CategoryAnalyzeAgent struct {
 //
 // Example:
 //
-//	agent, err := prebuilt.NewCategoryAnalyzeAgent(chatModel)
+//	agent, err := prebuilt.NewCategoryAnalyzeAgent(modelName, apiKey, apiUrl)
 //	result, err := agent.Analyze(rail, prebuilt.CategoryAnalyzeInput{
 //	    TaskExplanation: "Categorize trade activities for customs declaration.",
 //	    Categories:      []string{"Goods trade-Agricultural", "Service trade-Logistics"},
 //	    Descriptions:    []string{"区块链咨询服务"},
 //	})
-func NewCategoryAnalyzeAgent(chatModel model.ToolCallingChatModel, opts ...CategoryAnalyzeOption) (*CategoryAnalyzeAgent, error) {
+func NewCategoryAnalyzeAgent(modelName, apiKey, apiUrl string, opts ...CategoryAnalyzeOption) (*CategoryAnalyzeAgent, error) {
 	cfg := &categoryAnalyzeConfig{}
 	for _, o := range opts {
 		o(cfg)
@@ -85,7 +93,10 @@ func NewCategoryAnalyzeAgent(chatModel model.ToolCallingChatModel, opts ...Categ
 
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "CategoryAnalyzeAgent",
-		Model:        chatModel,
+		ModelName:    modelName,
+		ApiKey:       apiKey,
+		ApiUrl:       apiUrl,
+		Temperature:  cfg.Temperature,
 		MaxRunSteps:  30,
 		Language:     cfg.Language,
 		SystemPrompt: categoryAnalyzeSystemPrompt,

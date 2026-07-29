@@ -3,14 +3,15 @@ package agentloop
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/curtisnewbie/miso/flow"
 )
 
-// newTestMemFileStore creates a TmpFileStore with OnSessionStart already called.
+// newTestTmpFileStore creates a TmpFileStore with OnSessionStart already called.
 // Suitable for use in unit tests; panics if session start fails.
-func newTestMemFileStore() *TmpFileStore {
+func newTestTmpFileStore() *TmpFileStore {
 	be := NewTmpFileStore()
 	rail := flow.NewRail(context.Background())
 	if err := be.OnSessionStart(rail); err != nil {
@@ -66,7 +67,7 @@ func TestTmpFileStore_SessionLifecycle(t *testing.T) {
 }
 
 func TestTmpFileStore_WriteRead_TmpFile(t *testing.T) {
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 	defer be.OnSessionEnd(flow.NewRail(context.Background()))
 
 	ctx := context.Background()
@@ -109,7 +110,7 @@ func TestTmpFileStore_WriteRead_TmpFile(t *testing.T) {
 }
 
 func TestTmpFileStore_Overwrite_TmpFile(t *testing.T) {
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 	defer be.OnSessionEnd(flow.NewRail(context.Background()))
 
 	ctx := context.Background()
@@ -140,7 +141,7 @@ func TestTmpFileStore_Overwrite_TmpFile(t *testing.T) {
 }
 
 func TestTmpFileStore_DeleteFile_RemovesTmpFile(t *testing.T) {
-	be := newTestMemFileStore()
+	be := newTestTmpFileStore()
 	defer be.OnSessionEnd(flow.NewRail(context.Background()))
 
 	ctx := context.Background()
@@ -216,5 +217,34 @@ func TestTmpFileStore_LazyInit_WriteWithoutSessionStart(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("session dir %q should have been removed after OnSessionEnd", dir)
+	}
+}
+
+func TestTmpFileStore_WriteFile_RejectsPathTraversal(t *testing.T) {
+	be := newTestTmpFileStore()
+	defer be.OnSessionEnd(flow.NewRail(context.Background()))
+	ctx := context.Background()
+
+	dir, err := be.RootDir()
+	if err != nil {
+		t.Fatalf("RootDir failed: %v", err)
+	}
+	outsidePath := filepath.Join(filepath.Dir(dir), "escaped.txt")
+
+	tests := []string{
+		"../escaped.txt",
+		"/../escaped.txt",
+		"/foo/../../escaped.txt",
+		"../../../../../../tmp/escaped.txt",
+	}
+	for _, p := range tests {
+		if err := be.WriteFile(ctx, p, []byte("pwned")); err == nil {
+			t.Errorf("WriteFile(%q) should have been rejected, got no error", p)
+		}
+	}
+
+	if _, err := os.Stat(outsidePath); !os.IsNotExist(err) {
+		t.Errorf("traversal must not have created a file outside the store root: %s", outsidePath)
+		os.Remove(outsidePath)
 	}
 }

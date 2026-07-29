@@ -189,3 +189,17 @@ func TestResolveBranchTarget(t *testing.T) {
 		})
 	}
 }
+
+func TestNewAgent_BuildsGraphWithHitl(t *testing.T) {
+	ag, err := NewAgent(AgentConfig{
+		ModelName: "qwen-flash",
+		ApiKey:    "test-key",
+		HitlStore: NewMemHitlStore(),
+	})
+	if err != nil {
+		t.Fatalf("NewAgent() with HITL enabled returned err: %v", err)
+	}
+	if ag == nil {
+		t.Fatal("NewAgent() returned nil agent")
+	}
+}

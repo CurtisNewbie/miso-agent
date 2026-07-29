@@ -534,8 +534,9 @@ func joinGlobPath(base, component string) string {
 // Example:
 //
 //	agent := agentloop.NewAgent(agentloop.AgentConfig{
-//	    Model: chatModel,
-//	    Tools: []agentloop.Tool{agentloop.NewThinkTool()},
+//	    ModelName: "qwen3-max",
+//	    ApiKey:    apiKey,
+//	    Tools:     []agentloop.Tool{agentloop.NewThinkTool()},
 //	})
 func NewThinkTool() Tool {
 	type ThinkToolArgs struct {

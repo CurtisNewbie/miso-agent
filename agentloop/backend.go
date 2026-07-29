@@ -43,6 +43,15 @@ type SessionAware interface {
 	OnSessionEnd(rail flow.Rail) error
 }
 
+// DirBackedFileStore is implemented by FileStore backends that expose a real
+// on-disk directory whose relative paths mirror logical file paths, enabling
+// tools (like the bash tool) to operate on the same files via a real filesystem.
+type DirBackedFileStore interface {
+	FileStore
+	// RootDir returns the real directory backing this store, creating it if needed.
+	RootDir() (string, error)
+}
+
 // FileInfo represents file metadata.
 type FileInfo struct {
 	Path       string    `json:"path"`
@@ -64,6 +73,11 @@ type fileRef struct {
 // stored as individual tmp files inside that directory.
 // The tmp directory is created lazily on the first WriteFile call.
 // Call OnSessionEnd when the session is done to clean up.
+//
+// TmpFileStore expects paths to already be normalized (forward slashes, no trailing
+// slash) and free of traversal segments ("..") — it does not normalize or validate
+// paths itself. Callers should go through [newValidatingFileStore] (applied
+// automatically by Agent.Execute), which handles both centrally for any FileStore.
 type TmpFileStore struct {
 	mu    sync.RWMutex
 	files map[string]fileRef // logical path -> reference to tmp file on disk
@@ -77,6 +91,9 @@ func NewTmpFileStore() *TmpFileStore {
 	}
 }
 
+// compile-time check that *TmpFileStore satisfies DirBackedFileStore.
+var _ DirBackedFileStore = (*TmpFileStore)(nil)
+
 // ensureDir creates the session tmp directory if it has not been created yet.
 // Callers must hold b.mu (write lock) before calling this method.
 func (b *TmpFileStore) ensureDir() error {
@@ -89,6 +106,17 @@ func (b *TmpFileStore) ensureDir() error {
 	}
 	b.dir = dir
 	return nil
+}
+
+// RootDir returns the real on-disk directory backing this store, creating it if it
+// doesn't exist yet. Files inside this directory mirror their logical paths.
+func (b *TmpFileStore) RootDir() (string, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if err := b.ensureDir(); err != nil {
+		return "", err
+	}
+	return b.dir, nil
 }
 
 // OnSessionStart is a no-op for TmpFileStore.
@@ -119,8 +147,7 @@ func (b *TmpFileStore) ReadFile(ctx context.Context, path string) ([]byte, error
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	normalizedPath := normalizeMemPath(path)
-	ref, exists := b.files[normalizedPath]
+	ref, exists := b.files[path]
 	if !exists {
 		return nil, errs.NewErrf("file not found: %s", path)
 	}
@@ -145,10 +172,8 @@ func (b *TmpFileStore) WriteFile(ctx context.Context, path string, content []byt
 		return err
 	}
 
-	normalizedPath := normalizeMemPath(path)
-
 	// Ensure parent directory entry exists in the map.
-	dir := filepath.Dir(normalizedPath)
+	dir := filepath.Dir(path)
 	if dir != "." && dir != "/" {
 		if _, exists := b.files[dir]; !exists {
 			b.files[dir] = fileRef{
@@ -158,33 +183,21 @@ func (b *TmpFileStore) WriteFile(ctx context.Context, path string, content []byt
 		}
 	}
 
-	// If a tmp file already exists for this path, overwrite it in place.
-	if existing, exists := b.files[normalizedPath]; exists && !existing.IsDirectory && existing.TmpPath != "" {
-		if err := os.WriteFile(existing.TmpPath, content, 0o600); err != nil {
-			return errs.Wrapf(err, "failed to overwrite tmp file for %s", path)
-		}
-		b.files[normalizedPath] = fileRef{
-			TmpPath:    existing.TmpPath,
-			ModifiedAt: time.Now(),
-			Size:       int64(len(content)),
-		}
-		return nil
+	// Materialize the file at a real path mirroring its logical path inside the
+	// session tmp directory, e.g. logical path /foo/bar.txt -> <dir>/foo/bar.txt.
+	realPath := filepath.Join(b.dir, path)
+	if err := confineToDir(b.dir, realPath); err != nil {
+		return errs.Wrapf(err, "invalid path: %s", path)
+	}
+	if err := os.MkdirAll(filepath.Dir(realPath), 0o700); err != nil {
+		return errs.Wrapf(err, "failed to create parent dir for %s", path)
+	}
+	if err := os.WriteFile(realPath, content, 0o600); err != nil {
+		return errs.Wrapf(err, "failed to write file for %s", path)
 	}
 
-	// Create a new tmp file inside the session directory.
-	f, err := os.CreateTemp(b.dir, "file-*")
-	if err != nil {
-		return errs.Wrapf(err, "failed to create tmp file for %s", path)
-	}
-	tmpPath := f.Name()
-	if _, err := f.Write(content); err != nil {
-		f.Close()
-		return errs.Wrapf(err, "failed to write tmp file for %s", path)
-	}
-	f.Close()
-
-	b.files[normalizedPath] = fileRef{
-		TmpPath:    tmpPath,
+	b.files[path] = fileRef{
+		TmpPath:    realPath,
 		ModifiedAt: time.Now(),
 		Size:       int64(len(content)),
 	}
@@ -196,15 +209,14 @@ func (b *TmpFileStore) ListDirectory(ctx context.Context, path string) ([]FileIn
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	normalizedPath := normalizeMemPath(path)
 	var result []FileInfo
 
 	for p, ref := range b.files {
-		if p == normalizedPath {
+		if p == path {
 			continue
 		}
 		dir := filepath.Dir(p)
-		if dir == normalizedPath {
+		if dir == path {
 			result = append(result, FileInfo{
 				Path:       filepath.Base(p),
 				IsDir:      ref.IsDirectory,
@@ -222,8 +234,7 @@ func (b *TmpFileStore) FileExists(ctx context.Context, path string) (bool, error
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	normalizedPath := normalizeMemPath(path)
-	_, exists := b.files[normalizedPath]
+	_, exists := b.files[path]
 	return exists, nil
 }
 
@@ -232,8 +243,7 @@ func (b *TmpFileStore) DeleteFile(ctx context.Context, path string) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	normalizedPath := normalizeMemPath(path)
-	ref, exists := b.files[normalizedPath]
+	ref, exists := b.files[path]
 	if !exists {
 		return errs.NewErrf("file not found: %s", path)
 	}
@@ -245,11 +255,11 @@ func (b *TmpFileStore) DeleteFile(ctx context.Context, path string) error {
 		}
 	}
 
-	delete(b.files, normalizedPath)
+	delete(b.files, path)
 	return nil
 }
 
-// normalizeMemPath normalizes a path to use forward slashes and remove leading/trailing slashes.
+// normalizeMemPath normalizes a path to use forward slashes and remove trailing slashes.
 func normalizeMemPath(path string) string {
 	path = filepath.ToSlash(path)
 	path = strings.TrimRight(path, "/")
@@ -257,4 +267,32 @@ func normalizeMemPath(path string) string {
 		return "."
 	}
 	return path
+}
+
+// validateMemPath rejects logical paths containing traversal segments ("..").
+// Applied uniformly across all FileStore methods so no path-accepting method can
+// be used to reference entries outside the logical store, regardless of whether
+// that method also touches the real filesystem.
+func validateMemPath(path string) error {
+	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
+		if seg == ".." {
+			return errs.NewErrf("path must not contain traversal segments (..): %s", path)
+		}
+	}
+	return nil
+}
+
+// confineToDir returns an error if resolvedPath does not lie within root (or equal
+// root). Used to reject logical paths (e.g. containing "..") that would otherwise
+// resolve to a real path escaping the store's on-disk root directory.
+func confineToDir(root, resolvedPath string) error {
+	root = filepath.Clean(root)
+	resolvedPath = filepath.Clean(resolvedPath)
+	if resolvedPath == root {
+		return nil
+	}
+	if !strings.HasPrefix(resolvedPath, root+string(os.PathSeparator)) {
+		return errs.NewErrf("path escapes store root directory")
+	}
+	return nil
 }

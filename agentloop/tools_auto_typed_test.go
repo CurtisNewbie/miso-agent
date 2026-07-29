@@ -134,7 +134,7 @@ func TestNewAutoTypedCtxAwareToolFunc_AgentContextInjected(t *testing.T) {
 		},
 	)
 
-	store := newTestMemFileStore()
+	store := newTestTmpFileStore()
 	todos := NewTodoManager()
 	agentCtx := AgentContext{Store: store, Todos: todos}
 	ctx := context.WithValue(context.Background(), agentCtxKey, agentCtx)

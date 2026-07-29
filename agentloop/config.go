@@ -5,7 +5,6 @@ import (
 	"embed"
 	"io/fs"
 
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso/errs"
 )
 
@@ -33,17 +32,25 @@ type AgentConfig struct {
 	// If empty, defaults to "AgentLoop".
 	Name string
 
-	// Model is the LLM model to use.
-	//
-	// Retry behavior is controlled by the model wrapper, not the agent itself.
-	// Use [agents.NewOpenAIChatModel] with [agents.WithRetry] to configure retry count and
-	// backoff. The default model uses exponential backoff (1s, 2s, 4s, capped at 5s) with
-	// 5 retries; 429 (rate limit) errors skip directly to the 5s cap.
-	Model model.ToolCallingChatModel
+	// ModelName is the model identifier passed to the underlying OpenAI-compatible
+	// provider (e.g. "qwen3-max").
+	ModelName string
+
+	// ApiKey is the API key for the model provider.
+	ApiKey string
+
+	// ApiUrl is the base URL of the OpenAI-compatible API endpoint.
+	// If empty, defaults to agents.AliBailianIntlBaseURL (see [agents.NewOpenAIChatModel]).
+	ApiUrl string
+
+	// Temperature controls sampling randomness for the model.
+	// If 0, defaults to 0.7.
+	Temperature float32
 
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
-	// Internally it is multiplied by the number of nodes in the compiled graph to derive the Eino
-	// step budget (each node may execute at most MaxRunSteps times).
+	// Enforced directly by the agent loop's own round counter (not by Eino's internal step counter),
+	// so it maps 1:1 to actual chat-model calls regardless of graph topology (e.g. whether OutputCheck
+	// or tools are enabled).
 	// If 0 or negative, defaults to 5.
 	MaxRunSteps int
 
@@ -63,7 +70,7 @@ type AgentConfig struct {
 	// If nil, defaults to false.
 	LogInputs *bool
 
-	// LogOutputs controls whether the agent logs model output content.
+	// LogOutputs controls whether the agent logs model and tool output content.
 	// If nil, defaults to true.
 	LogOutputs *bool
 
@@ -109,6 +116,17 @@ type AgentConfig struct {
 	// delete_todo. When false, these tools are not registered.
 	// If nil, defaults to false.
 	EnableTodoTool *bool
+
+	// EnableBashTool enables the built-in bash tool, which executes shell scripts in a
+	// sandboxed environment (github.com/mark3labs/go-bash). When the configured FileStore
+	// implements DirBackedFileStore, the sandbox shares that store's real directory, so
+	// bash can operate on files written via write_file/read_file. When false, the tool is
+	// not registered. If nil, defaults to false.
+	EnableBashTool *bool
+
+	// BashToolOptions configures the built-in bash tool (timeout, network access). Only
+	// used when EnableBashTool is true. See WithBashTimeout, WithBashNetwork.
+	BashToolOptions []BashToolOption
 
 	// ToolEventCallback is called synchronously for each tool invocation during execution.
 	// Receives a ToolEvent with the tool name and raw JSON args before the tool runs.
@@ -169,6 +187,16 @@ type AgentConfig struct {
 	// the full message history per call, so TraceLogs can grow large on long multi-turn runs.
 	// If nil, defaults to false.
 	EnableTrace *bool
+
+	// EnableHitlInterruptTool registers the built-in interrupt_for_human tool, allowing
+	// the LLM to pause execution by calling it directly. Only takes effect when HitlStore
+	// is also set. When false, tools can still trigger HITL via [RequestHitlInterrupt].
+	EnableHitlInterruptTool bool
+
+	// HitlStore persists interrupted session state for later resumption via [Agent.Resume].
+	// When set, HITL is automatically enabled: tools may call [RequestHitlInterrupt] to
+	// pause execution; the agent persists its state and returns TaskOutput.Interrupted = true.
+	HitlStore HitlStore
 
 	// Log user query, default true
 	LogQuery *bool

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudwego/eino/components/model"
 	"github.com/curtisnewbie/miso-agent/agentloop"
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
@@ -20,6 +19,8 @@ type classificationConfig struct {
 	SystemPrompt string
 	// Language specifies the response language. If empty, defaults to "English".
 	Language string
+	// Temperature is the sampling temperature for the chat model.
+	Temperature float32
 }
 
 // WithClassificationSystemPrompt sets an optional system prompt for the classification agent.
@@ -33,6 +34,13 @@ func WithClassificationSystemPrompt(prompt string) ClassificationOption {
 func WithClassificationLanguage(lang string) ClassificationOption {
 	return func(o *classificationConfig) {
 		o.Language = lang
+	}
+}
+
+// WithClassificationTemperature sets the sampling temperature for the chat model.
+func WithClassificationTemperature(t float32) ClassificationOption {
+	return func(o *classificationConfig) {
+		o.Temperature = t
 	}
 }
 
@@ -84,12 +92,12 @@ type ClassificationAgent struct {
 //
 // Example:
 //
-//	agent, err := prebuilt.NewClassificationAgent(chatModel)
+//	agent, err := prebuilt.NewClassificationAgent(modelName, apiKey, apiUrl)
 //	result, err := agent.Classify(rail, prebuilt.ClassificationInput{
 //	    Categories: []string{"Goods trade-Alcohol", "Service trade-Logistics"},
 //	    Subjects:   []string{"物流", "进口葡萄酒"},
 //	})
-func NewClassificationAgent(chatModel model.ToolCallingChatModel, opts ...ClassificationOption) (*ClassificationAgent, error) {
+func NewClassificationAgent(modelName, apiKey, apiUrl string, opts ...ClassificationOption) (*ClassificationAgent, error) {
 	cfg := &classificationConfig{}
 	for _, o := range opts {
 		o(cfg)
@@ -102,7 +110,10 @@ func NewClassificationAgent(chatModel model.ToolCallingChatModel, opts ...Classi
 
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
 		Name:         "ClassificationAgent",
-		Model:        chatModel,
+		ModelName:    modelName,
+		ApiKey:       apiKey,
+		ApiUrl:       apiUrl,
+		Temperature:  cfg.Temperature,
 		MaxRunSteps:  30,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,

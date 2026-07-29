@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 
+	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 )
 
@@ -57,6 +58,14 @@ type TaskOutput struct {
 	Metadata   map[string]any // Snapshot of MetadataStore at end of execution
 	TokenUsage TokenUsage     // Aggregate token usage across all LLM calls
 	TraceLogs  []TraceEntry   // Per-node execution trace; populated when AgentConfig.EnableTrace is true, nil otherwise. Populated even when execution returns an error. ChatModel entries include the full message history per call, so size grows with each ReAct cycle.
+
+	// Interrupted is true when the agent loop was paused for human input via HITL.
+	// Use Agent.Resume to continue the session.
+	Interrupted bool
+
+	// InterruptReason is the human-readable reason for the interrupt provided by the tool.
+	// Empty when Interrupted is false.
+	InterruptReason string
 }
 
 // taskOutput is the internal output type used by the graph
@@ -67,6 +76,11 @@ type taskInput struct {
 	task   string
 	skills *Skills
 	store  FileStore
+
+	// Resume fields — non-nil/non-zero when Agent.Resume is called.
+	resumeMessages            []*schema.Message
+	resumeCompactionSummary   string
+	resumeOutputCheckAttempts int
 }
 
 // buildGraph builds the Eino graph for the ReAct agent.
@@ -88,6 +102,17 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 
 	// Prepare messages node - runs once at start
 	_ = g.AddLambdaNode("prepare_messages", compose.InvokableLambda(func(ctx context.Context, input taskInput) ([]*schema.Message, error) {
+		// Resume path: restore persisted message history and agent state.
+		if input.resumeMessages != nil {
+			_ = compose.ProcessState(ctx, func(ctx context.Context, st *agentLoopState) error {
+				st.taskInput = input
+				st.compactionSummary = input.resumeCompactionSummary
+				st.outputCheckAttempts = input.resumeOutputCheckAttempts
+				return nil
+			})
+			return input.resumeMessages, nil
+		}
+
 		fragments := make([]string, 0, len(agent.middleware))
 		for _, m := range agent.middleware {
 			if f := m.SystemPromptFragment(ctx); f != "" {
@@ -134,12 +159,12 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	var chatModel model.ToolCallingChatModel
 	if len(toolInfoList) > 0 {
 		var err error
-		chatModel, err = agent.config.Model.WithTools(toolInfoList)
+		chatModel, err = agent.model.WithTools(toolInfoList)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		chatModel = agent.config.Model
+		chatModel = agent.model
 	}
 
 	// Wrap chatModel with middleware WrapModelCall chain, if any middleware registered.
@@ -175,7 +200,7 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			}
 			if len(toSummarize) > 0 {
 				rail.Infof("Compaction started: summarizing %d messages, keeping %d (target preserve_recent_tokens: %v)", len(toSummarize), len(toKeep), agent.ops.compactPreserveRecentTokens)
-				summary, err := runCompaction(ctx, agent.config.Model, state.compactionSummary, toSummarize)
+				summary, err := runCompaction(ctx, agent.model, state.compactionSummary, toSummarize)
 				if err == nil && summary != "" {
 					state.compactionSummary = summary
 					checkpoint := schema.UserMessage(fmt.Sprintf(
@@ -229,7 +254,78 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 			return nil, err
 		}
 		_ = g.AddToolsNode("tools", toolNode)
-		_ = g.AddEdge("tools", "chat_model")
+		if agent.config.HitlStore != nil {
+			// hitl_gate: after tools, check for interrupt signal.
+			// Appends incoming tool results to state so hitl_output reads a complete history,
+			// then returns an empty slice so chat_model's StatePreHandler appends nothing.
+			_ = g.AddLambdaNode("hitl_gate", compose.InvokableLambda(func(ctx context.Context, toolResults []*schema.Message) ([]*schema.Message, error) {
+				_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+					state.messages = append(state.messages, toolResults...)
+					return nil
+				})
+				return []*schema.Message{}, nil
+			}), compose.WithNodeName(nodeNameHitlGate))
+			_ = g.AddEdge("tools", "hitl_gate")
+
+			// hitl_output: persist state to HitlStore and return an interrupted TaskOutput.
+			_ = g.AddLambdaNode("hitl_output", compose.InvokableLambda(func(ctx context.Context, _ []*schema.Message) (taskOutput, error) {
+				agentCtx, _ := ctx.Value(agentCtxKey).(AgentContext)
+
+				reason := ""
+				if sig := agentCtx.hitl.get(); sig != nil {
+					reason = sig.Reason
+				}
+
+				var savedMessages []*schema.Message
+				var compactionSummary string
+				var outputCheckAttempts int
+				_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+					savedMessages = make([]*schema.Message, len(state.messages))
+					copy(savedMessages, state.messages)
+					compactionSummary = state.compactionSummary
+					outputCheckAttempts = state.outputCheckAttempts
+					return nil
+				})
+
+				rail := flow.NewRail(ctx)
+				if err := agent.config.HitlStore.Save(ctx, agentCtx.SessionId, HitlState{
+					Messages:            savedMessages,
+					CompactionSummary:   compactionSummary,
+					OutputCheckAttempts: outputCheckAttempts,
+					InterruptReason:     reason,
+				}); err != nil {
+					rail.Errorf("[%v] HITL: failed to save state for session %q: %v", agent.config.Name, agentCtx.SessionId, err)
+				} else {
+					rail.Infof("[%v] HITL: session %q interrupted: %v", agent.config.Name, agentCtx.SessionId, reason)
+				}
+
+				var artifacts []Artifact
+				var metadata map[string]any
+				if agentCtx.Artifacts != nil {
+					artifacts = agentCtx.Artifacts.ListArtifacts()
+				}
+				if agentCtx.Metadata != nil {
+					metadata = agentCtx.Metadata.All()
+				}
+
+				return taskOutput{
+					Interrupted:     true,
+					InterruptReason: reason,
+					Artifacts:       artifacts,
+					Metadata:        metadata,
+				}, nil
+			}), compose.WithNodeName(nodeNameHitlOutput))
+			_ = g.AddEdge("hitl_output", compose.END)
+			_ = g.AddBranch("hitl_gate", compose.NewGraphBranch(func(ctx context.Context, _ []*schema.Message) (string, error) {
+				agentCtx, _ := ctx.Value(agentCtxKey).(AgentContext)
+				if agentCtx.hitl.get() != nil {
+					return "hitl_output", nil
+				}
+				return "chat_model", nil
+			}, map[string]bool{"chat_model": true, "hitl_output": true}))
+		} else {
+			_ = g.AddEdge("tools", "chat_model")
+		}
 	}
 
 	// output_check_retry bridges update_state (*schema.Message) back to chat_model ([]*schema.Message)
@@ -295,17 +391,22 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 		_ = g.AddBranch("update_state", compose.NewGraphBranch(func(ctx context.Context, input *schema.Message) (string, error) {
 			shouldContinue := false
 			var lastMsg *schema.Message
+			var cycleCount int
 			err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
 				if len(state.messages) > 0 {
 					lastMsg = state.messages[len(state.messages)-1]
 					shouldContinue = shouldContinueLoop(lastMsg)
 				}
+				cycleCount = state.cycleCount
 				return nil
 			})
 			if err != nil {
 				return "", err
 			}
 			if shouldContinue {
+				if cycleCount >= agent.config.MaxRunSteps {
+					return "", errs.NewErrf("agent %q exceeded max run steps (%d)", agent.config.Name, agent.config.MaxRunSteps)
+				}
 				return "tools", nil
 			}
 			if agent.config.OutputCheck != nil && lastMsg != nil {
@@ -321,6 +422,9 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 					return "", err
 				}
 				if !ok {
+					if cycleCount >= agent.config.MaxRunSteps {
+						return "", errs.NewErrf("agent %q exceeded max run steps (%d)", agent.config.Name, agent.config.MaxRunSteps)
+					}
 					rail := flow.NewRail(ctx)
 					rail.Infof("[%v] OutputCheck attempt %d rejected, inserting hint: %v", agent.config.Name, attempt, hint)
 					_ = compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
@@ -342,9 +446,13 @@ func buildGraph(agent *Agent) (compose.Runnable[taskInput, taskOutput], error) {
 	_ = g.AddEdge("chat_model", "update_state")
 	_ = g.AddEdge("final_output", compose.END)
 
-	compileOpts := []compose.GraphCompileOption{compose.WithGraphName("AgentLoop")}
-	if agent.ops.maxRunSteps > 0 {
-		compileOpts = append(compileOpts, compose.WithMaxRunSteps(agent.ops.maxRunSteps))
+	// einoStepSafetyCap is a generous backstop passed to Eino's own step counter, purely to
+	// prevent runaway execution from bugs; the actual MaxRunSteps enforcement happens in the
+	// branch function above via agentLoopState.cycleCount, which maps 1:1 to ReAct rounds.
+	const einoStepSafetyCap = 1_000_000
+	compileOpts := []compose.GraphCompileOption{
+		compose.WithGraphName("AgentLoop"),
+		compose.WithMaxRunSteps(einoStepSafetyCap),
 	}
 	return g.Compile(context.Background(), compileOpts...)
 }
