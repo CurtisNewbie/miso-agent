@@ -115,6 +115,7 @@ func NewContextualRetrievalAgent(modelName, apiKey, apiUrl string, opts ...Conte
 		MaxRunSteps:    2,
 		SystemPrompt:   cfg.SystemPrompt,
 		EnableFileTool: ptr.ValPtr(false),
+		LogQuery:       ptr.ValPtr(false),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create ContextualRetrievalAgent")

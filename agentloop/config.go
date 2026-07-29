@@ -197,6 +197,9 @@ type AgentConfig struct {
 	// When set, HITL is automatically enabled: tools may call [RequestHitlInterrupt] to
 	// pause execution; the agent persists its state and returns TaskOutput.Interrupted = true.
 	HitlStore HitlStore
+
+	// Log user query, default true
+	LogQuery *bool
 }
 
 // skillsMiddleware is a Middleware that writes pre-embedded skill files into the

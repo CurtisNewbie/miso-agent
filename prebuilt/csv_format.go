@@ -173,6 +173,7 @@ const csvFormatTaskPromptCn = `你是一个专精于 RAG（检索增强生成）
   - 'rows'：已解析的 CSV 表格（二维数组），rows[i][j] 为第 i 行第 j 列的字段值（从 1 开始）
 - 处理 CSV 文件时优先使用 'rows'；非 CSV 文件使用 'input'
 - 脚本必须 return 一个字符串作为转换结果
+- 输出中使用双换行 \n\n 作为 chunk 之间的唯一分隔符；chunk 内部使用单换行 \n，不得在 chunk 内部使用 \n\n
 - 可使用 Lua 标准库：string、table、math
 - 不可访问文件系统（os、io、require 均不可用）
 
@@ -194,12 +195,13 @@ const csvFormatTaskPromptCn = `你是一个专精于 RAG（检索增强生成）
 
 调用 transform_csv_lua，传入 output_path=/output/context.txt，直接将结果写入目标文件，遵循以下规范：
 
-**段落结构：**
-- 每个语义单元独立成段，段落之间用一个空行分隔
-- 段首为该单元的标识/主题（实体名、类别名等）
-- 段内每个属性单独一行，格式：「属性名: 属性值」
+**段落结构（chunk 划分规则）：**
+- 每个语义单元是独立的 chunk，chunk 之间用且仅用一个空行（双换行 \n\n）分隔；\n\n 仅作为 chunk 分隔符，不得在 chunk 内部出现
+- chunk 内部各行之间使用单个换行 \n——chunk 内不允许有空行
+- chunk 首行为该单元的标识/主题（实体名、类别名等）
+- chunk 内每个属性单独一行，格式：「属性名: 属性值」
 - 属性值为空、N/A 或无意义时跳过该行
-- 跨行的说明、注意事项、脚注单独成段，加前缀「说明:」或「注意:」
+- 跨行的说明、注意事项、脚注作为独立 chunk，加前缀「说明:」或「注意:」
 
 **格式示例（仅用于说明格式，与实际 CSV 内容无关）：**
 
@@ -260,6 +262,7 @@ Based on your understanding of the structure, write a Lua script to transform /i
   - 'rows': the file parsed as CSV — a 2D array where rows[i][j] is the j-th field of the i-th row (1-indexed)
 - For CSV files prefer 'rows'; for non-CSV files use 'input'
 - The script must return a string as the transformation result
+- In the output, use \n\n (double newline) exclusively to separate chunks; use \n (single newline) within a chunk — \n\n must never appear inside a chunk
 - Available Lua standard libraries: string, table, math
 - Filesystem access (os, io, require) is not available
 
@@ -281,12 +284,13 @@ Test the script logic against a small sample before processing the full file.
 
 Call transform_csv_lua with output_path=/output/context.txt to run the script and write the result directly to the target file, following these rules:
 
-**Paragraph structure:**
-- Each semantic unit is a separate paragraph, with one blank line between paragraphs
-- The first line of each paragraph is the unit's identifier or topic (entity name, category name, etc.)
+**Paragraph structure (chunk delimiter rules):**
+- Each semantic unit is a self-contained chunk. Chunks are delimited by exactly one blank line (double newline \n\n). \n\n is used ONLY as a chunk delimiter — it must never appear inside a chunk.
+- Within a chunk, all lines are separated by a single newline \n. No blank lines are allowed inside a chunk.
+- The first line of each chunk is the unit's identifier or topic (entity name, category name, etc.)
 - Each attribute occupies its own line, in the format: "Attribute: Value"
 - Skip any attribute whose value is empty, N/A, or meaningless
-- Cross-row notes, caveats, or footnotes form their own paragraph, prefixed with "Note:" or "Remark:"
+- Cross-row notes, caveats, or footnotes are separate chunks of their own, prefixed with "Note:" or "Remark:"
 
 **Format example (for illustration only — unrelated to the actual CSV content):**
 

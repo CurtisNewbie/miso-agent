@@ -217,7 +217,11 @@ func (r *retryChatModel) gapFunc(ctx context.Context, i int, err error) (time.Du
 }
 
 func (r *retryChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCallingChatModel, error) {
-	return r.c.WithTools(tools)
+	inner, err := r.c.WithTools(tools)
+	if err != nil {
+		return nil, err
+	}
+	return &retryChatModel{retry: r.retry, c: inner}, nil
 }
 
 // RetryChatModel wraps c with a default retry count of 5.
