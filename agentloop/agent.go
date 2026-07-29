@@ -76,9 +76,6 @@ func boolOrDefault(p *bool, def bool) bool {
 }
 
 // NewAgent creates a new ReAct agent.
-//
-// Retry on model errors is not handled by the agent — configure it on the model itself.
-// See [agents.NewOpenAIChatModel] and [agents.WithRetry].
 func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 	rail := flow.NewRail(slutil.VarArgAny(optCtx, func() context.Context { return context.Background() }))
 
