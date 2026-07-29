@@ -7,6 +7,7 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/util/llm"
+	"github.com/curtisnewbie/miso/util/ptr"
 	"github.com/curtisnewbie/miso/util/retry"
 	"github.com/curtisnewbie/miso/util/strutil"
 )
@@ -106,13 +107,14 @@ func NewContextualRetrievalAgent(modelName, apiKey, apiUrl string, opts ...Conte
 	}
 
 	agent, err := agentloop.NewAgent(agentloop.AgentConfig{
-		Name:         "ContextualRetrievalAgent",
-		ModelName:    modelName,
-		ApiKey:       apiKey,
-		ApiUrl:       apiUrl,
-		Temperature:  cfg.Temperature,
-		MaxRunSteps:  2,
-		SystemPrompt: cfg.SystemPrompt,
+		Name:           "ContextualRetrievalAgent",
+		ModelName:      modelName,
+		ApiKey:         apiKey,
+		ApiUrl:         apiUrl,
+		Temperature:    cfg.Temperature,
+		MaxRunSteps:    2,
+		SystemPrompt:   cfg.SystemPrompt,
+		EnableFileTool: ptr.ValPtr(false),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create ContextualRetrievalAgent")
