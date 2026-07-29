@@ -8,6 +8,12 @@ import (
 	"github.com/curtisnewbie/miso/errs"
 )
 
+// ContentModerationFunc is called to screen content before or after agent execution.
+// contentType is either "INPUT" (user input, before run) or "OUTPUT" (agent response, after run).
+// Return ok=true to allow the content, or ok=false with an intended output string to block it;
+// the intended output is returned to the caller as the agent's response instead of running further.
+type ContentModerationFunc func(content string, contentType string) (intendedOutput string, ok bool)
+
 // OutputCheckFunc is a callback invoked on each final assistant response before the agent
 // accepts it as the output.
 //
@@ -200,6 +206,13 @@ type AgentConfig struct {
 
 	// Log user query, default true
 	LogQuery *bool
+
+	// ContentModeration is an optional callback to screen content at the boundary of agent execution.
+	// It is called twice per Execute/Resume: once with contentType="INPUT" before the agent runs
+	// (screening the user input), and once with contentType="OUTPUT" after the agent runs
+	// (screening the agent's response). Returning ok=false aborts execution and surfaces the
+	// reason as an error. If nil, no moderation is applied.
+	ContentModeration ContentModerationFunc
 }
 
 // skillsMiddleware is a Middleware that writes pre-embedded skill files into the

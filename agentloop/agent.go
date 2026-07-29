@@ -327,6 +327,15 @@ func (a *Agent) Resume(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 // hitlState is nil for a fresh Execute; non-nil for a Resume, in which case the
 // persisted message history and agent counters are restored before the loop continues.
 func (a *Agent) run(rail flow.Rail, req AgentRequest, hitlState *HitlState) (TaskOutput, error) {
+	if a.config.ContentModeration != nil {
+		if out, ok := a.config.ContentModeration(req.UserInput, "INPUT"); !ok {
+			if out == "" {
+				out = "Content Moderated"
+			}
+			return TaskOutput{Response: out}, nil
+		}
+	}
+
 	// Initialize backend (fresh on each execution)
 	var backend FileStore
 	if a.config.BackendFactory != nil {
@@ -460,6 +469,15 @@ func (a *Agent) run(rail flow.Rail, req AgentRequest, hitlState *HitlState) (Tas
 	if req.ArtifactCallback != nil && len(result.Artifacts) > 0 {
 		if err := req.ArtifactCallback(backend, result.Artifacts); err != nil {
 			return result, errs.Wrapf(err, "artifact callback failed")
+		}
+	}
+
+	if a.config.ContentModeration != nil {
+		if out, ok := a.config.ContentModeration(result.Response, "OUTPUT"); !ok {
+			if out == "" {
+				out = "Content Moderated"
+			}
+			return TaskOutput{Response: out}, nil
 		}
 	}
 
