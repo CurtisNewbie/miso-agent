@@ -8,9 +8,14 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-tavily/search"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/miso"
 
 	"github.com/curtisnewbie/miso-agent/agentloop"
 )
+
+// tavilySearchMs is the Prometheus histogram for Tavily search duration in milliseconds.
+// Registered once at package init; only observed when WithTavilySearchMetrics is used.
+var tavilySearchMs = miso.NewPromHisto("tool_tavily_search")
 
 // TavilySearchArgs are the typed arguments for the tavily_search tool.
 type TavilySearchArgs struct {
@@ -32,9 +37,10 @@ type TavilySearchArgs struct {
 
 // tavilySearchConfig holds tool-level configuration for NewTavilySearchTool.
 type tavilySearchConfig struct {
-	name        string
-	description string
-	searchOpts  []func(*search.SearchReq)
+	name           string
+	description    string
+	searchOpts     []func(*search.SearchReq)
+	metricsEnabled bool
 }
 
 // TavilySearchOption is a functional option for NewTavilySearchTool.
@@ -54,6 +60,14 @@ func WithToolDescription(desc string) TavilySearchOption {
 // It is applied after all TavilySearchArgs fields have been set, so it can override any field.
 func WithSearchOption(fn func(*search.SearchReq)) TavilySearchOption {
 	return func(o *tavilySearchConfig) { o.searchOpts = append(o.searchOpts, fn) }
+}
+
+// WithTavilySearchMetrics enables Prometheus metrics for the Tavily search tool.
+// When enabled, each search.Search call duration is recorded in a histogram
+// named "tool_tavily_search" (milliseconds). The metric is auto-registered with
+// miso's Prometheus registry.
+func WithTavilySearchMetrics() TavilySearchOption {
+	return func(o *tavilySearchConfig) { o.metricsEnabled = true }
 }
 
 // NewTavilySearchTool creates an agentloop Tool that performs a Tavily web search.
@@ -121,7 +135,15 @@ func NewTavilySearchTool(apiKey string, maxResults int, opts ...TavilySearchOpti
 			for _, opt := range cfg.searchOpts {
 				opt(&req)
 			}
-			resp, err := search.Search(rail, apiKey, req)
+			var resp search.SearchResp
+			var err error
+			if cfg.metricsEnabled {
+				t := miso.NewHistTimer(tavilySearchMs)
+				resp, err = search.Search(rail, apiKey, req)
+				t.ObserveDuration()
+			} else {
+				resp, err = search.Search(rail, apiKey, req)
+			}
 			if err != nil {
 				return "", err
 			}

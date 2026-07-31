@@ -8,9 +8,14 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso-dify/dify"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/miso"
 
 	"github.com/curtisnewbie/miso-agent/agentloop"
 )
+
+// difyRetrievalMs is the Prometheus histogram for Dify retrieval duration in milliseconds.
+// Registered once at package init; only observed when WithDifyMetrics is used.
+var difyRetrievalMs = miso.NewPromHisto("tool_dify_retrieval")
 
 // DifyRetrievalArgs are the typed arguments for the dify_retrieval tool.
 type DifyRetrievalArgs struct {
@@ -41,10 +46,11 @@ type DifyRetrievalOption func(o *difyRetrievalOpts)
 
 // difyRetrievalOpts holds the mutable settings controlled by DifyRetrievalOption.
 type difyRetrievalOpts struct {
-	name          string
-	description   string
-	metadataKey   string // non-empty → append RetrievedRecords to AgentContext.Metadata
-	docNameFilter *dify.MetadataFilteringCondition
+	name           string
+	description    string
+	metadataKey    string // non-empty → append RetrievedRecords to AgentContext.Metadata
+	docNameFilter  *dify.MetadataFilteringCondition
+	metricsEnabled bool
 }
 
 // WithDifyToolName overrides the tool name that is registered with the LLM.
@@ -101,6 +107,14 @@ func WithDifyDocNameFilter(value, operator string) DifyRetrievalOption {
 	}
 }
 
+// WithDifyMetrics enables Prometheus metrics for the Dify retrieval tool.
+// When enabled, each dify.Retrieve call duration is recorded in a histogram
+// named "tool_dify_retrieval" (milliseconds). The metric is auto-registered with
+// miso's Prometheus registry.
+func WithDifyMetrics() DifyRetrievalOption {
+	return func(o *difyRetrievalOpts) { o.metricsEnabled = true }
+}
+
 // NewDifyRetrievalTool creates an agentloop Tool that retrieves relevant document
 // segments from a Dify knowledge base. Host, ApiKey, DatasetId and RetrievalModel
 // are fixed at construction time and never exposed to the LLM.
@@ -110,6 +124,7 @@ func WithDifyDocNameFilter(value, operator string) DifyRetrievalOption {
 //   - [WithDifyToolDescription] — override the description shown to the LLM
 //   - [WithDifyMetadataAppendKey] — append raw RetrievedRecords to AgentContext.Metadata
 //   - [WithDifyDocNameFilter] — add a document_name filter condition (FAQ/KB split pattern)
+//   - [WithDifyMetrics] — record retrieval duration in Prometheus histogram "tool_dify_retrieval"
 //
 // Example — two tools splitting FAQ vs knowledge base, both collecting references:
 //
@@ -172,16 +187,28 @@ func NewDifyRetrievalTool(cfg DifyRetrievalConfig, opts ...DifyRetrievalOption) 
 	}
 
 	metaKey := o.metadataKey
+	metricsEnabled := o.metricsEnabled
 	return agentloop.NewTypedCtxAwareToolFunc(
 		o.name,
 		o.description,
 		params,
 		func(ctx context.Context, agentCtx agentloop.AgentContext, args DifyRetrievalArgs) (string, error) {
 			rail := flow.NewRail(ctx)
-			resp, err := dify.Retrieve(rail, cfg.Host, cfg.ApiKey, cfg.DatasetId, dify.RetrieveReq{
-				Query:          args.Query,
-				RetrievalModel: retrievalModel,
-			})
+			var resp dify.RetrieveRes
+			var err error
+			if metricsEnabled {
+				t := miso.NewHistTimer(difyRetrievalMs)
+				resp, err = dify.Retrieve(rail, cfg.Host, cfg.ApiKey, cfg.DatasetId, dify.RetrieveReq{
+					Query:          args.Query,
+					RetrievalModel: retrievalModel,
+				})
+				t.ObserveDuration()
+			} else {
+				resp, err = dify.Retrieve(rail, cfg.Host, cfg.ApiKey, cfg.DatasetId, dify.RetrieveReq{
+					Query:          args.Query,
+					RetrievalModel: retrievalModel,
+				})
+			}
 			if err != nil {
 				return "", err
 			}

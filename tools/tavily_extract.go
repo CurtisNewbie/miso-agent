@@ -12,6 +12,10 @@ import (
 	"github.com/curtisnewbie/miso-agent/agentloop"
 )
 
+// tavilyExtractMs is the Prometheus histogram for Tavily extract duration in milliseconds.
+// Registered once at package init; only observed when WithTavilyExtractMetrics is used.
+var tavilyExtractMs = miso.NewPromHisto("tool_tavily_extract")
+
 // TavilyExtractArgs are the typed arguments for the tavily_extract tool.
 type TavilyExtractArgs struct {
 	// URLs is the list of URLs to extract content from. Required.
@@ -27,8 +31,9 @@ type TavilyExtractOption func(o *tavilyExtractCfg)
 
 // tavilyExtractCfg holds tool-level configuration for NewTavilyExtractTool.
 type tavilyExtractCfg struct {
-	name    string
-	reqOpts []func(*TavilyExtractReq)
+	name           string
+	reqOpts        []func(*TavilyExtractReq)
+	metricsEnabled bool
 }
 
 // WithTavilyExtractName overrides the tool name exposed to the LLM (default: "tavily_extract").
@@ -40,6 +45,14 @@ func WithTavilyExtractName(name string) TavilyExtractOption {
 // It is applied after all TavilyExtractArgs fields have been set, so it can override any field.
 func WithExtractReqOpt(fn func(*TavilyExtractReq)) TavilyExtractOption {
 	return func(o *tavilyExtractCfg) { o.reqOpts = append(o.reqOpts, fn) }
+}
+
+// WithTavilyExtractMetrics enables Prometheus metrics for the Tavily extract tool.
+// When enabled, each extract call duration is recorded in a histogram
+// named "tool_tavily_extract" (milliseconds). The metric is auto-registered with
+// miso's Prometheus registry.
+func WithTavilyExtractMetrics() TavilyExtractOption {
+	return func(o *tavilyExtractCfg) { o.metricsEnabled = true }
 }
 
 type TavilyExtractReq struct {
@@ -110,11 +123,22 @@ func NewTavilyExtractTool(apiKey string, opts ...TavilyExtractOption) agentloop.
 				fn(&req)
 			}
 			var resp tavilyExtractResp
-			err := miso.NewClient(rail, tavilyExtractURL).
-				AddAuthBearer(apiKey).
-				Require2xx().
-				PostJson(req).
-				Json(&resp)
+			var err error
+			if cfg.metricsEnabled {
+				t := miso.NewHistTimer(tavilyExtractMs)
+				err = miso.NewClient(rail, tavilyExtractURL).
+					AddAuthBearer(apiKey).
+					Require2xx().
+					PostJson(req).
+					Json(&resp)
+				t.ObserveDuration()
+			} else {
+				err = miso.NewClient(rail, tavilyExtractURL).
+					AddAuthBearer(apiKey).
+					Require2xx().
+					PostJson(req).
+					Json(&resp)
+			}
 			if err != nil {
 				return "", errs.Wrapf(err, "tavily extract failed")
 			}
