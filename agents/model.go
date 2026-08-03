@@ -97,9 +97,9 @@ func WithStreamingToolCall() func(o *openAiModelConfig) {
 }
 
 // WithMetrics enables Prometheus metrics for LLM calls (latency histogram and request count).
-func WithMetrics() func(o *openAiModelConfig) {
+func WithMetrics(enabled bool) func(o *openAiModelConfig) {
 	return func(o *openAiModelConfig) {
-		o.metricsEnabled = true
+		o.metricsEnabled = enabled
 	}
 }
 
@@ -159,6 +159,7 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 		baseURL:           AliBailianIntlBaseURL,
 		retry:             defModelRetry,
 		streamingToolCall: true,
+		metricsEnabled:    true,
 	}
 	for _, op := range ops {
 		op(o)
