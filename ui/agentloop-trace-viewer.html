@@ -1318,18 +1318,14 @@
         return m + 'm ' + s + 's';
       }
 
-      function getEntryDuration(entry, idx) {
-        if (!entry.timestamp) return null;
-        const cur = new Date(entry.timestamp).getTime();
-        if (isNaN(cur)) return null;
-        // find previous entry with timestamp
-        for (let i = idx - 1; i >= 0; i--) {
-          if (traceData[i].timestamp) {
-            const prev = new Date(traceData[i].timestamp).getTime();
-            if (!isNaN(prev)) return cur - prev;
-          }
-        }
-        return null;
+      function getEntryDuration(entry) {
+        const start = entry.started_at || entry.timestamp;
+        const end = entry.ended_at;
+        if (!start || !end) return null;
+        const s = new Date(start).getTime();
+        const e = new Date(end).getTime();
+        if (isNaN(s) || isNaN(e)) return null;
+        return e - s;
       }
 
       function formatTimestamp(ts) {
@@ -1539,8 +1535,9 @@
 
       function renderEntryMeta(entry, idx) {
         let meta = '';
-        if (entry.timestamp) {
-          const ts = formatTimestamp(entry.timestamp);
+        const startTs = entry.started_at || entry.timestamp;
+        if (startTs) {
+          const ts = formatTimestamp(startTs);
           if (ts) {
             meta += `
         <span class="entry-meta-item">
@@ -1549,7 +1546,7 @@
         </span>`;
           }
         }
-        const dur = getEntryDuration(entry, idx);
+        const dur = getEntryDuration(entry);
         if (dur !== null) {
           meta += `
         <span class="entry-meta-item">

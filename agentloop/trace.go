@@ -87,7 +87,8 @@ func accIncStep(acc *tokenAccumulator) int {
 type TraceEntry struct {
 	Node      string          `json:"node"`
 	Component string          `json:"component"`
-	Timestamp time.Time       `json:"timestamp"`
+	StartedAt time.Time       `json:"started_at"`
+	EndedAt   time.Time       `json:"ended_at,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
 	Output    json.RawMessage `json:"output,omitempty"`
 }
@@ -111,6 +112,7 @@ func (a *traceAccumulator) setOutput(idx int, output json.RawMessage) {
 	defer a.mu.Unlock()
 	if idx >= 0 && idx < len(a.entries) {
 		a.entries[idx].Output = output
+		a.entries[idx].EndedAt = time.Now()
 	}
 }
 
@@ -218,7 +220,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 				idx := traceAcc.appendEntry(TraceEntry{
 					Node:      ri.Name,
 					Component: string(ri.Component),
-					Timestamp: time.Now(),
+					StartedAt: time.Now(),
 					Input:     marshalCallbackInput(in),
 				})
 				ctx = context.WithValue(ctx, traceEntryIdxCtxKey, idx)
