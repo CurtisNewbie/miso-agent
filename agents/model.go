@@ -48,7 +48,7 @@ var (
 
 // llmCallMs is the Prometheus histogram vector for LLM call latency, labeled by model name.
 // Observations are only recorded when WithMetrics() is enabled.
-var llmCallMs = miso.NewPromHistoVec("llm_call", []string{"model"})
+var llmCallMs = miso.NewPromHistoVec("llm_call", []string{"model"}, miso.LLMResponseBuckets()...)
 
 // OpenAIChatModelOpt is a functional option for [NewOpenAIChatModel].
 type OpenAIChatModelOpt = func(o *openAiModelConfig)

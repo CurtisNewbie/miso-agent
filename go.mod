@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/cloudwego/eino v0.7.18
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.10
-	github.com/curtisnewbie/miso v0.4.17-0.20260727033724-0dc016cb9a46
+	github.com/curtisnewbie/miso v0.4.18-0.20260803085802-9783b5e9cbe6
 	github.com/curtisnewbie/miso-dify v0.1.11-0.20260601022935-aae70e282670
 	github.com/curtisnewbie/miso-tavily v0.0.2-0.20260309090836-5ac7462fd1e4
 	github.com/eino-contrib/jsonschema v1.0.3
