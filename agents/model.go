@@ -10,6 +10,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/flow"
+	"github.com/curtisnewbie/miso/miso"
 	"github.com/curtisnewbie/miso/util/ptr"
 	"github.com/curtisnewbie/miso/util/retry"
 )
@@ -45,6 +46,10 @@ var (
 	}
 )
 
+// llmCallMs is the Prometheus histogram vector for LLM call latency, labeled by model name.
+// Observations are only recorded when WithMetrics() is enabled.
+var llmCallMs = miso.NewPromHistoVec("llm_call", []string{"model"})
+
 // OpenAIChatModelOpt is a functional option for [NewOpenAIChatModel].
 type OpenAIChatModelOpt = func(o *openAiModelConfig)
 
@@ -54,6 +59,7 @@ type openAiModelConfig struct {
 	baseURL           string
 	retry             int
 	streamingToolCall bool
+	metricsEnabled    bool
 }
 
 func WithTemperature(n float32) func(o *openAiModelConfig) {
@@ -90,6 +96,13 @@ func WithStreamingToolCall() func(o *openAiModelConfig) {
 	}
 }
 
+// WithMetrics enables Prometheus metrics for LLM calls (latency histogram and request count).
+func WithMetrics() func(o *openAiModelConfig) {
+	return func(o *openAiModelConfig) {
+		o.metricsEnabled = true
+	}
+}
+
 // ModelNamer is implemented by chat models that expose their underlying model name.
 type ModelNamer interface {
 	ModelName() string
@@ -99,17 +112,26 @@ type ModelNamer interface {
 // It wraps the internal layered model (retry → contentFix → optionally streamingTool)
 // and exposes the model name via ModelName().
 type OpenAIChatModel struct {
-	name  string
-	inner model.ToolCallingChatModel
+	name           string
+	inner          model.ToolCallingChatModel
+	metricsEnabled bool
 }
 
 func (m *OpenAIChatModel) ModelName() string { return m.name }
 
 func (m *OpenAIChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.Message, error) {
+	if m.metricsEnabled {
+		t := miso.NewVecTimer(llmCallMs)
+		defer t.ObserveDuration(m.name)
+	}
 	return m.inner.Generate(ctx, input, opts...)
 }
 
 func (m *OpenAIChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
+	if m.metricsEnabled {
+		t := miso.NewVecTimer(llmCallMs)
+		defer t.ObserveDuration(m.name)
+	}
 	return m.inner.Stream(ctx, input, opts...)
 }
 
@@ -118,7 +140,7 @@ func (m *OpenAIChatModel) WithTools(tools []*schema.ToolInfo) (model.ToolCalling
 	if err != nil {
 		return nil, err
 	}
-	return &OpenAIChatModel{name: m.name, inner: inner}, nil
+	return &OpenAIChatModel{name: m.name, inner: inner, metricsEnabled: m.metricsEnabled}, nil
 }
 
 // NewOpenAIChatModel creates a new OpenAI-compatible chat model.
@@ -179,7 +201,7 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 		result = &streamingToolModel{inner: result}
 	}
 
-	return &OpenAIChatModel{name: modelName, inner: result}, nil
+	return &OpenAIChatModel{name: modelName, inner: result, metricsEnabled: o.metricsEnabled}, nil
 }
 
 type retryChatModel struct {
