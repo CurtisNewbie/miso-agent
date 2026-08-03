@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components/model"
@@ -86,6 +87,7 @@ func accIncStep(acc *tokenAccumulator) int {
 type TraceEntry struct {
 	Node      string          `json:"node"`
 	Component string          `json:"component"`
+	Timestamp time.Time       `json:"timestamp"`
 	Input     json.RawMessage `json:"input,omitempty"`
 	Output    json.RawMessage `json:"output,omitempty"`
 }
@@ -216,6 +218,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 				idx := traceAcc.appendEntry(TraceEntry{
 					Node:      ri.Name,
 					Component: string(ri.Component),
+					Timestamp: time.Now(),
 					Input:     marshalCallbackInput(in),
 				})
 				ctx = context.WithValue(ctx, traceEntryIdxCtxKey, idx)

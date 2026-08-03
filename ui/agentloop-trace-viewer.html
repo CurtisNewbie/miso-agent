@@ -1310,6 +1310,39 @@
         return str.slice(0, max) + '…';
       }
 
+      function formatDuration(ms) {
+        if (ms < 1000) return ms + 'ms';
+        if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+        const m = Math.floor(ms / 60000);
+        const s = ((ms % 60000) / 1000).toFixed(0);
+        return m + 'm ' + s + 's';
+      }
+
+      function getEntryDuration(entry, idx) {
+        if (!entry.timestamp) return null;
+        const cur = new Date(entry.timestamp).getTime();
+        if (isNaN(cur)) return null;
+        // find previous entry with timestamp
+        for (let i = idx - 1; i >= 0; i--) {
+          if (traceData[i].timestamp) {
+            const prev = new Date(traceData[i].timestamp).getTime();
+            if (!isNaN(prev)) return cur - prev;
+          }
+        }
+        return null;
+      }
+
+      function formatTimestamp(ts) {
+        if (!ts) return '';
+        const d = new Date(ts);
+        if (isNaN(d.getTime())) return '';
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        const ms = String(d.getMilliseconds()).padStart(3, '0');
+        return `${hh}:${mm}:${ss}.${ms}`;
+      }
+
       function componentClass(component) {
         return component.toLowerCase().replace(/\s+/g, '');
       }
@@ -1504,23 +1537,43 @@
         return escapeHtml(entry.node || entry.component);
       }
 
-      function renderEntryMeta(entry) {
+      function renderEntryMeta(entry, idx) {
+        let meta = '';
+        if (entry.timestamp) {
+          const ts = formatTimestamp(entry.timestamp);
+          if (ts) {
+            meta += `
+        <span class="entry-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          ${ts}
+        </span>`;
+          }
+        }
+        const dur = getEntryDuration(entry, idx);
+        if (dur !== null) {
+          meta += `
+        <span class="entry-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          ${formatDuration(dur)}
+        </span>`;
+        }
         if (entry.component === 'ChatModel') {
           const u = entry.output?.response_meta?.usage;
-          if (!u) return '';
-          return `
+          if (u) {
+            meta += `
         <span class="entry-meta-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
           ${formatNum(u.total_tokens || 0)} tok
         </span>`;
+          }
         }
         if (entry.component === 'Tool' && entry.node === 'bash') {
           const parsed = tryParseJSON(entry.input);
           if (parsed?.script) {
-            return `<span class="entry-meta-item">${escapeHtml(truncate(parsed.script, 30))}</span>`;
+            meta += `<span class="entry-meta-item">${escapeHtml(truncate(parsed.script, 30))}</span>`;
           }
         }
-        return '';
+        return meta;
       }
 
       function renderEntryBody(entry, idx) {
