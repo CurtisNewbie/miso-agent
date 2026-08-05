@@ -6,6 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VIEWER="$SCRIPT_DIR/agentloop-trace-viewer.html"
+OUT="/tmp/agentloop-trace-viewer.html"
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: open-trace <trace.json>" >&2
@@ -19,27 +20,31 @@ if [[ ! -f "$JSON_FILE" ]]; then
   exit 1
 fi
 
-# Build a temp HTML file with the JSON embedded
-TMP_HTML="$(mktemp /tmp/agentloop-trace-XXXXXX.html)"
-trap 'rm -f "$TMP_HTML"' EXIT
+# Inject JSON safely via Python (avoids sed & / \ escaping issues)
+python3 - "$VIEWER" "$JSON_FILE" "$OUT" << 'EOF'
+import sys, json, pathlib, os
 
-BASENAME="$(basename "$JSON_FILE")"
-JSON_CONTENT="$(cat "$JSON_FILE")"
+viewer_path, json_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
 
-# Inject __INITIAL_TRACE__ right before </head>
-sed "s|</head>|<script>window.__INITIAL_TRACE__ = $JSON_CONTENT; window.__INITIAL_TRACE_FILE__ = $(printf '%s' "\"$BASENAME\"");</script></head>|" \
-  "$VIEWER" > "$TMP_HTML"
+viewer = pathlib.Path(viewer_path).read_text(encoding='utf-8')
+data   = json.loads(pathlib.Path(json_path).read_bytes())
+name   = os.path.basename(json_path)
 
-# Open in default browser
+injection = (
+    '<script>'
+    f'window.__INITIAL_TRACE__ = {json.dumps(data, ensure_ascii=False)};'
+    f'window.__INITIAL_TRACE_FILE__ = {json.dumps(name)};'
+    '</script>'
+)
+patched = viewer.replace('</head>', injection + '</head>', 1)
+pathlib.Path(out_path).write_text(patched, encoding='utf-8')
+EOF
+
+# Open the stable output file (no deletion = no race)
 if command -v open &>/dev/null; then
-  open "$TMP_HTML"
+  open "$OUT"
 elif command -v xdg-open &>/dev/null; then
-  xdg-open "$TMP_HTML"
+  xdg-open "$OUT"
 else
-  echo "Cannot detect browser opener. Open manually: $TMP_HTML" >&2
-  trap - EXIT   # don't delete so user can open it
-  exit 0
+  echo "Open manually: $OUT" >&2
 fi
-
-# Give the browser a moment to load the file before the trap cleans it up
-sleep 3
