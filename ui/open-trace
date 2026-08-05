@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Usage: open-trace <trace.json>
+# Opens agentloop-trace-viewer.html with the given JSON pre-loaded.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+VIEWER="$SCRIPT_DIR/agentloop-trace-viewer.html"
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: open-trace <trace.json>" >&2
+  exit 1
+fi
+
+JSON_FILE="$(realpath "$1")"
+
+if [[ ! -f "$JSON_FILE" ]]; then
+  echo "Error: file not found: $JSON_FILE" >&2
+  exit 1
+fi
+
+# Build a temp HTML file with the JSON embedded
+TMP_HTML="$(mktemp /tmp/agentloop-trace-XXXXXX.html)"
+trap 'rm -f "$TMP_HTML"' EXIT
+
+BASENAME="$(basename "$JSON_FILE")"
+JSON_CONTENT="$(cat "$JSON_FILE")"
+
+# Inject __INITIAL_TRACE__ right before </head>
+sed "s|</head>|<script>window.__INITIAL_TRACE__ = $JSON_CONTENT; window.__INITIAL_TRACE_FILE__ = $(printf '%s' "\"$BASENAME\"");</script></head>|" \
+  "$VIEWER" > "$TMP_HTML"
+
+# Open in default browser
+if command -v open &>/dev/null; then
+  open "$TMP_HTML"
+elif command -v xdg-open &>/dev/null; then
+  xdg-open "$TMP_HTML"
+else
+  echo "Cannot detect browser opener. Open manually: $TMP_HTML" >&2
+  trap - EXIT   # don't delete so user can open it
+  exit 0
+fi
+
+# Give the browser a moment to load the file before the trap cleans it up
+sleep 3

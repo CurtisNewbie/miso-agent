@@ -1878,6 +1878,15 @@
         });
       };
 
+      // ─── Auto-load injected trace (CLI usage) ───
+      if (typeof window.__INITIAL_TRACE__ !== 'undefined' && Array.isArray(window.__INITIAL_TRACE__)) {
+        traceData = window.__INITIAL_TRACE__;
+        fileLabel.classList.add('loaded');
+        fileLabelText.textContent = typeof window.__INITIAL_TRACE_FILE__ === 'string'
+          ? window.__INITIAL_TRACE_FILE__ : 'trace.json';
+        render();
+      }
+
     }
     )();
   </script>
