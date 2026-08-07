@@ -254,6 +254,7 @@ func buildTraceHandler(name string, ops agentOps, acc *tokenAccumulator, traceAc
 				inToken, outToken, cachedToken, ok := agentTokenUsage(output)
 				if ok && acc != nil {
 					acc.add(inToken, outToken, cachedToken)
+					recordChatModelMetrics(ops.modelName, inToken, outToken, cachedToken)
 				}
 				{
 					rail := flow.NewRail(ctx)

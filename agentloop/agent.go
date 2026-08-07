@@ -32,6 +32,7 @@ type agentOps struct {
 	compactPreserveRecentTokens  int
 	compactBuffer                int // derived from compactionThreshold * MaxTokens
 	maxTokens                    int // model context window size (0 = unknown)
+	modelName                    string
 	toolOffloadTokenLimit        int // 0 = disabled
 	toolOffloadResultsPathPrefix string
 	enableFileTool               bool
@@ -108,6 +109,7 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 	ops := agentOps{
 		maxRunSteps:                 config.MaxRunSteps,
 		language:                    config.Language,
+		modelName:                   config.ModelName,
 		logOnStart:                  boolOrDefault(config.LogOnStart, true),
 		logOnEnd:                    boolOrDefault(config.LogOnEnd, true),
 		logInputs:                   boolOrDefault(config.LogInputs, false),

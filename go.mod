@@ -10,6 +10,7 @@ require (
 	github.com/curtisnewbie/miso-tavily v0.0.2-0.20260309090836-5ac7462fd1e4
 	github.com/eino-contrib/jsonschema v1.0.3
 	github.com/mark3labs/go-bash v0.0.0-20260619105339-d1567f4755b3
+	github.com/prometheus/client_golang v1.12.2
 	github.com/yuin/gopher-lua v1.1.1
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -98,7 +99,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.9 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/client_golang v1.12.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
