@@ -53,7 +53,7 @@ type Artifact struct {
 
 // TaskOutput represents the output from an agent execution
 type TaskOutput struct {
-	Response   string         // Main response (research report)
+	Response   string         // Main response
 	Artifacts  []Artifact     // Artifacts collected during execution
 	Metadata   map[string]any // Snapshot of MetadataStore at end of execution
 	TokenUsage TokenUsage     // Aggregate token usage across all LLM calls
@@ -66,6 +66,9 @@ type TaskOutput struct {
 	// InterruptReason is the human-readable reason for the interrupt provided by the tool.
 	// Empty when Interrupted is false.
 	InterruptReason string
+
+	// Whether input/output moderated.
+	Moderated bool
 }
 
 // taskOutput is the internal output type used by the graph

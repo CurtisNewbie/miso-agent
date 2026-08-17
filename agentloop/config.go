@@ -12,7 +12,7 @@ import (
 // contentType is either "INPUT" (user input, before run) or "OUTPUT" (agent response, after run).
 // Return ok=true to allow the content, or ok=false with an intended output string to block it;
 // the intended output is returned to the caller as the agent's response instead of running further.
-type ContentModerationFunc func(content string, contentType string) (intendedOutput string, ok bool)
+type ContentModerationFunc func(ctx context.Context, content string, contentType string) (intendedOutput string, ok bool)
 
 // OutputCheckFunc is a callback invoked on each final assistant response before the agent
 // accepts it as the output.

@@ -330,11 +330,11 @@ func (a *Agent) Resume(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 // persisted message history and agent counters are restored before the loop continues.
 func (a *Agent) run(rail flow.Rail, req AgentRequest, hitlState *HitlState) (TaskOutput, error) {
 	if a.config.ContentModeration != nil {
-		if out, ok := a.config.ContentModeration(req.UserInput, "INPUT"); !ok {
+		if out, ok := a.config.ContentModeration(rail, req.UserInput, "INPUT"); !ok {
 			if out == "" {
 				out = "Content Moderated"
 			}
-			return TaskOutput{Response: out}, nil
+			return TaskOutput{Response: out, Moderated: true}, nil
 		}
 	}
 
@@ -475,11 +475,13 @@ func (a *Agent) run(rail flow.Rail, req AgentRequest, hitlState *HitlState) (Tas
 	}
 
 	if a.config.ContentModeration != nil {
-		if out, ok := a.config.ContentModeration(result.Response, "OUTPUT"); !ok {
+		if out, ok := a.config.ContentModeration(rail, result.Response, "OUTPUT"); !ok {
 			if out == "" {
 				out = "Content Moderated"
 			}
-			return TaskOutput{Response: out}, nil
+			result.Moderated = true
+			result.Response = out
+			return result, nil
 		}
 	}
 
