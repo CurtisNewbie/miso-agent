@@ -1,6 +1,11 @@
 package prebuilt
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	"github.com/curtisnewbie/miso-agent/agentloop"
+)
 
 func TestParseScoreReason(t *testing.T) {
 	tests := []struct {
@@ -118,6 +123,119 @@ func TestParseScoreReason(t *testing.T) {
 			}
 			if tt.wantReason != "" && reason != tt.wantReason {
 				t.Errorf("reason = %q, want %q", reason, tt.wantReason)
+			}
+		})
+	}
+}
+
+func TestScoreReasonOutputCheck(t *testing.T) {
+	tests := []struct {
+		name     string
+		output   string
+		attempt  int
+		wantOk   bool
+		wantHint bool // true => hint must be non-empty; false => hint must be empty
+	}{
+		// --- valid input always passes, regardless of attempt ---
+		{
+			name:    "Valid JSON at attempt 0",
+			output:  `{"score": 4, "reason": "Well justified."}`,
+			attempt: 0,
+			wantOk:  true,
+		},
+		{
+			name:    "Valid JSON at attempt 1",
+			output:  `{"score": 4, "reason": "Well justified."}`,
+			attempt: 1,
+			wantOk:  true,
+		},
+		// --- invalid JSON ---
+		{
+			name:     "Invalid JSON below maxAttempts rejects with hint",
+			output:   "the answer is great",
+			attempt:  0,
+			wantOk:   false,
+			wantHint: true,
+		},
+		{
+			name:    "Invalid JSON at maxAttempts gives up",
+			output:  "the answer is great",
+			attempt: 2,
+			wantOk:  true,
+		},
+		// --- score out of range ---
+		{
+			name:     "Score below range rejects with hint",
+			output:   `{"score": 0, "reason": "too low"}`,
+			attempt:  0,
+			wantOk:   false,
+			wantHint: true,
+		},
+		{
+			name:     "Score above range rejects with hint",
+			output:   `{"score": 6, "reason": "too high"}`,
+			attempt:  0,
+			wantOk:   false,
+			wantHint: true,
+		},
+		{
+			name:    "Score out of range at maxAttempts gives up",
+			output:  `{"score": 6, "reason": "too high"}`,
+			attempt: 2,
+			wantOk:  true,
+		},
+		// --- empty reason ---
+		{
+			name:     "Empty reason rejects with hint",
+			output:   `{"score": 3, "reason": ""}`,
+			attempt:  0,
+			wantOk:   false,
+			wantHint: true,
+		},
+		{
+			name:     "Whitespace-only reason rejects with hint",
+			output:   `{"score": 3, "reason": "   "}`,
+			attempt:  0,
+			wantOk:   false,
+			wantHint: true,
+		},
+		{
+			name:    "Empty reason at maxAttempts gives up",
+			output:  `{"score": 3, "reason": ""}`,
+			attempt: 2,
+			wantOk:  true,
+		},
+		// --- boundary scores ---
+		{
+			name:    "Score = 1 (min) with reason passes",
+			output:  `{"score": 1, "reason": "Completely wrong."}`,
+			attempt: 0,
+			wantOk:  true,
+		},
+		{
+			name:    "Score = 5 (max) with reason passes",
+			output:  `{"score": 5, "reason": "Fully correct."}`,
+			attempt: 0,
+			wantOk:  true,
+		},
+	}
+
+	check := scoreReasonOutputCheck(2)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hint, ok, err := check(context.Background(), agentloop.AgentContext{}, tt.attempt, tt.output)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if ok != tt.wantOk {
+				t.Errorf("ok = %v, want %v (hint=%q)", ok, tt.wantOk, hint)
+			}
+			if tt.wantHint && hint == "" {
+				t.Errorf("expected non-empty hint, got empty")
+			}
+			if !tt.wantHint && hint != "" {
+				t.Errorf("expected empty hint, got %q", hint)
 			}
 		})
 	}

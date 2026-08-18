@@ -118,7 +118,7 @@ func NewRelevanceCheckAgent(modelName, apiKey, apiUrl string, opts ...RelevanceC
 		MaxRunSteps:  5,
 		Language:     cfg.Language,
 		SystemPrompt: systemPrompt,
-		OutputCheck:  agentloop.JsonOutputCheck[scoreReasonResponse](2),
+		OutputCheck:  scoreReasonOutputCheck(2),
 	})
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create RelevanceCheckAgent")
