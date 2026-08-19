@@ -284,7 +284,11 @@ func (a *Agent) Execute(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 	} else {
 		rail.Infof("Execute agent %q, SessionId: %q", a.config.Name, req.SessionId)
 	}
-	return a.run(rail, req, nil)
+	v, err := a.run(rail, req, nil)
+	if err != nil {
+		rail.Warnf("Execute agent %q failed, %v", a.config.Name, err)
+	}
+	return v, err
 }
 
 // Resume resumes an interrupted agent session.
@@ -321,6 +325,9 @@ func (a *Agent) Resume(rail flow.Rail, req AgentRequest) (TaskOutput, error) {
 		if delErr := a.config.HitlStore.Delete(rail, req.SessionId); delErr != nil {
 			rail.Errorf("[%v] Resume: failed to delete HITL state for session %q: %v", a.config.Name, req.SessionId, delErr)
 		}
+	}
+	if err != nil {
+		rail.Warnf("Resume agent %q failed, %v", a.config.Name, err)
 	}
 	return result, err
 }
