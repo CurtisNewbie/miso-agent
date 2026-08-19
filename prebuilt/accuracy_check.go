@@ -191,22 +191,27 @@ Do NOT penalize for style, verbosity, or extra helpful context that does not con
 Score scale:
 1 = Completely wrong or directly contradicts the reference answer, OR response claims no information but reference has substantive specific content
 2 = Significant divergence from the reference answer affecting core meaning, OR response claims no information but reference has some content, OR response contains a mix of correct facts and a direct contradiction
-3 = Partially matches — covers some key points but missing others without contradiction, OR reference answer was not provided (cannot evaluate)
-4 = Mostly matches — all core points present, minor omissions or imprecise wording
-5 = Fully matches — all key points from the reference answer are correctly conveyed
+3 = Partially matches — covers some key points the question actually asks for but misses others, without contradiction, OR reference answer was not provided (cannot evaluate)
+4 = Mostly matches — every core point the question actually asks for is present; only supplementary/procedural detail is omitted, or wording is imprecise
+5 = Fully matches — all key points from the reference answer that are responsive to the question are correctly conveyed
 
 Before scoring, follow these steps:
 1. If the reference answer is empty, assign Score: 3 and state the reference answer was not provided.
-2. Identify the core factual claims in the reference answer. Core factual claims are specific facts, figures, requirements, steps, or conclusions. Generic routing or fallback instructions (e.g., "refer to page X for details", "contact customer support / your account manager") are NOT core factual claims — they represent the reference's handling approach, not facts the LLM response must mirror.
-3. For each core factual claim, determine which category applies in the LLM response:
+2. Identify the core factual claims in the reference answer — but only those that are actually responsive to the user's question. Core factual claims are specific facts, figures, requirements, or conclusions that directly answer what was asked. The following are NOT core factual claims, even if present in the reference answer, and missing them should never by itself drop the score below 4:
+   - Generic routing or fallback instructions (e.g., "refer to page X for details", "contact customer support / your account manager").
+   - Procedural or navigational detail for how to locate or execute something (e.g., specific URLs, menu paths, button names, click sequences) when the response already conveys the same underlying mechanism, step, or outcome.
+   - Edge cases, quantitative limits, or exception conditions the question did not ask about (e.g. a yes/no question like "can I do X" does not require the response to also state rare exceptions, quotas, or schedule caveats that the reference happens to mention).
+   - Elaboration beyond the literal scope of the question (e.g. the question asks "can you provide X" and the reference goes on to describe the full multi-step application process for X — the extra steps are not required to answer the narrower question that was actually asked).
+3. For each core factual claim (as scoped in step 2), determine which category applies in the LLM response:
    - correct: the claim is accurately conveyed
    - alternative: the agent takes a different but non-contradictory path to address the same need (e.g. reference says "register first", agent says "call customer service" — both help the user, neither negates the other). Treat as a minor deviation, not a missing point.
    - missing: the claim is entirely absent with no equivalent coverage
    - contradicted: the claim is directly negated or replaced with incorrect information
-4. Assign score: all correct/alternative → 4-5; minor gaps → 4; some correct/alternative + some missing → 3; core meaning wrong or direct contradiction present → 1-2.
+4. Assign score: all question-scoped core claims correct/alternative → 5; core claims correct/alternative but supplementary detail excluded per step 2 is omitted → 4-5 (never drop to 3 solely for this); some question-scoped core claims correct/alternative + some missing → 3; core meaning wrong or direct contradiction present → 1-2.
 
 Important:
 - Do not penalize for additional helpful information beyond the reference, as long as it does not contradict it.
+- Do not penalize for omitting reference-answer content that falls under the step-2 exclusions (routing/fallback, procedural/navigational detail, unasked edge cases and limits, or elaboration beyond the literal question scope). These are supplementary, not core — a response that gets the actual question right should not be capped at 3 just because it lacks this extra material.
 - A hallucinated response (not grounded in context) can still accurately match the reference answer — that is a separate concern, not penalized here.
 - Score 1 vs 2: use 1 when the response is entirely wrong or contains a direct factual contradiction; use 2 when core meaning diverges but there is no outright contradiction (e.g. response omits a critical requirement that changes the answer's validity).
 - If the reference answer contains no substantive factual claims — only routing or fallback instructions (e.g., "please refer to the page" or "contact your account manager for details") — then there are no core claims to match against. If the LLM response provides specific, substantive information that addresses the question and does not contradict the reference's intent, do not score 1-2. Score 3-4 based on whether the response is reasonable and aligned with the question.
@@ -260,6 +265,18 @@ Example 8:
 <llm_response>Orders can remain pending due to: (1) payment verification taking longer than usual; (2) the item being temporarily out of stock; (3) address validation checks. If none of these apply to your situation, please contact our support team for further assistance.</llm_response>
 <reference_answer>Please check the status details on the order page. If you cannot determine the cause, contact customer support for help.</reference_answer>
 Output: {"score": 4, "reason": "The reference answer contains no core factual claims — it is a pure routing/fallback instruction with no specific facts to match or contradict. The LLM response provides substantive specific reasons and retains the fallback guidance (contact support), covering the reference's core intent. Score 4."}
+
+Example 9:
+<user_question>How do I open a payment account?</user_question>
+<llm_response>To open an account, register and complete identity verification on the official website, then apply for a global account once verification passes.</llm_response>
+<reference_answer>To open an account: 1) Go to the registration page at www.example.com/register and sign up. 2) Complete identity verification. 3) Log in to the merchant portal, go to Accounts, and click "Apply for Global Account".</reference_answer>
+Output: {"score": 5, "reason": "The core steps — register, verify identity, apply for a global account — are all correctly conveyed. The specific URL and exact menu path (Accounts > Apply for Global Account) are procedural/navigational detail, not core claims the response must mirror, and the question did not ask for the exact click path. No contradiction present."}
+
+Example 10:
+<user_question>Can I withdraw my balance to a bank card?</user_question>
+<llm_response>Yes. Log in, go to Withdraw, select your linked bank card, enter the amount, and confirm. Funds typically arrive within a few business days.</llm_response>
+<reference_answer>Yes, withdrawals to bank card are supported. You can link multiple withdrawal cards for flexibility. Withdrawals do not count against the annual FX settlement quota as long as funds have a genuine trade background.</reference_answer>
+Output: {"score": 4, "reason": "The core question — can I withdraw to a bank card, and how — is correctly and completely answered. The reference's notes about linking multiple cards and the annual FX quota exemption are edge-case/supplementary details the question did not ask about; omitting them does not warrant dropping below 4."}
 
 --- END EXAMPLES ---
 

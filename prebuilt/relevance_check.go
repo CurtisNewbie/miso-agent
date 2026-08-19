@@ -194,6 +194,7 @@ Important:
 - Use score 2 when context has the answer but the response ignores it or falsely claims no info is available.
 - Use score 3 when context has no relevant information and the response correctly abstains.
 - When a question has no deterministic rule-based answer and the correct handling is to route the user to a human agent, a response that guides to human contact IS on-topic and should score 4-5, not 1. Contrast: if the question has a clear rule-based answer, routing to human support instead is off-topic (Score: 1).
+- If the context only provides categorical or background information without directly answering the literal question (e.g. a yes/no question), but the response synthesizes that context into a direct, specific answer, the response is MORE relevant than a bare restatement of the context, not less. Do not penalize a response for restructuring context into a direct answer that the context itself did not phrase directly — score 4-5.
 
 --- EXAMPLES ---
 
@@ -238,6 +239,12 @@ Example 7:
 <knowledge_context>Special rates are assessed on a case-by-case basis depending on account history, transaction volume, and other factors. No universal eligibility criteria apply.</knowledge_context>
 <llm_response>Eligibility for the special rate depends on your specific account situation. Please reach out to your account manager who can review the details and advise you directly.</llm_response>
 Output: {"score": 5, "reason": "The question has no deterministic rule-based answer — eligibility requires human case-by-case judgment. Routing the user to a human agent is the correct and complete response to this type of question, making it fully on-topic."}
+
+Example 8:
+<user_question>Can I use my bank card to transfer money directly into someone else's account?</user_question>
+<knowledge_context>Account funding methods include: trade-related receipts, same-name overseas bank transfers (business users only), and e-wallet transfers (e.g. PayPal, Payoneer).</knowledge_context>
+<llm_response>No, you cannot transfer directly from a bank card into someone else's account. Bank card funding can only be used to top up your own account. To send money to another account, you need to use the platform's transfer/payment feature.</llm_response>
+Output: {"score": 5, "reason": "The context only lists funding methods in the abstract and does not directly address the yes/no question asked. The response synthesizes that context into a direct, correct answer to the literal question, which is more relevant than a bare category list would be — not less."}
 
 --- END EXAMPLES ---
 
