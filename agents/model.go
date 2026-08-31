@@ -60,6 +60,7 @@ type openAiModelConfig struct {
 	retry             int
 	streamingToolCall bool
 	metricsEnabled    bool
+	timeout           time.Duration
 }
 
 func WithTemperature(n float32) func(o *openAiModelConfig) {
@@ -100,6 +101,13 @@ func WithStreamingToolCall() func(o *openAiModelConfig) {
 func WithMetrics(enabled bool) func(o *openAiModelConfig) {
 	return func(o *openAiModelConfig) {
 		o.metricsEnabled = enabled
+	}
+}
+
+// WithModelTimeout sets the maximum duration to wait for API responses.
+func WithModelTimeout(d time.Duration) func(o *openAiModelConfig) {
+	return func(o *openAiModelConfig) {
+		o.timeout = d
 	}
 }
 
@@ -180,6 +188,7 @@ func NewOpenAIChatModel(modelName, apiKey string, ops ...func(o *openAiModelConf
 		Model:               modelName,
 		Temperature:         ptr.ValPtr(o.temperature),
 		MaxCompletionTokens: ptr.ValPtr(o.maxToken),
+		Timeout:             o.timeout,
 	})
 	if err != nil {
 		return nil, err
