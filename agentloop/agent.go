@@ -100,6 +100,9 @@ func NewAgent(config AgentConfig, optCtx ...context.Context) (*Agent, error) {
 	if config.ApiUrl != "" {
 		modelOpts = append(modelOpts, agents.WithBaseURL(config.ApiUrl))
 	}
+	if config.ModelTimeout > 0 {
+		modelOpts = append(modelOpts, agents.WithModelTimeout(config.ModelTimeout))
+	}
 	chatModel, err := agents.NewOpenAIChatModel(config.ModelName, config.ApiKey, modelOpts...)
 	if err != nil {
 		return nil, errs.Wrapf(err, "failed to create chat model")

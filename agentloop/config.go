@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"io/fs"
+	"time"
 
 	"github.com/curtisnewbie/miso/errs"
 )
@@ -52,6 +53,10 @@ type AgentConfig struct {
 	// Temperature controls sampling randomness for the model.
 	// If 0, defaults to 0.7.
 	Temperature float32
+
+	// ModelTimeout is the maximum duration to wait for API responses from the model provider.
+	// If 0, no timeout override is applied (see [agents.NewOpenAIChatModel]).
+	ModelTimeout time.Duration
 
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
 	// Enforced directly by the agent loop's own round counter (not by Eino's internal step counter),
