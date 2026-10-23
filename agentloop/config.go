@@ -58,6 +58,12 @@ type AgentConfig struct {
 	// If 0, no timeout override is applied (see [agents.NewOpenAIChatModel]).
 	ModelTimeout time.Duration
 
+	// ModelRetry is the number of retries for a failed model API call, with exponential
+	// backoff (1s, 2s, 4s, 8s, capped at 10s), so a value of 1 means two attempts in
+	// total: the initial call plus exactly one retry.
+	// If 0, the library default is used (see [agents.WithRetry]).
+	ModelRetry int
+
 	// MaxRunSteps limits the maximum number of ReAct rounds (tool-call cycles) the agent may execute.
 	// Enforced directly by the agent loop's own round counter (not by Eino's internal step counter),
 	// so it maps 1:1 to actual chat-model calls regardless of graph topology (e.g. whether OutputCheck
