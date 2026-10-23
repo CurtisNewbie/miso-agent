@@ -228,3 +228,19 @@ If an `agentdoc/` directory exists, it may contain design and implementation doc
 - `agentdoc/faq.md` — common questions and known pitfalls
 
 Check `agentdoc/` before starting a non-trivial task to avoid duplicating prior work.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown under `.scratch/<feature-slug>/`: spec at `spec.md`, tickets at `issues/NN-<slug>.md`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
