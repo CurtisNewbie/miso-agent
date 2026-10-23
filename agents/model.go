@@ -3,14 +3,17 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
+	"github.com/curtisnewbie/miso/errs"
 	"github.com/curtisnewbie/miso/flow"
 	"github.com/curtisnewbie/miso/miso"
+	"github.com/curtisnewbie/miso/util/async"
 	"github.com/curtisnewbie/miso/util/ptr"
 	"github.com/curtisnewbie/miso/util/retry"
 )
@@ -227,12 +230,78 @@ func (r *retryChatModel) Generate(ctx context.Context, input []*schema.Message, 
 	})
 }
 
+// Stream issues a completion and drains it as a single retry unit. A failure at
+// creation *or* while draining before any chunk has reached the consumer is
+// retried within the shared budget. Once a chunk has been delivered, a re-issued
+// completion would replay output the consumer already saw, so the error is
+// propagated unchanged instead.
 func (r *retryChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...model.Option) (*schema.StreamReader[*schema.Message], error) {
-	return retry.GetOneDyn(func() (*schema.StreamReader[*schema.Message], error) {
-		return r.c.Stream(ctx, input, opts...)
-	}, func(i int, err error) (wait time.Duration, doRetry bool) {
-		return r.gapFunc(ctx, i, err)
+	// unbuffered pipe preserves end-to-end backpressure
+	sr, sw := schema.Pipe[*schema.Message](0)
+	async.Fire(flow.NewRail(ctx), func() error {
+		defer sw.Close()
+		defer func() {
+			// async.Fire only logs recovered panics; surface them to the consumer
+			// so a crash is never mistaken for a clean end of stream.
+			if p := recover(); p != nil {
+				sw.Send(nil, errs.NewErrf("panic in model stream: %v", p))
+			}
+		}()
+		r.stream(ctx, input, opts, sw)
+		return nil // errors are delivered on the stream, not returned here
 	})
+	return sr, nil
+}
+
+// stream drives a single streamed completion, retrying the whole call while no
+// chunk has been delivered yet. The attempt counter is shared across creation
+// and consumption failures, so retry is a total budget.
+func (r *retryChatModel) stream(ctx context.Context, input []*schema.Message, opts []model.Option, sw *schema.StreamWriter[*schema.Message]) {
+	attempt := 1
+	for {
+		reader, err := r.c.Stream(ctx, input, opts...)
+		if err != nil {
+			wait, doRetry := r.gapFunc(ctx, attempt, err)
+			if !doRetry {
+				sw.Send(nil, err)
+				return
+			}
+			time.Sleep(wait)
+			attempt++
+			continue
+		}
+
+		delivered := false
+		for {
+			chunk, recvErr := reader.Recv()
+			if recvErr != nil {
+				// release the abandoned response body/goroutine before retrying
+				reader.Close()
+				if errors.Is(recvErr, io.EOF) {
+					return
+				}
+				if delivered {
+					// cannot silently replay output the consumer already saw
+					sw.Send(nil, recvErr)
+					return
+				}
+				wait, doRetry := r.gapFunc(ctx, attempt, recvErr)
+				if !doRetry {
+					sw.Send(nil, recvErr)
+					return
+				}
+				time.Sleep(wait)
+				attempt++
+				break // retry the whole call
+			}
+			if closed := sw.Send(chunk, nil); closed {
+				// consumer stopped reading; stop the driver and release the reader
+				reader.Close()
+				return
+			}
+			delivered = true
+		}
+	}
 }
 
 func (r *retryChatModel) gapFunc(ctx context.Context, i int, err error) (time.Duration, bool) {
@@ -241,7 +310,9 @@ func (r *retryChatModel) gapFunc(ctx context.Context, i int, err error) (time.Du
 	if wait > 10*time.Second {
 		wait = 10 * time.Second
 	}
-	doRetry := i <= r.retry
+	// do not retry when the request context is already done: a dead context
+	// must surface its error immediately instead of sleeping through backoff.
+	doRetry := i <= r.retry && ctx.Err() == nil
 	if doRetry {
 		flow.NewRail(ctx).Warnf("Retrying, i: %v, wait: %v, %v", i, wait, err)
 	}
