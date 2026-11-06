@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
@@ -304,6 +305,57 @@ func (r *retryChatModel) stream(ctx context.Context, input []*schema.Message, op
 	}
 }
 
+// nonRetryableErrorMarkers maps lowercase error text fragments to a short reason.
+// Provider errors arrive as plain strings from the OpenAI-compatible client, so text
+// matching is the portable classification; the fragments cover the shapes seen in
+// practice (e.g. "error, status code: 401, status: , message: invalid_api_key").
+// Rate limits (HTTP 429) are deliberately absent: they are worth retrying.
+var nonRetryableErrorMarkers = []struct {
+	marker string
+	reason string
+}{
+	{"invalid_api_key", "invalid api key"},
+	{"insufficient_quota", "quota exhausted"},
+	{"exceeded your current quota", "quota exhausted"},
+	{"account_deactivated", "account deactivated"},
+	{"context_length_exceeded", "context length exceeded"},
+	{"maximum context length", "context length exceeded"},
+	{"status code: 401", "unauthorized"},
+	{"401 unauthorized", "unauthorized"},
+	{"status code: 403", "forbidden"},
+	{"403 forbidden", "forbidden"},
+	{"status code: 404", "not found"},
+	{"status code: 400", "bad request"},
+	{"billing", "billing issue"},
+	{"quota", "quota exhausted"},
+}
+
+// isNonRetryableError reports whether err is a permanent failure that must not be
+// retried, along with a short reason for logging. Retrying a bad credential, an
+// exhausted quota, an oversized context or a cancellation only burns the budget.
+func isNonRetryableError(err error) (string, bool) {
+	if err == nil {
+		return "", false
+	}
+	if errors.Is(err, context.Canceled) {
+		return "context canceled", true
+	}
+	// A per-attempt HTTP client timeout also surfaces as a wrapped DeadlineExceeded
+	// ("... (Client.Timeout or context cancellation while reading body)"). That is a
+	// transport timeout and stays retryable; only a genuine caller deadline is permanent.
+	if errors.Is(err, context.DeadlineExceeded) &&
+		!strings.Contains(strings.ToLower(err.Error()), "client.timeout") {
+		return "context deadline exceeded", true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, m := range nonRetryableErrorMarkers {
+		if strings.Contains(msg, m.marker) {
+			return m.reason, true
+		}
+	}
+	return "", false
+}
+
 func (r *retryChatModel) gapFunc(ctx context.Context, i int, err error) (time.Duration, bool) {
 	// exponential backoff: 1s, 2s, 4s, 8s, capped at 10s
 	wait := time.Duration(1<<uint(i-1)) * time.Second
@@ -314,6 +366,10 @@ func (r *retryChatModel) gapFunc(ctx context.Context, i int, err error) (time.Du
 	// must surface its error immediately instead of sleeping through backoff.
 	doRetry := i <= r.retry && ctx.Err() == nil
 	if doRetry {
+		if reason, ok := isNonRetryableError(err); ok {
+			flow.NewRail(ctx).Warnf("Not retrying non-retryable error: %v (%s)", err, reason)
+			return wait, false
+		}
 		flow.NewRail(ctx).Warnf("Retrying, i: %v, wait: %v, %v", i, wait, err)
 	}
 	return wait, doRetry

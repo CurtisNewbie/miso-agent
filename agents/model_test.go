@@ -466,6 +466,86 @@ func TestRetryGapFunc_BackoffCap(t *testing.T) {
 	}
 }
 
+// TestIsNonRetryableError pins the error classification: permanent provider failures
+// must not be retried, transient ones (including 429 rate limits and transport timeouts)
+// must be.
+func TestIsNonRetryableError(t *testing.T) {
+	tests := []struct {
+		name        string
+		err         error
+		wantReason  string
+		wantNoRetry bool
+	}{
+		{name: "nil", err: nil, wantNoRetry: false},
+		{name: "401 status code", err: errors.New("error, status code: 401, status: , message: nope"), wantReason: "unauthorized", wantNoRetry: true},
+		{name: "401 unauthorized text", err: errors.New("401 Unauthorized"), wantReason: "unauthorized", wantNoRetry: true},
+		{name: "invalid api key", err: errors.New("error, status code: 401, message: invalid_api_key"), wantReason: "invalid api key", wantNoRetry: true},
+		{name: "403", err: errors.New("error, status code: 403, status: , message: forbidden"), wantReason: "forbidden", wantNoRetry: true},
+		{name: "404", err: errors.New("error, status code: 404, status: , message: not found"), wantReason: "not found", wantNoRetry: true},
+		{name: "400", err: errors.New("error, status code: 400, status: , message: bad request"), wantReason: "bad request", wantNoRetry: true},
+		{name: "insufficient quota", err: errors.New(`{"error":{"code":"insufficient_quota"}}`), wantReason: "quota exhausted", wantNoRetry: true},
+		{name: "exceeded current quota", err: errors.New("You exceeded your current quota, please check your plan"), wantReason: "quota exhausted", wantNoRetry: true},
+		{name: "billing", err: errors.New("billing hard limit has been reached"), wantReason: "billing issue", wantNoRetry: true},
+		{name: "account deactivated", err: errors.New("account_deactivated"), wantReason: "account deactivated", wantNoRetry: true},
+		{name: "context length exceeded", err: errors.New("context_length_exceeded: too many tokens"), wantReason: "context length exceeded", wantNoRetry: true},
+		{name: "maximum context length", err: errors.New("This model's maximum context length is 32768 tokens"), wantReason: "context length exceeded", wantNoRetry: true},
+		{name: "context canceled", err: fmt.Errorf("request failed: %w", context.Canceled), wantReason: "context canceled", wantNoRetry: true},
+		{name: "context deadline exceeded", err: fmt.Errorf("request failed: %w", context.DeadlineExceeded), wantReason: "context deadline exceeded", wantNoRetry: true},
+		{name: "per-attempt client timeout stays retryable", err: fmt.Errorf("context deadline exceeded (Client.Timeout or context cancellation while reading body): %w", context.DeadlineExceeded), wantNoRetry: false},
+		{name: "429 rate limit", err: errors.New("error, status code: 429, status: , message: Rate limit reached for requests"), wantNoRetry: false},
+		{name: "500", err: errors.New("error, status code: 500, status: , message: internal error"), wantNoRetry: false},
+		{name: "502", err: errors.New("error, status code: 502, status: , message: bad gateway"), wantNoRetry: false},
+		{name: "EOF", err: io.EOF, wantNoRetry: false},
+		{name: "timeout", err: errors.New("dial tcp 127.0.0.1:443: i/o timeout"), wantNoRetry: false},
+		{name: "generic", err: errors.New("connection reset by peer"), wantNoRetry: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reason, noRetry := isNonRetryableError(tt.err)
+			if noRetry != tt.wantNoRetry {
+				t.Fatalf("isNonRetryableError() noRetry = %v, want %v", noRetry, tt.wantNoRetry)
+			}
+			if noRetry && reason != tt.wantReason {
+				t.Fatalf("isNonRetryableError() reason = %q, want %q", reason, tt.wantReason)
+			}
+		})
+	}
+}
+
+// TestNonRetryableError_HTTP401NoRetry proves a 401 is issued exactly once: the retry
+// layer must not burn its budget on a permanent auth failure.
+func TestNonRetryableError_HTTP401NoRetry(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid api key","type":"invalid_request_error","code":"invalid_api_key"}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	m, err := NewOpenAIChatModel("test-model", "sk-test",
+		WithBaseURL(srv.URL),
+		WithRetry(5),
+	)
+	if err != nil {
+		t.Fatalf("NewOpenAIChatModel: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	if _, err := invokeGenerate(ctx, m); err == nil {
+		t.Fatal("expected the 401 to surface as an error")
+	}
+	t.Logf("401: finished in %v after %d request(s)", time.Since(start), requests.Load())
+
+	if got := int(requests.Load()); got != 1 {
+		t.Fatalf("expected exactly 1 provider request for a 401, got %d", got)
+	}
+}
+
 // errorStream returns a reader that yields err before any chunk.
 func errorStream(err error) *schema.StreamReader[*schema.Message] {
 	sr, sw := schema.Pipe[*schema.Message](1)
