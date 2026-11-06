@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/curtisnewbie/miso/util/llm"
 )
@@ -72,6 +73,9 @@ func (w *toolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
 }
 
 func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...tool.Option) (string, error) {
+	if refusal, truncated := truncatedResponseRefusal(ctx, w.tool.Name()); truncated {
+		return refusal, nil
+	}
 	if w.toolCallChain != nil {
 		var args map[string]interface{}
 		if input != "" {
@@ -114,6 +118,36 @@ func (w *toolWrapper) InvokableRun(ctx context.Context, input string, opts ...to
 		return fmt.Sprintf("Error: %v", err), nil
 	}
 	return result, nil
+}
+
+// truncatedResponseRefusal reports whether the assistant message that requested this tool
+// call was cut off by the output token limit, and if so returns the result to hand back
+// instead of executing. Arguments of such a call may be silently truncated mid-JSON, so a
+// tool must never receive them.
+//
+// The check runs before any argument parsing and before the middleware chain, so no
+// execution path can reach a tool with a truncated call. Outside a graph run
+// compose.ProcessState fails and the call proceeds normally.
+func truncatedResponseRefusal(ctx context.Context, toolName string) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	truncated := false
+	err := compose.ProcessState(ctx, func(ctx context.Context, state *agentLoopState) error {
+		for i := len(state.messages) - 1; i >= 0; i-- {
+			msg := state.messages[i]
+			if msg == nil || msg.Role != schema.Assistant {
+				continue
+			}
+			truncated = msg.ResponseMeta != nil && msg.ResponseMeta.FinishReason == "length"
+			return nil
+		}
+		return nil
+	})
+	if err != nil || !truncated {
+		return "", false
+	}
+	return fmt.Sprintf("Error: tool %q was not executed because the previous assistant response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.", toolName), true
 }
 
 // ToEinoTools converts the registry to Eino tool instances.
