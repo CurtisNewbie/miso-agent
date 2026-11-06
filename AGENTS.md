@@ -235,7 +235,7 @@ Check `agentdoc/` before starting a non-trivial task to avoid duplicating prior 
 
 ### Issue tracker
 
-Local markdown under `.scratch/<feature-slug>/`: spec at `spec.md`, tickets at `issues/NN-<slug>.md`. See `docs/agents/issue-tracker.md`.
+Local markdown under `.scratch/<YYYYMMDD>-<feature-slug>/`: spec at `spec.md`, tickets at `issues/NN-<slug>.md`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
