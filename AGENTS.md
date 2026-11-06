@@ -244,3 +244,7 @@ The five default triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, 
 ### Domain docs
 
 Single-context: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Code review
+
+Read before writing and when reviewing code. See `docs/agents/code-review.md`.
