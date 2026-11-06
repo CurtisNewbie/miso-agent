@@ -15,7 +15,7 @@ func compileGraph() error {
 	}
 	gop := graph.NewGenericOps()
 	gop.RepeatPrompt = true
-	gop.VisualizeDir = "../doc"
+	gop.VisualizeDir = "../docs/prebuilt"
 	_, err = agents.NewMemorySummarizer(rail, model, agents.NewMemorySummarizerOps(gop))
 	if err != nil {
 		return err
