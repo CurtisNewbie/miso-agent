@@ -19,8 +19,7 @@ analyze.log
 .DS_Store
 
 __debug_bin*
-doc/api.md
 PROGRESS.md
 MISTAKE.md
-agentdoc
+docs/prompts
 .codegraph
