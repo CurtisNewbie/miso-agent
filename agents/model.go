@@ -392,14 +392,24 @@ func RetryChatModel(c model.ToolCallingChatModel) model.ToolCallingChatModel {
 }
 
 // ensureMessageContent is a RequestPayloadModifier that guarantees every
-// message object in the serialized request body contains a "content" field.
+// message object in the serialized request body carries the fields providers
+// consider required: "content", and for tool calls "tool_calls[].function.name"
+// and "tool_calls[].function.arguments".
 //
 // Some providers (e.g. DashScope) reject requests when the "content" field is
 // absent from an assistant message, even though standard Go JSON encoding drops
 // the field via omitempty when the content string is empty (which is normal for
-// assistant messages that only contain tool_calls).  This modifier patches the
-// raw body without re-encoding any unrelated fields, so precision of other
-// numeric/string values is fully preserved.
+// assistant messages that only contain tool_calls). Other providers reject a
+// request whose tool call has no arguments ("If tool_calls are present in the
+// message, function.arguments must be defined"), which happens because
+// schema.FunctionCall drops an empty arguments string via omitempty too. A tool
+// call without a name is dropped entirely: it cannot be addressed by the model.
+// A dropped call's "tool" result message is dropped with it, because gateways
+// reject a tool message that answers no preceding tool_calls entry.
+//
+// This modifier patches the raw body without re-encoding any unrelated fields,
+// so precision of other numeric/string values is fully preserved. A body that
+// needs no patch is returned as the original slice.
 func ensureMessageContent(_ context.Context, _ []*schema.Message, body []byte) ([]byte, error) {
 	var reqMap map[string]json.RawMessage
 	if err := json.Unmarshal(body, &reqMap); err != nil {
@@ -414,20 +424,64 @@ func ensureMessageContent(_ context.Context, _ []*schema.Message, body []byte) (
 		return body, nil
 	}
 	modified := false
+	// parsed[i] is the decoded view of msgs[i], nil when the message could not be
+	// decoded. It is kept so the orphan scan below does not parse twice.
+	parsed := make([]map[string]json.RawMessage, len(msgs))
+	droppedIDs := map[string]struct{}{}
 	for i, msgRaw := range msgs {
 		var msgMap map[string]json.RawMessage
 		if err := json.Unmarshal(msgRaw, &msgMap); err != nil {
 			continue
 		}
+		parsed[i] = msgMap
+		msgModified := false
 		if _, hasContent := msgMap["content"]; !hasContent {
 			msgMap["content"] = json.RawMessage(`""`)
-			newMsgBytes, err := json.Marshal(msgMap)
+			msgModified = true
+		}
+		if callsRaw, hasCalls := msgMap["tool_calls"]; hasCalls {
+			calls, dropped, callsModified, err := ensureToolCallArguments(callsRaw)
 			if err != nil {
+				return body, nil
+			}
+			for _, id := range dropped {
+				droppedIDs[id] = struct{}{}
+			}
+			if callsModified {
+				if len(calls) == 0 {
+					// Every call was unusable: send the message without tool_calls
+					// instead of an empty array.
+					delete(msgMap, "tool_calls")
+				} else {
+					callsBytes, err := json.Marshal(calls)
+					if err != nil {
+						return body, nil
+					}
+					msgMap["tool_calls"] = json.RawMessage(callsBytes)
+				}
+				msgModified = true
+			}
+		}
+		if !msgModified {
+			continue
+		}
+		newMsgBytes, err := json.Marshal(msgMap)
+		if err != nil {
+			return body, nil
+		}
+		msgs[i] = json.RawMessage(newMsgBytes)
+		modified = true
+	}
+	if len(droppedIDs) > 0 {
+		kept := make([]json.RawMessage, 0, len(msgs))
+		for i, msgRaw := range msgs {
+			if isDroppedToolResult(parsed[i], droppedIDs) {
+				modified = true
 				continue
 			}
-			msgs[i] = json.RawMessage(newMsgBytes)
-			modified = true
+			kept = append(kept, msgRaw)
 		}
+		msgs = kept
 	}
 	if !modified {
 		return body, nil
@@ -444,10 +498,124 @@ func ensureMessageContent(_ context.Context, _ []*schema.Message, body []byte) (
 	return newBody, nil
 }
 
+// isDroppedToolResult reports whether msg is a "tool" result answering a tool
+// call that this pass dropped. Only ids dropped in this pass are considered: a
+// transcript already trimmed elsewhere is left untouched.
+func isDroppedToolResult(msg map[string]json.RawMessage, droppedIDs map[string]struct{}) bool {
+	if msg == nil {
+		return false
+	}
+	roleRaw, ok := msg["role"]
+	if !ok {
+		return false
+	}
+	var role string
+	if err := json.Unmarshal(roleRaw, &role); err != nil || role != "tool" {
+		return false
+	}
+	idRaw, ok := msg["tool_call_id"]
+	if !ok {
+		return false
+	}
+	var id string
+	if err := json.Unmarshal(idRaw, &id); err != nil {
+		return false
+	}
+	_, dropped := droppedIDs[id]
+	return dropped
+}
+
+// ensureToolCallArguments normalizes one "tool_calls" array. It drops calls
+// whose function name is missing or empty, and gives an absent or empty
+// "arguments" string the value "{}". Any other arguments value is preserved
+// byte-exactly, even when it is not valid JSON: inventing a repair is worse
+// than forwarding what the model produced. The ids of dropped calls are
+// returned so the caller can drop their tool results too.
+func ensureToolCallArguments(raw json.RawMessage) ([]json.RawMessage, []string, bool, error) {
+	var calls []json.RawMessage
+	if err := json.Unmarshal(raw, &calls); err != nil {
+		return nil, nil, false, err
+	}
+	kept := make([]json.RawMessage, 0, len(calls))
+	var droppedIDs []string
+	modified := false
+	for _, callRaw := range calls {
+		var call map[string]json.RawMessage
+		if err := json.Unmarshal(callRaw, &call); err != nil {
+			return nil, nil, false, err
+		}
+		fn := map[string]json.RawMessage{}
+		if fnRaw, hasFn := call["function"]; hasFn {
+			if err := json.Unmarshal(fnRaw, &fn); err != nil {
+				return nil, nil, false, err
+			}
+		}
+		if !toolCallHasName(fn) {
+			modified = true
+			// Only a non-empty string id can be referenced by a tool result.
+			var id string
+			if idRaw, ok := call["id"]; ok {
+				if err := json.Unmarshal(idRaw, &id); err == nil && id != "" {
+					droppedIDs = append(droppedIDs, id)
+				}
+			}
+			continue
+		}
+		if toolCallHasArguments(fn) {
+			kept = append(kept, callRaw)
+			continue
+		}
+		fn["arguments"] = json.RawMessage(`"{}"`)
+		fnBytes, err := json.Marshal(fn)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		call["function"] = json.RawMessage(fnBytes)
+		callBytes, err := json.Marshal(call)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		kept = append(kept, json.RawMessage(callBytes))
+		modified = true
+	}
+	return kept, droppedIDs, modified, nil
+}
+
+// toolCallHasName reports whether the serialized function object carries a
+// non-empty string name. A non-string name is treated as missing: such a call
+// cannot be addressed by the model either.
+func toolCallHasName(fn map[string]json.RawMessage) bool {
+	nameRaw, ok := fn["name"]
+	if !ok {
+		return false
+	}
+	var name string
+	if err := json.Unmarshal(nameRaw, &name); err != nil {
+		return false
+	}
+	return name != ""
+}
+
+// toolCallHasArguments reports whether the serialized function object carries a
+// non-empty arguments string, or an arguments value of an unrecognised shape
+// (which is left untouched).
+func toolCallHasArguments(fn map[string]json.RawMessage) bool {
+	argsRaw, ok := fn["arguments"]
+	if !ok {
+		return false
+	}
+	var args string
+	if err := json.Unmarshal(argsRaw, &args); err != nil {
+		return true
+	}
+	return args != ""
+}
+
 // contentFixModel wraps a ToolCallingChatModel and always injects
 // ensureMessageContent as a RequestPayloadModifier on every Generate and
 // Stream call, ensuring compatibility with providers that require the
-// "content" field to be present in every message.
+// "content" field to be present in every message and a well-formed "arguments"
+// field on every tool call.
 type contentFixModel struct {
 	inner model.ToolCallingChatModel
 }

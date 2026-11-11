@@ -2,11 +2,13 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -483,6 +485,7 @@ func TestIsNonRetryableError(t *testing.T) {
 		{name: "403", err: errors.New("error, status code: 403, status: , message: forbidden"), wantReason: "forbidden", wantNoRetry: true},
 		{name: "404", err: errors.New("error, status code: 404, status: , message: not found"), wantReason: "not found", wantNoRetry: true},
 		{name: "400", err: errors.New("error, status code: 400, status: , message: bad request"), wantReason: "bad request", wantNoRetry: true},
+		{name: "400 missing function.arguments", err: errors.New("error, status code: 400, status: 400 Bad Request, message: If tool_calls are present in the message, function.arguments must be defined."), wantReason: "bad request", wantNoRetry: true},
 		{name: "insufficient quota", err: errors.New(`{"error":{"code":"insufficient_quota"}}`), wantReason: "quota exhausted", wantNoRetry: true},
 		{name: "exceeded current quota", err: errors.New("You exceeded your current quota, please check your plan"), wantReason: "quota exhausted", wantNoRetry: true},
 		{name: "billing", err: errors.New("billing hard limit has been reached"), wantReason: "billing issue", wantNoRetry: true},
@@ -543,6 +546,46 @@ func TestNonRetryableError_HTTP401NoRetry(t *testing.T) {
 
 	if got := int(requests.Load()); got != 1 {
 		t.Fatalf("expected exactly 1 provider request for a 401, got %d", got)
+	}
+}
+
+// TestNonRetryableError_HTTP400NoRetry proves the incident's deterministic 400 is
+// attempted once: retrying it would burn the budget and ~7s of sleeps, and the body
+// cannot change, since the request that produced it is already fixed on the wire.
+func TestNonRetryableError_HTTP400NoRetry(t *testing.T) {
+	const rejection = `{"error":{"message":"If tool_calls are present in the message, function.arguments must be defined.","type":"invalid_request_error"}}`
+
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(rejection))
+	}))
+	t.Cleanup(srv.Close)
+
+	m, err := NewOpenAIChatModel("gpt-4o-mini", "k",
+		WithBaseURL(srv.URL),
+		WithRetry(3),
+	)
+	if err != nil {
+		t.Fatalf("NewOpenAIChatModel: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	_, err = m.Generate(ctx, []*schema.Message{schema.UserMessage("hi")})
+	if err == nil {
+		t.Fatal("expected the 400 to surface as an error")
+	}
+	if !strings.Contains(err.Error(), "function.arguments") {
+		t.Fatalf("expected the provider message to surface, got %v", err)
+	}
+	t.Logf("400: finished in %v after %d request(s)", time.Since(start), requests.Load())
+
+	if got := int(requests.Load()); got != 1 {
+		t.Fatalf("expected exactly 1 provider request for a deterministic 400, got %d", got)
 	}
 }
 
@@ -717,5 +760,108 @@ func TestStreamRetry_AttemptCounterSharedAcrossPhases_Exhausts(t *testing.T) {
 	}
 	if got := int(n.Load()); got != 3 {
 		t.Fatalf("expected exactly 3 provider requests (shared budget of 2), got %d", got)
+	}
+}
+
+// assertJSONEqual compares two JSON documents semantically so tests do not pin
+// key order, while still catching a missing, added or altered field.
+func assertJSONEqual(t *testing.T, want string, got []byte) {
+	t.Helper()
+	var wantAny, gotAny any
+	if err := json.Unmarshal([]byte(want), &wantAny); err != nil {
+		t.Fatalf("invalid expected JSON: %v", err)
+	}
+	if err := json.Unmarshal(got, &gotAny); err != nil {
+		t.Fatalf("modifier produced invalid JSON: %v (%s)", err, got)
+	}
+	if !reflect.DeepEqual(wantAny, gotAny) {
+		t.Fatalf("body mismatch\n got: %s\nwant: %s", got, want)
+	}
+}
+
+// TestEnsureMessageContent verifies the request payload modifier injects the
+// fields providers require and drops tool calls that cannot be addressed.
+func TestEnsureMessageContent(t *testing.T) {
+	tests := []struct {
+		name          string
+		body          string
+		want          string
+		wantUnchanged bool
+	}{
+		{
+			name: "missing arguments becomes an empty object",
+			body: `{"messages":[{"role":"assistant","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq"}}]}]}`,
+			want: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}}]}]}`,
+		},
+		{
+			name: "empty arguments becomes an empty object",
+			body: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":""}}]}]}`,
+			want: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}}]}]}`,
+		},
+		{
+			name:          "non-empty arguments is left untouched",
+			body:          `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{\"query\":\"x\"}"}}]}]}`,
+			want:          `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{\"query\":\"x\"}"}}]}]}`,
+			wantUnchanged: true,
+		},
+		{
+			name: "tool call without a function name is dropped",
+			body: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"arguments":"{}"}}]}]}`,
+			want: `{"messages":[{"role":"assistant","content":""}]}`,
+		},
+		{
+			name: "tool call with an empty function name is dropped",
+			body: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"","arguments":"{}"}}]}]}`,
+			want: `{"messages":[{"role":"assistant","content":""}]}`,
+		},
+		{
+			name: "tool call without a function object is dropped",
+			body: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function"}]}]}`,
+			want: `{"messages":[{"role":"assistant","content":""}]}`,
+		},
+		{
+			name: "mixed message keeps only the addressable call",
+			body: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}},{"id":"c2","type":"function","function":{"name":"","arguments":"{}"}}]}]}`,
+			want: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}}]}]}`,
+		},
+		{
+			name:          "message without tool_calls is untouched",
+			body:          `{"messages":[{"role":"user","content":"hi"}]}`,
+			want:          `{"messages":[{"role":"user","content":"hi"}]}`,
+			wantUnchanged: true,
+		},
+		{
+			name: "tool result of a dropped nameless call is dropped too",
+			body: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c2","type":"function","function":{"name":""}}]},{"role":"tool","tool_call_id":"c2","content":"tool \"\" does not exist"}]}`,
+			want: `{"messages":[{"role":"assistant","content":""}]}`,
+		},
+		{
+			name: "tool result of a kept call survives a dropped sibling",
+			body: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}},{"id":"c2","type":"function","function":{"name":""}}]},{"role":"tool","tool_call_id":"c1","content":"ok"}]}`,
+			want: `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}}]},{"role":"tool","tool_call_id":"c1","content":"ok"}]}`,
+		},
+		{
+			name:          "tool results are untouched when no call is dropped",
+			body:          `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}}]},{"role":"tool","tool_call_id":"c1","content":"ok"}]}`,
+			want:          `{"messages":[{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"query_faq","arguments":"{}"}}]},{"role":"tool","tool_call_id":"c1","content":"ok"}]}`,
+			wantUnchanged: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ensureMessageContent(context.Background(), nil, []byte(tt.body))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertJSONEqual(t, tt.want, got)
+			if tt.wantUnchanged && string(got) != tt.body {
+				t.Fatalf("expected the original body, got %s", got)
+			}
+			if tt.name == "non-empty arguments is left untouched" &&
+				!strings.Contains(string(got), `"arguments":"{\"query\":\"x\"}"`) {
+				t.Fatalf("arguments were re-encoded instead of preserved: %s", got)
+			}
+		})
 	}
 }
